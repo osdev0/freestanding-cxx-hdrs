@@ -1,0 +1,130 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+#ifndef __FREESTANDING_CXX_HDRS_CSTDDEF
+#define __FREESTANDING_CXX_HDRS_CSTDDEF 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#define _FCXX_VERSION_CSTDDEF
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_CSTDDEF
+
+/* The types and the macros of the C header, which defines those of each
+ * revision of C++, and max_align_t also in std, where size_t, ptrdiff_t and
+ * nullptr_t already are. */
+#include <stddef.h>
+
+namespace std {
+
+#if _FCXX_STD >= 2011
+using ::max_align_t;
+#endif
+
+#if _FCXX_STD >= 2017
+
+enum class byte : unsigned char {};
+
+/* The byte operations taking an integer only take the integral types. */
+template <class _Tp> struct __byte_integral {};
+template <> struct __byte_integral<bool> { typedef bool __type; };
+template <> struct __byte_integral<char> { typedef char __type; };
+template <> struct __byte_integral<signed char> { typedef signed char __type; };
+template <> struct __byte_integral<unsigned char> { typedef unsigned char __type; };
+template <> struct __byte_integral<wchar_t> { typedef wchar_t __type; };
+#  if _FCXX_HAS_CHAR8_T
+template <> struct __byte_integral<char8_t> { typedef char8_t __type; };
+#  endif
+template <> struct __byte_integral<char16_t> { typedef char16_t __type; };
+template <> struct __byte_integral<char32_t> { typedef char32_t __type; };
+template <> struct __byte_integral<short> { typedef short __type; };
+template <> struct __byte_integral<unsigned short> { typedef unsigned short __type; };
+template <> struct __byte_integral<int> { typedef int __type; };
+template <> struct __byte_integral<unsigned int> { typedef unsigned int __type; };
+template <> struct __byte_integral<long> { typedef long __type; };
+template <> struct __byte_integral<unsigned long> { typedef unsigned long __type; };
+template <> struct __byte_integral<long long> { typedef long long __type; };
+template <> struct __byte_integral<unsigned long long> { typedef unsigned long long __type; };
+#  ifdef __SIZEOF_INT128__
+__extension__ template <> struct __byte_integral<__int128> { __extension__ typedef __int128 __type; };
+__extension__ template <> struct __byte_integral<unsigned __int128> { __extension__ typedef unsigned __int128 __type; };
+#  endif
+/* The cv-qualified integral types are integral types too, which only
+ * to_integer can be given, with its template argument. */
+template <class _Tp> struct __byte_integral<const _Tp> : __byte_integral<_Tp> {};
+template <class _Tp> struct __byte_integral<volatile _Tp> : __byte_integral<_Tp> {};
+template <class _Tp> struct __byte_integral<const volatile _Tp> : __byte_integral<_Tp> {};
+
+template <class _IntType, class = typename __byte_integral<_IntType>::__type>
+constexpr byte& operator<<=(byte& __b, _IntType __shift) noexcept {
+    return __b = static_cast<byte>(static_cast<unsigned int>(__b) << __shift);
+}
+
+template <class _IntType, class = typename __byte_integral<_IntType>::__type>
+constexpr byte operator<<(byte __b, _IntType __shift) noexcept {
+    return static_cast<byte>(static_cast<unsigned int>(__b) << __shift);
+}
+
+template <class _IntType, class = typename __byte_integral<_IntType>::__type>
+constexpr byte& operator>>=(byte& __b, _IntType __shift) noexcept {
+    return __b = static_cast<byte>(static_cast<unsigned int>(__b) >> __shift);
+}
+
+template <class _IntType, class = typename __byte_integral<_IntType>::__type>
+constexpr byte operator>>(byte __b, _IntType __shift) noexcept {
+    return static_cast<byte>(static_cast<unsigned int>(__b) >> __shift);
+}
+
+constexpr byte& operator|=(byte& __l, byte __r) noexcept {
+    return __l = static_cast<byte>(static_cast<unsigned int>(__l) | static_cast<unsigned int>(__r));
+}
+
+constexpr byte operator|(byte __l, byte __r) noexcept {
+    return static_cast<byte>(static_cast<unsigned int>(__l) | static_cast<unsigned int>(__r));
+}
+
+constexpr byte& operator&=(byte& __l, byte __r) noexcept {
+    return __l = static_cast<byte>(static_cast<unsigned int>(__l) & static_cast<unsigned int>(__r));
+}
+
+constexpr byte operator&(byte __l, byte __r) noexcept {
+    return static_cast<byte>(static_cast<unsigned int>(__l) & static_cast<unsigned int>(__r));
+}
+
+constexpr byte& operator^=(byte& __l, byte __r) noexcept {
+    return __l = static_cast<byte>(static_cast<unsigned int>(__l) ^ static_cast<unsigned int>(__r));
+}
+
+constexpr byte operator^(byte __l, byte __r) noexcept {
+    return static_cast<byte>(static_cast<unsigned int>(__l) ^ static_cast<unsigned int>(__r));
+}
+
+constexpr byte operator~(byte __b) noexcept {
+    return static_cast<byte>(~static_cast<unsigned int>(__b));
+}
+
+template <class _IntType, class = typename __byte_integral<_IntType>::__type>
+constexpr _IntType to_integer(byte __b) noexcept {
+    return static_cast<_IntType>(__b);
+}
+
+#endif
+
+} /* namespace std */
+
+#endif

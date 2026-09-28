@@ -1,0 +1,1166 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_FUNCTIONAL
+#define __FREESTANDING_CXX_HDRS_FUNCTIONAL 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2023
+#  error "<functional> is not a freestanding header before C++23"
+#endif
+
+#define _FCXX_VERSION_FUNCTIONAL
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_FUNCTIONAL
+
+#if _FCXX_STD >= 2023
+
+#include <__fcxx/operations.h>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+#include <__fcxx/hash.h>
+#include <__fcxx/integer_sequence.h>
+#include <__fcxx/invoke.h>
+#include <__fcxx/reference_wrapper.h>
+#include <compare>
+#if _FCXX_STD >= 2026
+#  include <initializer_list>
+#  include <typeinfo>
+#  include <__fcxx/addressof.h>
+#endif
+
+namespace std {
+
+/* The perfect forwarding call wrappers of not_fn, bind_front and bind_back:
+ * their target object and bound arguments are the elements of a tuple, and
+ * a pattern makes the call of them with the arguments of the call, with the
+ * cv-qualification and value category of the call wrapper. The call
+ * operators that cannot make the call are deleted, so that the call of an
+ * rvalue does not fall back to the operator of const lvalues, and so on. */
+struct __fcxx_not_fn_pattern {
+    template <class _State, size_t... _Is, class... _Args>
+    static constexpr auto __call(_State&& __s, index_sequence<_Is...>, _Args&&... __args) noexcept(
+        noexcept(!std::__fcxx_invoke(std::get<0>(std::forward<_State>(__s)), std::forward<_Args>(__args)...)))
+        -> decltype(!std::__fcxx_invoke(std::get<0>(std::forward<_State>(__s)), std::forward<_Args>(__args)...)) {
+        return !std::__fcxx_invoke(std::get<0>(std::forward<_State>(__s)), std::forward<_Args>(__args)...);
+    }
+};
+
+struct __fcxx_bind_front_pattern {
+    template <class _State, size_t... _Is, class... _Args>
+    static constexpr auto __call(_State&& __s, index_sequence<_Is...>, _Args&&... __args) noexcept(
+        noexcept(std::__fcxx_invoke(std::get<0>(std::forward<_State>(__s)), std::get<_Is>(std::forward<_State>(__s))...,
+                                    std::forward<_Args>(__args)...)))
+        -> decltype(std::__fcxx_invoke(std::get<0>(std::forward<_State>(__s)),
+                                       std::get<_Is>(std::forward<_State>(__s))..., std::forward<_Args>(__args)...)) {
+        return std::__fcxx_invoke(std::get<0>(std::forward<_State>(__s)), std::get<_Is>(std::forward<_State>(__s))...,
+                                  std::forward<_Args>(__args)...);
+    }
+};
+
+struct __fcxx_bind_back_pattern {
+    template <class _State, size_t... _Is, class... _Args>
+    static constexpr auto __call(_State&& __s, index_sequence<_Is...>, _Args&&... __args) noexcept(
+        noexcept(std::__fcxx_invoke(std::get<0>(std::forward<_State>(__s)), std::forward<_Args>(__args)...,
+                                    std::get<_Is>(std::forward<_State>(__s))...)))
+        -> decltype(std::__fcxx_invoke(std::get<0>(std::forward<_State>(__s)), std::forward<_Args>(__args)...,
+                                       std::get<_Is>(std::forward<_State>(__s))...)) {
+        return std::__fcxx_invoke(std::get<0>(std::forward<_State>(__s)), std::forward<_Args>(__args)...,
+                                  std::get<_Is>(std::forward<_State>(__s))...);
+    }
+};
+
+/* The indices of the bound arguments in the tuple, after the target. */
+template <class _Seq>
+struct __fcxx_bound_indices;
+
+template <size_t... _Is>
+struct __fcxx_bound_indices<index_sequence<_Is...> > {
+    typedef index_sequence<(_Is + 1)...> type;
+};
+
+template <class _Pattern, class _State, class _Seq, class _Void, class... _Args>
+struct __fcxx_pf_callable : false_type {};
+
+template <class _Pattern, class _State, class _Seq, class... _Args>
+struct __fcxx_pf_callable<
+    _Pattern, _State, _Seq,
+    __fcxx_void_t<decltype(_Pattern::__call(std::declval<_State>(), _Seq(), std::declval<_Args>()...))>, _Args...>
+    : true_type {};
+
+struct __fcxx_pf_tag {};
+
+template <class _Pattern, class _Fd, class... _Bound>
+class __fcxx_pf_wrapper {
+    typedef tuple<_Fd, _Bound...> _State;
+    typedef typename __fcxx_bound_indices<index_sequence_for<_Bound...> >::type _Seq;
+
+    _State __state;
+
+public:
+    template <class _Fn, class... _Args>
+    constexpr explicit __fcxx_pf_wrapper(__fcxx_pf_tag, _Fn&& __f, _Args&&... __args)
+        : __state(std::forward<_Fn>(__f), std::forward<_Args>(__args)...) {}
+
+    template <class... _Args,
+              __fcxx_enable_if_t<__fcxx_pf_callable<_Pattern, _State&, _Seq, void, _Args...>::value, int> = 0>
+    constexpr auto operator()(_Args&&... __args) & noexcept(
+        noexcept(_Pattern::__call(std::declval<_State&>(), _Seq(), std::declval<_Args>()...)))
+        -> decltype(_Pattern::__call(std::declval<_State&>(), _Seq(), std::declval<_Args>()...)) {
+        return _Pattern::__call(__state, _Seq(), std::forward<_Args>(__args)...);
+    }
+
+    template <class... _Args,
+              __fcxx_enable_if_t<!__fcxx_pf_callable<_Pattern, _State&, _Seq, void, _Args...>::value, int> = 0>
+    void operator()(_Args&&...) & = delete;
+
+    template <class... _Args,
+              __fcxx_enable_if_t<__fcxx_pf_callable<_Pattern, const _State&, _Seq, void, _Args...>::value, int> = 0>
+    constexpr auto operator()(_Args&&... __args) const& noexcept(
+        noexcept(_Pattern::__call(std::declval<const _State&>(), _Seq(), std::declval<_Args>()...)))
+        -> decltype(_Pattern::__call(std::declval<const _State&>(), _Seq(), std::declval<_Args>()...)) {
+        return _Pattern::__call(__state, _Seq(), std::forward<_Args>(__args)...);
+    }
+
+    template <class... _Args,
+              __fcxx_enable_if_t<!__fcxx_pf_callable<_Pattern, const _State&, _Seq, void, _Args...>::value, int> = 0>
+    void operator()(_Args&&...) const& = delete;
+
+    template <class... _Args,
+              __fcxx_enable_if_t<__fcxx_pf_callable<_Pattern, _State&&, _Seq, void, _Args...>::value, int> = 0>
+    constexpr auto operator()(_Args&&... __args) && noexcept(
+        noexcept(_Pattern::__call(std::declval<_State&&>(), _Seq(), std::declval<_Args>()...)))
+        -> decltype(_Pattern::__call(std::declval<_State&&>(), _Seq(), std::declval<_Args>()...)) {
+        return _Pattern::__call(std::move(__state), _Seq(), std::forward<_Args>(__args)...);
+    }
+
+    template <class... _Args,
+              __fcxx_enable_if_t<!__fcxx_pf_callable<_Pattern, _State&&, _Seq, void, _Args...>::value, int> = 0>
+    void operator()(_Args&&...) && = delete;
+
+    template <class... _Args,
+              __fcxx_enable_if_t<__fcxx_pf_callable<_Pattern, const _State&&, _Seq, void, _Args...>::value, int> = 0>
+    constexpr auto operator()(_Args&&... __args) const&& noexcept(
+        noexcept(_Pattern::__call(std::declval<const _State&&>(), _Seq(), std::declval<_Args>()...)))
+        -> decltype(_Pattern::__call(std::declval<const _State&&>(), _Seq(), std::declval<_Args>()...)) {
+        return _Pattern::__call(std::move(__state), _Seq(), std::forward<_Args>(__args)...);
+    }
+
+    template <class... _Args,
+              __fcxx_enable_if_t<!__fcxx_pf_callable<_Pattern, const _State&&, _Seq, void, _Args...>::value, int> = 0>
+    void operator()(_Args&&...) const&& = delete;
+};
+
+/* [func.not.fn], function template not_fn */
+template <class _Fp>
+constexpr __fcxx_pf_wrapper<__fcxx_not_fn_pattern, __fcxx_decay_t<_Fp> > not_fn(_Fp&& __f) {
+    static_assert(is_constructible<__fcxx_decay_t<_Fp>, _Fp>::value
+                      && is_move_constructible<__fcxx_decay_t<_Fp>>::value,
+                  "std::not_fn of a callable object that cannot be decayed-copied");
+    return __fcxx_pf_wrapper<__fcxx_not_fn_pattern, __fcxx_decay_t<_Fp> >(__fcxx_pf_tag(), std::forward<_Fp>(__f));
+}
+
+#if _FCXX_STD >= 2026
+/* The target object of the call wrappers of a constant callable object,
+ * which is empty, and calls the constant. */
+template <auto _Fn>
+struct __fcxx_constant_fn {
+    template <class... _Args>
+    constexpr auto operator()(_Args&&... __args) const
+        noexcept(noexcept(std::__fcxx_invoke(_Fn, std::declval<_Args>()...)))
+            -> decltype(std::__fcxx_invoke(_Fn, std::declval<_Args>()...)) {
+        return std::__fcxx_invoke(_Fn, std::forward<_Args>(__args)...);
+    }
+};
+
+template <auto _Fn>
+consteval void __fcxx_check_constant_fn() {
+    using _Fp = decltype(_Fn);
+    if constexpr (is_pointer_v<_Fp> || is_member_pointer_v<_Fp>) {
+        static_assert(_Fn != nullptr, "a null pointer is not callable");
+    }
+}
+
+template <auto _Fn>
+constexpr __fcxx_pf_wrapper<__fcxx_not_fn_pattern, __fcxx_constant_fn<_Fn> > not_fn() noexcept {
+    std::__fcxx_check_constant_fn<_Fn>();
+    return __fcxx_pf_wrapper<__fcxx_not_fn_pattern, __fcxx_constant_fn<_Fn> >(__fcxx_pf_tag(),
+                                                                            __fcxx_constant_fn<_Fn>());
+}
+#endif
+
+/* [func.bind.partial], function templates bind_front and bind_back */
+
+template <class _Fp, class... _Args>
+struct __fcxx_bind_partial_check {
+    static_assert(is_constructible<__fcxx_decay_t<_Fp>, _Fp>::value
+                      && is_move_constructible<__fcxx_decay_t<_Fp>>::value,
+                  "the callable object cannot be decayed-copied");
+    static_assert(__fcxx_and<is_constructible<__fcxx_decay_t<_Args>, _Args>...,
+                             is_move_constructible<__fcxx_decay_t<_Args> >...>::value,
+                  "the bound arguments cannot be decayed-copied");
+    static constexpr bool value = true;
+};
+
+template <class _Fp, class... _Args>
+constexpr __fcxx_pf_wrapper<__fcxx_bind_front_pattern, __fcxx_decay_t<_Fp>, __fcxx_decay_t<_Args>...> bind_front(
+    _Fp&& __f, _Args&&... __args) {
+    static_assert(__fcxx_bind_partial_check<_Fp, _Args...>::value, "");
+    return __fcxx_pf_wrapper<__fcxx_bind_front_pattern, __fcxx_decay_t<_Fp>, __fcxx_decay_t<_Args>...>(
+        __fcxx_pf_tag(), std::forward<_Fp>(__f), std::forward<_Args>(__args)...);
+}
+
+template <class _Fp, class... _Args>
+constexpr __fcxx_pf_wrapper<__fcxx_bind_back_pattern, __fcxx_decay_t<_Fp>, __fcxx_decay_t<_Args>...> bind_back(
+    _Fp&& __f, _Args&&... __args) {
+    static_assert(__fcxx_bind_partial_check<_Fp, _Args...>::value, "");
+    return __fcxx_pf_wrapper<__fcxx_bind_back_pattern, __fcxx_decay_t<_Fp>, __fcxx_decay_t<_Args>...>(
+        __fcxx_pf_tag(), std::forward<_Fp>(__f), std::forward<_Args>(__args)...);
+}
+
+#if _FCXX_STD >= 2026
+template <auto _Fn, class... _Args>
+constexpr __fcxx_pf_wrapper<__fcxx_bind_front_pattern, __fcxx_constant_fn<_Fn>, __fcxx_decay_t<_Args>...> bind_front(
+    _Args&&... __args) {
+    std::__fcxx_check_constant_fn<_Fn>();
+    static_assert(__fcxx_bind_partial_check<__fcxx_constant_fn<_Fn>, _Args...>::value, "");
+    return __fcxx_pf_wrapper<__fcxx_bind_front_pattern, __fcxx_constant_fn<_Fn>, __fcxx_decay_t<_Args>...>(
+        __fcxx_pf_tag(), __fcxx_constant_fn<_Fn>(), std::forward<_Args>(__args)...);
+}
+
+template <auto _Fn, class... _Args>
+constexpr __fcxx_pf_wrapper<__fcxx_bind_back_pattern, __fcxx_constant_fn<_Fn>, __fcxx_decay_t<_Args>...> bind_back(
+    _Args&&... __args) {
+    std::__fcxx_check_constant_fn<_Fn>();
+    static_assert(__fcxx_bind_partial_check<__fcxx_constant_fn<_Fn>, _Args...>::value, "");
+    return __fcxx_pf_wrapper<__fcxx_bind_back_pattern, __fcxx_constant_fn<_Fn>, __fcxx_decay_t<_Args>...>(
+        __fcxx_pf_tag(), __fcxx_constant_fn<_Fn>(), std::forward<_Args>(__args)...);
+}
+#endif
+
+/* [func.bind], function object binders */
+
+template <class _Tp>
+struct is_bind_expression : false_type {};
+
+template <class _Tp>
+struct is_bind_expression<const _Tp> : is_bind_expression<_Tp> {};
+
+template <class _Tp>
+struct is_bind_expression<volatile _Tp> : is_bind_expression<_Tp> {};
+
+template <class _Tp>
+struct is_bind_expression<const volatile _Tp> : is_bind_expression<_Tp> {};
+
+template <class _Tp>
+struct is_placeholder : integral_constant<int, 0> {};
+
+template <class _Tp>
+struct is_placeholder<const _Tp> : is_placeholder<_Tp> {};
+
+template <class _Tp>
+struct is_placeholder<volatile _Tp> : is_placeholder<_Tp> {};
+
+template <class _Tp>
+struct is_placeholder<const volatile _Tp> : is_placeholder<_Tp> {};
+
+template <class _Tp>
+inline constexpr bool is_bind_expression_v = is_bind_expression<_Tp>::value;
+
+template <class _Tp>
+inline constexpr int is_placeholder_v = is_placeholder<_Tp>::value;
+
+/* [func.bind.place], placeholders */
+template <int _Np>
+struct __fcxx_placeholder {};
+
+template <int _Np>
+struct is_placeholder<__fcxx_placeholder<_Np> > : integral_constant<int, _Np> {};
+
+namespace placeholders {
+inline constexpr __fcxx_placeholder<1> _1{};
+inline constexpr __fcxx_placeholder<2> _2{};
+inline constexpr __fcxx_placeholder<3> _3{};
+inline constexpr __fcxx_placeholder<4> _4{};
+inline constexpr __fcxx_placeholder<5> _5{};
+inline constexpr __fcxx_placeholder<6> _6{};
+inline constexpr __fcxx_placeholder<7> _7{};
+inline constexpr __fcxx_placeholder<8> _8{};
+inline constexpr __fcxx_placeholder<9> _9{};
+inline constexpr __fcxx_placeholder<10> _10{};
+} /* namespace placeholders */
+
+/* The argument that bind passes for a bound argument of type _Td, cv-
+ * qualified like the call wrapper, from the arguments of the call, which
+ * are in a tuple of references: the reference of a reference_wrapper, the
+ * result of the call of a bind expression, an argument of the call for a
+ * placeholder, and the bound argument otherwise. */
+template <class _Td, class _Args, class = void>
+struct __fcxx_bind_arg {
+    static constexpr _Td& __get(_Td& __td, _Args&) noexcept {
+        return __td;
+    }
+};
+
+template <class _Td, class _Args>
+struct __fcxx_bind_arg<_Td, _Args, __fcxx_enable_if_t<__fcxx_is_reference_wrapper<__fcxx_remove_cv_t<_Td> >::value> > {
+    static constexpr typename __fcxx_remove_cv_t<_Td>::type& __get(_Td& __td, _Args&) noexcept {
+        return __td.get();
+    }
+};
+
+template <class _Td, class _Seq, class _Args, class = void>
+struct __fcxx_bind_nested_call {};
+
+template <class _Td, size_t... _Js, class... _Us>
+struct __fcxx_bind_nested_call<_Td, index_sequence<_Js...>, tuple<_Us...>,
+                               __fcxx_void_t<decltype(std::declval<_Td&>()(std::declval<_Us>()...))> > {
+    typedef decltype(std::declval<_Td&>()(std::declval<_Us>()...)) _Result;
+
+    static constexpr _Result __get(_Td& __td, tuple<_Us...>& __args) {
+        return __td(std::get<_Js>(std::move(__args))...);
+    }
+};
+
+template <class _Td, class... _Us>
+struct __fcxx_bind_arg<_Td, tuple<_Us...>,
+                       __fcxx_enable_if_t<!__fcxx_is_reference_wrapper<__fcxx_remove_cv_t<_Td> >::value
+                                          && is_bind_expression<__fcxx_remove_cv_t<_Td> >::value> >
+    : __fcxx_bind_nested_call<_Td, index_sequence_for<_Us...>, tuple<_Us...> > {};
+
+template <int _Jp, class _Args, bool = (_Jp <= int(tuple_size<_Args>::value))>
+struct __fcxx_bind_placeholder_arg {};
+
+template <int _Jp, class... _Us>
+struct __fcxx_bind_placeholder_arg<_Jp, tuple<_Us...>, true> {
+    template <class _Td>
+    static constexpr typename tuple_element<_Jp - 1, tuple<_Us...>>::type&&
+    __get(_Td&, tuple<_Us...>& __args) noexcept {
+        return std::get<_Jp - 1>(std::move(__args));
+    }
+};
+
+template <class _Td, class _Args>
+struct __fcxx_bind_arg<_Td, _Args,
+                       __fcxx_enable_if_t<!__fcxx_is_reference_wrapper<__fcxx_remove_cv_t<_Td> >::value
+                                          && !is_bind_expression<__fcxx_remove_cv_t<_Td> >::value
+                                          && (is_placeholder<__fcxx_remove_cv_t<_Td> >::value > 0)> >
+    : __fcxx_bind_placeholder_arg<is_placeholder<__fcxx_remove_cv_t<_Td> >::value, _Args> {};
+
+/* The call of the target object of a bind expression, with the arguments
+ * bind passes, as INVOKE, or as INVOKE<R> for bind<R>. */
+struct __fcxx_bind_no_result {};
+
+template <class _Fd, class _TdTuple, class _Seq, class _Args, class = void>
+struct __fcxx_bind_call {};
+
+template <class _Fd, class... _Td, size_t... _Is, class _Args>
+struct __fcxx_bind_call<
+    _Fd, tuple<_Td...>, index_sequence<_Is...>, _Args,
+    __fcxx_void_t<decltype(std::__fcxx_invoke(std::declval<_Fd&>(),
+                                              __fcxx_bind_arg<_Td, _Args>::__get(std::declval<_Td&>(),
+                                                                                 std::declval<_Args&>())...))> > {
+    typedef decltype(std::__fcxx_invoke(
+        std::declval<_Fd&>(),
+        __fcxx_bind_arg<_Td, _Args>::__get(std::declval<_Td&>(), std::declval<_Args&>())...)) _Result;
+
+    template <class _Tuple>
+    static constexpr _Result __call(_Fd& __fd, _Tuple& __td, _Args&& __args) {
+        return std::__fcxx_invoke(__fd, __fcxx_bind_arg<_Td, _Args>::__get(std::get<_Is>(__td), __args)...);
+    }
+};
+
+template <class _Rp, class _Fd, class _TdTuple, class _Seq, class _Args, bool = is_void<_Rp>::value>
+struct __fcxx_bind_call_r_impl {
+    typedef __fcxx_bind_call<_Fd, _TdTuple, _Seq, _Args> _Call;
+    typedef _Rp _Result;
+
+    template <class _Tuple>
+    static constexpr _Rp __call(_Fd& __fd, _Tuple& __td, _Args&& __args) {
+        return _Call::__call(__fd, __td, std::move(__args));
+    }
+};
+
+template <class _Rp, class _Fd, class _TdTuple, class _Seq, class _Args>
+struct __fcxx_bind_call_r_impl<_Rp, _Fd, _TdTuple, _Seq, _Args, true> {
+    typedef __fcxx_bind_call<_Fd, _TdTuple, _Seq, _Args> _Call;
+    typedef _Rp _Result;
+
+    template <class _Tuple>
+    static constexpr _Rp __call(_Fd& __fd, _Tuple& __td, _Args&& __args) {
+        static_cast<void>(_Call::__call(__fd, __td, std::move(__args)));
+    }
+};
+
+/* INVOKE<R>, where the result converts to R, which may not bind a reference
+ * to a temporary from C++23 on. */
+template <class _Rp, class _Fd, class _TdTuple, class _Seq, class _Args, class = void>
+struct __fcxx_bind_call_r {};
+
+template <class _Rp, class _Fd, class _TdTuple, class _Seq, class _Args>
+struct __fcxx_bind_call_r<_Rp, _Fd, _TdTuple, _Seq, _Args,
+                          __fcxx_enable_if_t<__fcxx_is_invocable_r<
+                              _Rp, typename __fcxx_bind_call<_Fd, _TdTuple, _Seq, _Args>::_Result (*)()>::value>>
+    : __fcxx_bind_call_r_impl<_Rp, _Fd, _TdTuple, _Seq, _Args> {};
+
+template <class _Rp, class _Fd, class _TdTuple, class _Seq, class _Args>
+struct __fcxx_bind_invoke : __fcxx_bind_call_r<_Rp, _Fd, _TdTuple, _Seq, _Args> {};
+
+template <class _Fd, class _TdTuple, class _Seq, class _Args>
+struct __fcxx_bind_invoke<__fcxx_bind_no_result, _Fd, _TdTuple, _Seq, _Args>
+    : __fcxx_bind_call<_Fd, _TdTuple, _Seq, _Args> {};
+
+template <class _Invoke, class = void>
+struct __fcxx_bind_callable : false_type {};
+
+template <class _Invoke>
+struct __fcxx_bind_callable<_Invoke, __fcxx_void_t<typename _Invoke::_Result> > : true_type {};
+
+struct __fcxx_bind_tag {};
+
+template <class _Rp, class _Fd, class... _Td>
+class __fcxx_bind_t {
+    typedef make_index_sequence<sizeof...(_Td)> _Seq;
+
+    _Fd __fd;
+    tuple<_Td...> __td;
+
+    template <class _Fcv, class _Tcv, class... _Us>
+    struct __invoke : __fcxx_bind_invoke<_Rp, _Fcv, _Tcv, _Seq, tuple<_Us&&...> > {};
+
+public:
+    template <class _Fn, class... _Args>
+    constexpr explicit __fcxx_bind_t(__fcxx_bind_tag, _Fn&& __f, _Args&&... __args)
+        : __fd(std::forward<_Fn>(__f)), __td(std::forward<_Args>(__args)...) {}
+
+    /* The call operators that cannot make the call are deleted, so that the
+     * call of a non-const bind expression does not fall back to that of a
+     * const one. */
+    template <class... _Us,
+              __fcxx_enable_if_t<__fcxx_bind_callable<__invoke<_Fd, tuple<_Td...>, _Us...> >::value, int> = 0>
+    constexpr typename __invoke<_Fd, tuple<_Td...>, _Us...>::_Result operator()(_Us&&... __us) {
+        return __invoke<_Fd, tuple<_Td...>, _Us...>::__call(__fd, __td,
+                                                            tuple<_Us&&...>(std::forward<_Us>(__us)...));
+    }
+
+    template <class... _Us,
+              __fcxx_enable_if_t<!__fcxx_bind_callable<__invoke<_Fd, tuple<_Td...>, _Us...> >::value, int> = 0>
+    void operator()(_Us&&...) = delete;
+
+    template <
+        class... _Us,
+        __fcxx_enable_if_t<__fcxx_bind_callable<__invoke<const _Fd, tuple<const _Td...>, _Us...>>::value, int> = 0>
+    constexpr typename __invoke<const _Fd, tuple<const _Td...>, _Us...>::_Result
+    operator()(_Us&&... __us) const {
+        return __invoke<const _Fd, tuple<const _Td...>, _Us...>::__call(__fd, __td,
+                                                                        tuple<_Us&&...>(std::forward<_Us>(__us)...));
+    }
+
+    template <
+        class... _Us,
+        __fcxx_enable_if_t<!__fcxx_bind_callable<__invoke<const _Fd, tuple<const _Td...>, _Us...>>::value, int> = 0>
+    void operator()(_Us&&...) const = delete;
+};
+
+template <class _Rp, class _Fd, class... _Td>
+struct is_bind_expression<__fcxx_bind_t<_Rp, _Fd, _Td...> > : true_type {};
+
+/* [func.bind.bind], function template bind */
+template <class _Fp, class... _Args>
+constexpr __fcxx_bind_t<__fcxx_bind_no_result, __fcxx_decay_t<_Fp>, __fcxx_decay_t<_Args>...> bind(
+    _Fp&& __f, _Args&&... __args) {
+    static_assert(__fcxx_and<is_constructible<__fcxx_decay_t<_Fp>, _Fp>,
+                             is_constructible<__fcxx_decay_t<_Args>, _Args>...>::value,
+                  "std::bind of arguments that cannot be decayed-copied");
+    return __fcxx_bind_t<__fcxx_bind_no_result, __fcxx_decay_t<_Fp>, __fcxx_decay_t<_Args>...>(
+        __fcxx_bind_tag(), std::forward<_Fp>(__f), std::forward<_Args>(__args)...);
+}
+
+template <class _Rp, class _Fp, class... _Args>
+constexpr __fcxx_bind_t<_Rp, __fcxx_decay_t<_Fp>, __fcxx_decay_t<_Args>...> bind(_Fp&& __f, _Args&&... __args) {
+    static_assert(__fcxx_and<is_constructible<__fcxx_decay_t<_Fp>, _Fp>,
+                             is_constructible<__fcxx_decay_t<_Args>, _Args>...>::value,
+                  "std::bind of arguments that cannot be decayed-copied");
+    return __fcxx_bind_t<_Rp, __fcxx_decay_t<_Fp>, __fcxx_decay_t<_Args>...>(__fcxx_bind_tag(), std::forward<_Fp>(__f),
+                                                                           std::forward<_Args>(__args)...);
+}
+
+/* [func.memfn], function template mem_fn */
+
+template <class _Pm>
+class __fcxx_mem_fn {
+    _Pm __pm;
+
+public:
+    constexpr explicit __fcxx_mem_fn(_Pm __p) noexcept : __pm(__p) {}
+
+    template <class... _Args>
+    constexpr typename __fcxx_invoke_result<const _Pm&, _Args...>::type operator()(_Args&&... __args) const
+        noexcept(__fcxx_is_nothrow_invocable<const _Pm&, _Args...>::value) {
+        return std::__fcxx_invoke(__pm, std::forward<_Args>(__args)...);
+    }
+};
+
+template <class _Rp, class _Tp>
+constexpr __fcxx_mem_fn<_Rp _Tp::*> mem_fn(_Rp _Tp::* __pm) noexcept {
+    return __fcxx_mem_fn<_Rp _Tp::*>(__pm);
+}
+
+#if _FCXX_STD >= 2026
+/* [func.wrap.ref], non-owning wrapper */
+
+template <class... _Sig>
+class function_ref;
+
+/* What a function_ref refers to: an object, or a function. */
+union __fcxx_bound_entity {
+    const volatile void* __object;
+    void (*__function)();
+
+    constexpr __fcxx_bound_entity() noexcept : __object(nullptr) {}
+
+    constexpr explicit __fcxx_bound_entity(const volatile void* __p) noexcept : __object(__p) {}
+
+    template <class _Fp>
+        requires is_function_v<_Fp>
+    explicit __fcxx_bound_entity(_Fp* __f) noexcept : __function(reinterpret_cast<void (*)()>(__f)) {}
+};
+
+/* Whether a type is a specialization of function_ref that another one can
+ * take over the function of, as it calls with the same signature. */
+template <class _Fp>
+struct __fcxx_function_ref_traits {
+    static constexpr bool __is = false;
+
+    template <class _Rp, bool _Noex, bool _Const, class... _Args>
+    static constexpr bool __converts_to = false;
+};
+
+template <class _R2, class... _Args2, bool _Noex2>
+struct __fcxx_function_ref_traits<function_ref<_R2(_Args2...) noexcept(_Noex2)> > {
+    static constexpr bool __is = true;
+
+    template <class _Rp, bool _Noex, bool _Const, class... _Args>
+    static constexpr bool __converts_to =
+        is_convertible_v<_R2 (&)(_Args2...) noexcept(_Noex2), _Rp (&)(_Args...) noexcept(_Noex)> && !_Const;
+};
+
+template <class _R2, class... _Args2, bool _Noex2>
+struct __fcxx_function_ref_traits<function_ref<_R2(_Args2...) const noexcept(_Noex2)> > {
+    static constexpr bool __is = true;
+
+    template <class _Rp, bool _Noex, bool _Const, class... _Args>
+    static constexpr bool __converts_to =
+        is_convertible_v<_R2 (&)(_Args2...) noexcept(_Noex2), _Rp (&)(_Args...) noexcept(_Noex)>;
+};
+
+template <class _Tp>
+struct __fcxx_is_constant_wrapper : false_type {};
+
+#  if _FCXX_HAS_CONSTANT_WRAPPER
+template <auto _Cv, class _Fp>
+struct __fcxx_is_constant_wrapper<constant_wrapper<_Cv, _Fp> > : true_type {};
+#  endif
+
+template <class _Rp, class... _ArgTypes>
+class function_ref<_Rp(_ArgTypes...) noexcept(false)> {
+    template <class... _Tp>
+    static constexpr bool __invocable_using = is_invocable_r_v<_Rp, _Tp..., _ArgTypes...>;
+
+    template <class _Fp>
+    static constexpr bool __convertible_from_specialization =
+        __fcxx_function_ref_traits<_Fp>::__is
+        && __fcxx_function_ref_traits<_Fp>::template __converts_to<_Rp, false, false, _ArgTypes...>;
+
+    using _Thunk = _Rp (*)(__fcxx_bound_entity, _ArgTypes&&...);
+
+    template <class _Fp>
+    static _Rp __function_thunk(__fcxx_bound_entity __e, _ArgTypes&&... __args) {
+        return std::invoke_r<_Rp>(reinterpret_cast<_Fp*>(__e.__function), std::forward<_ArgTypes>(__args)...);
+    }
+
+    template <class _Tp>
+    static _Rp __object_thunk(__fcxx_bound_entity __e, _ArgTypes&&... __args) {
+        return std::invoke_r<_Rp>(static_cast<_Tp&>(*static_cast<_Tp*>(const_cast<void*>(__e.__object))),
+                                  std::forward<_ArgTypes>(__args)...);
+    }
+
+#  if _FCXX_HAS_CONSTANT_WRAPPER
+    template <class _Cw>
+    static _Rp __constant_thunk(__fcxx_bound_entity, _ArgTypes&&... __args) {
+        return std::invoke_r<_Rp>(_Cw::value, std::forward<_ArgTypes>(__args)...);
+    }
+
+    template <class _Cw, class _Tp>
+    static _Rp __constant_object_thunk(__fcxx_bound_entity __e, _ArgTypes&&... __args) {
+        return std::invoke_r<_Rp>(_Cw::value,
+                                  static_cast<_Tp&>(*static_cast<_Tp*>(const_cast<void*>(__e.__object))),
+                                  std::forward<_ArgTypes>(__args)...);
+    }
+
+    template <class _Cw, class _Tp>
+    static _Rp __constant_pointer_thunk(__fcxx_bound_entity __e, _ArgTypes&&... __args) {
+        return std::invoke_r<_Rp>(_Cw::value, static_cast<_Tp*>(const_cast<void*>(__e.__object)),
+                                  std::forward<_ArgTypes>(__args)...);
+    }
+
+    template <class _Cw>
+    static consteval void __check_constant() {
+        using _Fp = typename _Cw::value_type;
+        if constexpr (is_pointer_v<_Fp> || is_member_pointer_v<_Fp>) {
+            static_assert(_Cw::value != nullptr, "std::function_ref of a null pointer");
+        }
+    }
+#  endif
+
+    template <class...>
+    friend class function_ref;
+
+    _Thunk __thunk;
+    __fcxx_bound_entity __entity;
+
+public:
+    template <class _Fp>
+        requires (is_function_v<_Fp> && __invocable_using<_Fp>)
+    function_ref(_Fp* __f) noexcept : __thunk(&__function_thunk<_Fp>), __entity(__f) {}
+
+    template <class _Fp, class _Tp = remove_reference_t<_Fp> >
+        requires (!is_same_v<remove_cvref_t<_Fp>, function_ref> && !is_member_pointer_v<_Tp>
+                  && __invocable_using<_Tp&>)
+    constexpr function_ref(_Fp&& __f) noexcept {
+        if constexpr (__convertible_from_specialization<remove_cv_t<_Tp> >) {
+            __thunk = __f.__thunk;
+            __entity = __f.__entity;
+        } else if constexpr (is_function_v<_Tp>) {
+            __thunk = &__function_thunk<_Tp>;
+            __entity = __fcxx_bound_entity(std::addressof(__f));
+        } else {
+            __thunk = &__object_thunk<_Tp>;
+            __entity = __fcxx_bound_entity(static_cast<const volatile void*>(std::addressof(__f)));
+        }
+    }
+
+#  if _FCXX_HAS_CONSTANT_WRAPPER
+    template <auto _Cv, class _Fp>
+        requires __invocable_using<const _Fp&>
+    constexpr function_ref(constant_wrapper<_Cv, _Fp>) noexcept
+        : __thunk(&__constant_thunk<constant_wrapper<_Cv, _Fp> >), __entity() {
+        __check_constant<constant_wrapper<_Cv, _Fp> >();
+        static_assert(sizeof...(_ArgTypes) == 0 || !__fcxx_cw_constant_call<constant_wrapper<_Cv, _Fp>, _ArgTypes...>,
+                      "std::function_ref of a constant callable whose call with constant arguments is constant");
+    }
+
+    template <auto _Cv, class _Fp, class _Up, class _Tp = remove_reference_t<_Up> >
+        requires (!is_rvalue_reference_v<_Up&&> && __invocable_using<const _Fp&, _Tp&>)
+    constexpr function_ref(constant_wrapper<_Cv, _Fp>, _Up&& __obj) noexcept
+        : __thunk(&__constant_object_thunk<constant_wrapper<_Cv, _Fp>, _Tp>),
+          __entity(static_cast<const volatile void*>(std::addressof(__obj))) {
+        __check_constant<constant_wrapper<_Cv, _Fp> >();
+    }
+
+    template <auto _Cv, class _Fp, class _Tp>
+        requires __invocable_using<const _Fp&, _Tp*>
+    constexpr function_ref(constant_wrapper<_Cv, _Fp>, _Tp* __obj) noexcept
+        : __thunk(&__constant_pointer_thunk<constant_wrapper<_Cv, _Fp>, _Tp>),
+          __entity(static_cast<const volatile void*>(__obj)) {
+        __check_constant<constant_wrapper<_Cv, _Fp> >();
+    }
+#  endif
+
+    constexpr function_ref(const function_ref&) noexcept = default;
+    constexpr function_ref& operator=(const function_ref&) noexcept = default;
+
+    template <class _Tp>
+        requires(!__convertible_from_specialization<_Tp> && !is_pointer_v<_Tp>
+                 && !__fcxx_is_constant_wrapper<_Tp>::value)
+    function_ref& operator=(_Tp) = delete;
+
+    _Rp operator()(_ArgTypes... __args) const {
+        return __thunk(__entity, std::forward<_ArgTypes>(__args)...);
+    }
+};
+
+template <class _Rp, class... _ArgTypes>
+class function_ref<_Rp(_ArgTypes...) noexcept(true)> {
+    template <class... _Tp>
+    static constexpr bool __invocable_using = is_nothrow_invocable_r_v<_Rp, _Tp..., _ArgTypes...>;
+
+    template <class _Fp>
+    static constexpr bool __convertible_from_specialization =
+        __fcxx_function_ref_traits<_Fp>::__is
+        && __fcxx_function_ref_traits<_Fp>::template __converts_to<_Rp, true, false, _ArgTypes...>;
+
+    using _Thunk = _Rp (*)(__fcxx_bound_entity, _ArgTypes&&...) noexcept;
+
+    template <class _Fp>
+    static _Rp __function_thunk(__fcxx_bound_entity __e, _ArgTypes&&... __args) noexcept {
+        return std::invoke_r<_Rp>(reinterpret_cast<_Fp*>(__e.__function), std::forward<_ArgTypes>(__args)...);
+    }
+
+    template <class _Tp>
+    static _Rp __object_thunk(__fcxx_bound_entity __e, _ArgTypes&&... __args) noexcept {
+        return std::invoke_r<_Rp>(static_cast<_Tp&>(*static_cast<_Tp*>(const_cast<void*>(__e.__object))),
+                                  std::forward<_ArgTypes>(__args)...);
+    }
+
+#  if _FCXX_HAS_CONSTANT_WRAPPER
+    template <class _Cw>
+    static _Rp __constant_thunk(__fcxx_bound_entity, _ArgTypes&&... __args) noexcept {
+        return std::invoke_r<_Rp>(_Cw::value, std::forward<_ArgTypes>(__args)...);
+    }
+
+    template <class _Cw, class _Tp>
+    static _Rp __constant_object_thunk(__fcxx_bound_entity __e, _ArgTypes&&... __args) noexcept {
+        return std::invoke_r<_Rp>(_Cw::value,
+                                  static_cast<_Tp&>(*static_cast<_Tp*>(const_cast<void*>(__e.__object))),
+                                  std::forward<_ArgTypes>(__args)...);
+    }
+
+    template <class _Cw, class _Tp>
+    static _Rp __constant_pointer_thunk(__fcxx_bound_entity __e, _ArgTypes&&... __args) noexcept {
+        return std::invoke_r<_Rp>(_Cw::value, static_cast<_Tp*>(const_cast<void*>(__e.__object)),
+                                  std::forward<_ArgTypes>(__args)...);
+    }
+
+    template <class _Cw>
+    static consteval void __check_constant() {
+        using _Fp = typename _Cw::value_type;
+        if constexpr (is_pointer_v<_Fp> || is_member_pointer_v<_Fp>) {
+            static_assert(_Cw::value != nullptr, "std::function_ref of a null pointer");
+        }
+    }
+#  endif
+
+    template <class...>
+    friend class function_ref;
+
+    _Thunk __thunk;
+    __fcxx_bound_entity __entity;
+
+public:
+    template <class _Fp>
+        requires (is_function_v<_Fp> && __invocable_using<_Fp>)
+    function_ref(_Fp* __f) noexcept : __thunk(&__function_thunk<_Fp>), __entity(__f) {}
+
+    template <class _Fp, class _Tp = remove_reference_t<_Fp> >
+        requires (!is_same_v<remove_cvref_t<_Fp>, function_ref> && !is_member_pointer_v<_Tp>
+                  && __invocable_using<_Tp&>)
+    constexpr function_ref(_Fp&& __f) noexcept {
+        if constexpr (__convertible_from_specialization<remove_cv_t<_Tp> >) {
+            __thunk = __f.__thunk;
+            __entity = __f.__entity;
+        } else if constexpr (is_function_v<_Tp>) {
+            __thunk = &__function_thunk<_Tp>;
+            __entity = __fcxx_bound_entity(std::addressof(__f));
+        } else {
+            __thunk = &__object_thunk<_Tp>;
+            __entity = __fcxx_bound_entity(static_cast<const volatile void*>(std::addressof(__f)));
+        }
+    }
+
+#  if _FCXX_HAS_CONSTANT_WRAPPER
+    template <auto _Cv, class _Fp>
+        requires __invocable_using<const _Fp&>
+    constexpr function_ref(constant_wrapper<_Cv, _Fp>) noexcept
+        : __thunk(&__constant_thunk<constant_wrapper<_Cv, _Fp> >), __entity() {
+        __check_constant<constant_wrapper<_Cv, _Fp> >();
+        static_assert(sizeof...(_ArgTypes) == 0 || !__fcxx_cw_constant_call<constant_wrapper<_Cv, _Fp>, _ArgTypes...>,
+                      "std::function_ref of a constant callable whose call with constant arguments is constant");
+    }
+
+    template <auto _Cv, class _Fp, class _Up, class _Tp = remove_reference_t<_Up> >
+        requires (!is_rvalue_reference_v<_Up&&> && __invocable_using<const _Fp&, _Tp&>)
+    constexpr function_ref(constant_wrapper<_Cv, _Fp>, _Up&& __obj) noexcept
+        : __thunk(&__constant_object_thunk<constant_wrapper<_Cv, _Fp>, _Tp>),
+          __entity(static_cast<const volatile void*>(std::addressof(__obj))) {
+        __check_constant<constant_wrapper<_Cv, _Fp> >();
+    }
+
+    template <auto _Cv, class _Fp, class _Tp>
+        requires __invocable_using<const _Fp&, _Tp*>
+    constexpr function_ref(constant_wrapper<_Cv, _Fp>, _Tp* __obj) noexcept
+        : __thunk(&__constant_pointer_thunk<constant_wrapper<_Cv, _Fp>, _Tp>),
+          __entity(static_cast<const volatile void*>(__obj)) {
+        __check_constant<constant_wrapper<_Cv, _Fp> >();
+    }
+#  endif
+
+    constexpr function_ref(const function_ref&) noexcept = default;
+    constexpr function_ref& operator=(const function_ref&) noexcept = default;
+
+    template <class _Tp>
+        requires(!__convertible_from_specialization<_Tp> && !is_pointer_v<_Tp>
+                 && !__fcxx_is_constant_wrapper<_Tp>::value)
+    function_ref& operator=(_Tp) = delete;
+
+    _Rp operator()(_ArgTypes... __args) const noexcept {
+        return __thunk(__entity, std::forward<_ArgTypes>(__args)...);
+    }
+};
+
+template <class _Rp, class... _ArgTypes>
+class function_ref<_Rp(_ArgTypes...) const noexcept(false)> {
+    template <class... _Tp>
+    static constexpr bool __invocable_using = is_invocable_r_v<_Rp, _Tp..., _ArgTypes...>;
+
+    template <class _Fp>
+    static constexpr bool __convertible_from_specialization =
+        __fcxx_function_ref_traits<_Fp>::__is
+        && __fcxx_function_ref_traits<_Fp>::template __converts_to<_Rp, false, true, _ArgTypes...>;
+
+    using _Thunk = _Rp (*)(__fcxx_bound_entity, _ArgTypes&&...);
+
+    template <class _Fp>
+    static _Rp __function_thunk(__fcxx_bound_entity __e, _ArgTypes&&... __args) {
+        return std::invoke_r<_Rp>(reinterpret_cast<_Fp*>(__e.__function), std::forward<_ArgTypes>(__args)...);
+    }
+
+    template <class _Tp>
+    static _Rp __object_thunk(__fcxx_bound_entity __e, _ArgTypes&&... __args) {
+        return std::invoke_r<_Rp>(static_cast<const _Tp&>(*static_cast<const _Tp*>(const_cast<void*>(__e.__object))),
+                                  std::forward<_ArgTypes>(__args)...);
+    }
+
+#  if _FCXX_HAS_CONSTANT_WRAPPER
+    template <class _Cw>
+    static _Rp __constant_thunk(__fcxx_bound_entity, _ArgTypes&&... __args) {
+        return std::invoke_r<_Rp>(_Cw::value, std::forward<_ArgTypes>(__args)...);
+    }
+
+    template <class _Cw, class _Tp>
+    static _Rp __constant_object_thunk(__fcxx_bound_entity __e, _ArgTypes&&... __args) {
+        return std::invoke_r<_Rp>(_Cw::value,
+                                  static_cast<const _Tp&>(*static_cast<const _Tp*>(const_cast<void*>(__e.__object))),
+                                  std::forward<_ArgTypes>(__args)...);
+    }
+
+    template <class _Cw, class _Tp>
+    static _Rp __constant_pointer_thunk(__fcxx_bound_entity __e, _ArgTypes&&... __args) {
+        return std::invoke_r<_Rp>(_Cw::value, static_cast<const _Tp*>(const_cast<void*>(__e.__object)),
+                                  std::forward<_ArgTypes>(__args)...);
+    }
+
+    template <class _Cw>
+    static consteval void __check_constant() {
+        using _Fp = typename _Cw::value_type;
+        if constexpr (is_pointer_v<_Fp> || is_member_pointer_v<_Fp>) {
+            static_assert(_Cw::value != nullptr, "std::function_ref of a null pointer");
+        }
+    }
+#  endif
+
+    template <class...>
+    friend class function_ref;
+
+    _Thunk __thunk;
+    __fcxx_bound_entity __entity;
+
+public:
+    template <class _Fp>
+        requires (is_function_v<_Fp> && __invocable_using<_Fp>)
+    function_ref(_Fp* __f) noexcept : __thunk(&__function_thunk<_Fp>), __entity(__f) {}
+
+    template <class _Fp, class _Tp = remove_reference_t<_Fp> >
+        requires (!is_same_v<remove_cvref_t<_Fp>, function_ref> && !is_member_pointer_v<_Tp>
+                  && __invocable_using<const _Tp&>)
+    constexpr function_ref(_Fp&& __f) noexcept {
+        if constexpr (__convertible_from_specialization<remove_cv_t<_Tp> >) {
+            __thunk = __f.__thunk;
+            __entity = __f.__entity;
+        } else if constexpr (is_function_v<_Tp>) {
+            __thunk = &__function_thunk<_Tp>;
+            __entity = __fcxx_bound_entity(std::addressof(__f));
+        } else {
+            __thunk = &__object_thunk<_Tp>;
+            __entity = __fcxx_bound_entity(static_cast<const volatile void*>(std::addressof(__f)));
+        }
+    }
+
+#  if _FCXX_HAS_CONSTANT_WRAPPER
+    template <auto _Cv, class _Fp>
+        requires __invocable_using<const _Fp&>
+    constexpr function_ref(constant_wrapper<_Cv, _Fp>) noexcept
+        : __thunk(&__constant_thunk<constant_wrapper<_Cv, _Fp> >), __entity() {
+        __check_constant<constant_wrapper<_Cv, _Fp> >();
+        static_assert(sizeof...(_ArgTypes) == 0 || !__fcxx_cw_constant_call<constant_wrapper<_Cv, _Fp>, _ArgTypes...>,
+                      "std::function_ref of a constant callable whose call with constant arguments is constant");
+    }
+
+    template <auto _Cv, class _Fp, class _Up, class _Tp = remove_reference_t<_Up> >
+        requires (!is_rvalue_reference_v<_Up&&> && __invocable_using<const _Fp&, const _Tp&>)
+    constexpr function_ref(constant_wrapper<_Cv, _Fp>, _Up&& __obj) noexcept
+        : __thunk(&__constant_object_thunk<constant_wrapper<_Cv, _Fp>, _Tp>),
+          __entity(static_cast<const volatile void*>(std::addressof(__obj))) {
+        __check_constant<constant_wrapper<_Cv, _Fp> >();
+    }
+
+    template <auto _Cv, class _Fp, class _Tp>
+        requires __invocable_using<const _Fp&, const _Tp*>
+    constexpr function_ref(constant_wrapper<_Cv, _Fp>, const _Tp* __obj) noexcept
+        : __thunk(&__constant_pointer_thunk<constant_wrapper<_Cv, _Fp>, _Tp>),
+          __entity(static_cast<const volatile void*>(__obj)) {
+        __check_constant<constant_wrapper<_Cv, _Fp> >();
+    }
+#  endif
+
+    constexpr function_ref(const function_ref&) noexcept = default;
+    constexpr function_ref& operator=(const function_ref&) noexcept = default;
+
+    template <class _Tp>
+        requires(!__convertible_from_specialization<_Tp> && !is_pointer_v<_Tp>
+                 && !__fcxx_is_constant_wrapper<_Tp>::value)
+    function_ref& operator=(_Tp) = delete;
+
+    _Rp operator()(_ArgTypes... __args) const {
+        return __thunk(__entity, std::forward<_ArgTypes>(__args)...);
+    }
+};
+
+template <class _Rp, class... _ArgTypes>
+class function_ref<_Rp(_ArgTypes...) const noexcept(true)> {
+    template <class... _Tp>
+    static constexpr bool __invocable_using = is_nothrow_invocable_r_v<_Rp, _Tp..., _ArgTypes...>;
+
+    template <class _Fp>
+    static constexpr bool __convertible_from_specialization =
+        __fcxx_function_ref_traits<_Fp>::__is
+        && __fcxx_function_ref_traits<_Fp>::template __converts_to<_Rp, true, true, _ArgTypes...>;
+
+    using _Thunk = _Rp (*)(__fcxx_bound_entity, _ArgTypes&&...) noexcept;
+
+    template <class _Fp>
+    static _Rp __function_thunk(__fcxx_bound_entity __e, _ArgTypes&&... __args) noexcept {
+        return std::invoke_r<_Rp>(reinterpret_cast<_Fp*>(__e.__function), std::forward<_ArgTypes>(__args)...);
+    }
+
+    template <class _Tp>
+    static _Rp __object_thunk(__fcxx_bound_entity __e, _ArgTypes&&... __args) noexcept {
+        return std::invoke_r<_Rp>(static_cast<const _Tp&>(*static_cast<const _Tp*>(const_cast<void*>(__e.__object))),
+                                  std::forward<_ArgTypes>(__args)...);
+    }
+
+#  if _FCXX_HAS_CONSTANT_WRAPPER
+    template <class _Cw>
+    static _Rp __constant_thunk(__fcxx_bound_entity, _ArgTypes&&... __args) noexcept {
+        return std::invoke_r<_Rp>(_Cw::value, std::forward<_ArgTypes>(__args)...);
+    }
+
+    template <class _Cw, class _Tp>
+    static _Rp __constant_object_thunk(__fcxx_bound_entity __e, _ArgTypes&&... __args) noexcept {
+        return std::invoke_r<_Rp>(_Cw::value,
+                                  static_cast<const _Tp&>(*static_cast<const _Tp*>(const_cast<void*>(__e.__object))),
+                                  std::forward<_ArgTypes>(__args)...);
+    }
+
+    template <class _Cw, class _Tp>
+    static _Rp __constant_pointer_thunk(__fcxx_bound_entity __e, _ArgTypes&&... __args) noexcept {
+        return std::invoke_r<_Rp>(_Cw::value, static_cast<const _Tp*>(const_cast<void*>(__e.__object)),
+                                  std::forward<_ArgTypes>(__args)...);
+    }
+
+    template <class _Cw>
+    static consteval void __check_constant() {
+        using _Fp = typename _Cw::value_type;
+        if constexpr (is_pointer_v<_Fp> || is_member_pointer_v<_Fp>) {
+            static_assert(_Cw::value != nullptr, "std::function_ref of a null pointer");
+        }
+    }
+#  endif
+
+    template <class...>
+    friend class function_ref;
+
+    _Thunk __thunk;
+    __fcxx_bound_entity __entity;
+
+public:
+    template <class _Fp>
+        requires (is_function_v<_Fp> && __invocable_using<_Fp>)
+    function_ref(_Fp* __f) noexcept : __thunk(&__function_thunk<_Fp>), __entity(__f) {}
+
+    template <class _Fp, class _Tp = remove_reference_t<_Fp> >
+        requires (!is_same_v<remove_cvref_t<_Fp>, function_ref> && !is_member_pointer_v<_Tp>
+                  && __invocable_using<const _Tp&>)
+    constexpr function_ref(_Fp&& __f) noexcept {
+        if constexpr (__convertible_from_specialization<remove_cv_t<_Tp> >) {
+            __thunk = __f.__thunk;
+            __entity = __f.__entity;
+        } else if constexpr (is_function_v<_Tp>) {
+            __thunk = &__function_thunk<_Tp>;
+            __entity = __fcxx_bound_entity(std::addressof(__f));
+        } else {
+            __thunk = &__object_thunk<_Tp>;
+            __entity = __fcxx_bound_entity(static_cast<const volatile void*>(std::addressof(__f)));
+        }
+    }
+
+#  if _FCXX_HAS_CONSTANT_WRAPPER
+    template <auto _Cv, class _Fp>
+        requires __invocable_using<const _Fp&>
+    constexpr function_ref(constant_wrapper<_Cv, _Fp>) noexcept
+        : __thunk(&__constant_thunk<constant_wrapper<_Cv, _Fp> >), __entity() {
+        __check_constant<constant_wrapper<_Cv, _Fp> >();
+        static_assert(sizeof...(_ArgTypes) == 0 || !__fcxx_cw_constant_call<constant_wrapper<_Cv, _Fp>, _ArgTypes...>,
+                      "std::function_ref of a constant callable whose call with constant arguments is constant");
+    }
+
+    template <auto _Cv, class _Fp, class _Up, class _Tp = remove_reference_t<_Up> >
+        requires (!is_rvalue_reference_v<_Up&&> && __invocable_using<const _Fp&, const _Tp&>)
+    constexpr function_ref(constant_wrapper<_Cv, _Fp>, _Up&& __obj) noexcept
+        : __thunk(&__constant_object_thunk<constant_wrapper<_Cv, _Fp>, _Tp>),
+          __entity(static_cast<const volatile void*>(std::addressof(__obj))) {
+        __check_constant<constant_wrapper<_Cv, _Fp> >();
+    }
+
+    template <auto _Cv, class _Fp, class _Tp>
+        requires __invocable_using<const _Fp&, const _Tp*>
+    constexpr function_ref(constant_wrapper<_Cv, _Fp>, const _Tp* __obj) noexcept
+        : __thunk(&__constant_pointer_thunk<constant_wrapper<_Cv, _Fp>, _Tp>),
+          __entity(static_cast<const volatile void*>(__obj)) {
+        __check_constant<constant_wrapper<_Cv, _Fp> >();
+    }
+#  endif
+
+    constexpr function_ref(const function_ref&) noexcept = default;
+    constexpr function_ref& operator=(const function_ref&) noexcept = default;
+
+    template <class _Tp>
+        requires(!__convertible_from_specialization<_Tp> && !is_pointer_v<_Tp>
+                 && !__fcxx_is_constant_wrapper<_Tp>::value)
+    function_ref& operator=(_Tp) = delete;
+
+    _Rp operator()(_ArgTypes... __args) const noexcept {
+        return __thunk(__entity, std::forward<_ArgTypes>(__args)...);
+    }
+};
+
+template <class _Fp>
+    requires is_function_v<_Fp>
+function_ref(_Fp*) -> function_ref<_Fp>;
+
+#  if _FCXX_HAS_CONSTANT_WRAPPER
+/* The signature of a function_ref of a constant callable object bound to an
+ * object: that of a pointer to member function without its object, that of
+ * a pointer to data member, and that of a pointer to function without its
+ * first parameter. */
+template <class _Fp, class _Tp>
+struct __fcxx_function_ref_bound_signature {};
+
+template <class _Rp, class _Gp, class... _Args, bool _Ex, class _Tp>
+struct __fcxx_function_ref_bound_signature<_Rp (_Gp::*)(_Args...) noexcept(_Ex), _Tp> {
+    using type = _Rp(_Args...) noexcept(_Ex);
+};
+
+template <class _Rp, class _Gp, class... _Args, bool _Ex, class _Tp>
+struct __fcxx_function_ref_bound_signature<_Rp (_Gp::*)(_Args...) & noexcept(_Ex), _Tp> {
+    using type = _Rp(_Args...) noexcept(_Ex);
+};
+
+template <class _Rp, class _Gp, class... _Args, bool _Ex, class _Tp>
+struct __fcxx_function_ref_bound_signature<_Rp (_Gp::*)(_Args...) const noexcept(_Ex), _Tp> {
+    using type = _Rp(_Args...) noexcept(_Ex);
+};
+
+template <class _Rp, class _Gp, class... _Args, bool _Ex, class _Tp>
+struct __fcxx_function_ref_bound_signature<_Rp (_Gp::*)(_Args...) const & noexcept(_Ex), _Tp> {
+    using type = _Rp(_Args...) noexcept(_Ex);
+};
+
+template <class _Rp, class _Gp, class... _Args, bool _Ex, class _Tp>
+struct __fcxx_function_ref_bound_signature<_Rp (_Gp::*)(_Args...) volatile noexcept(_Ex), _Tp> {
+    using type = _Rp(_Args...) noexcept(_Ex);
+};
+
+template <class _Rp, class _Gp, class... _Args, bool _Ex, class _Tp>
+struct __fcxx_function_ref_bound_signature<_Rp (_Gp::*)(_Args...) volatile & noexcept(_Ex), _Tp> {
+    using type = _Rp(_Args...) noexcept(_Ex);
+};
+
+template <class _Rp, class _Gp, class... _Args, bool _Ex, class _Tp>
+struct __fcxx_function_ref_bound_signature<_Rp (_Gp::*)(_Args...) const volatile noexcept(_Ex), _Tp> {
+    using type = _Rp(_Args...) noexcept(_Ex);
+};
+
+template <class _Rp, class _Gp, class... _Args, bool _Ex, class _Tp>
+struct __fcxx_function_ref_bound_signature<_Rp (_Gp::*)(_Args...) const volatile & noexcept(_Ex), _Tp> {
+    using type = _Rp(_Args...) noexcept(_Ex);
+};
+
+template <class _Mp, class _Gp, class _Tp>
+    requires is_object_v<_Mp>
+struct __fcxx_function_ref_bound_signature<_Mp _Gp::*, _Tp> {
+    using type = invoke_result_t<_Mp _Gp::*, _Tp&>() noexcept;
+};
+
+template <class _Rp, class _Gp, class... _Args, bool _Ex, class _Tp>
+struct __fcxx_function_ref_bound_signature<_Rp (*)(_Gp, _Args...) noexcept(_Ex), _Tp> {
+    using type = _Rp(_Args...) noexcept(_Ex);
+};
+
+template <auto _Cv, class _F0>
+    requires is_function_v<remove_pointer_t<_F0> >
+function_ref(constant_wrapper<_Cv, _F0>) -> function_ref<remove_pointer_t<_F0> >;
+
+template <auto _Cv, class _Fp, class _Tp>
+function_ref(constant_wrapper<_Cv, _Fp>, _Tp&&)
+    -> function_ref<typename __fcxx_function_ref_bound_signature<_Fp, _Tp>::type>;
+#  endif
+#endif
+
+/* [func.search.default], class template default_searcher */
+
+template <class _ForwardIterator1, class _BinaryPredicate = equal_to<> >
+class default_searcher {
+public:
+    constexpr default_searcher(_ForwardIterator1 __first, _ForwardIterator1 __last,
+                                       _BinaryPredicate __p = _BinaryPredicate())
+        : __pat_first(__first), __pat_last(__last), __pred(__p) {}
+
+    template <class _ForwardIterator2>
+    constexpr pair<_ForwardIterator2, _ForwardIterator2> operator()(_ForwardIterator2 __first,
+                                                                             _ForwardIterator2 __last) const {
+        for (;; ++__first) {
+            _ForwardIterator2 __it = __first;
+            for (_ForwardIterator1 __p = __pat_first;; ++__it, ++__p) {
+                if (__p == __pat_last) {
+                    return pair<_ForwardIterator2, _ForwardIterator2>(__first, __it);
+                }
+                if (__it == __last) {
+                    return pair<_ForwardIterator2, _ForwardIterator2>(__last, __last);
+                }
+                if (!__pred(*__it, *__p)) {
+                    break;
+                }
+            }
+        }
+    }
+
+private:
+    _ForwardIterator1 __pat_first;
+    _ForwardIterator1 __pat_last;
+    _BinaryPredicate __pred;
+};
+
+} /* namespace std */
+
+#endif
+
+#endif

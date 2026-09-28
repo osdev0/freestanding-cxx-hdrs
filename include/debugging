@@ -1,0 +1,82 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_DEBUGGING
+#define __FREESTANDING_CXX_HDRS_DEBUGGING 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2026
+#  error "<debugging> requires C++26 or later"
+#endif
+
+#define _FCXX_VERSION_DEBUGGING
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_DEBUGGING
+
+#if _FCXX_STD >= 2026
+
+namespace std {
+
+/* The instruction the debuggers of each architecture take for a breakpoint,
+ * or a trap where there is none known to be.
+ * Workaround: Clang 17 to 23 (all the versions with a mode for C++26),
+ * MSP430: it has the builtin, but rejects it ("cannot compile this builtin
+ * function yet"), so a trap is used there. */
+inline void breakpoint() noexcept {
+#if _FCXX_HAS_BUILTIN(__builtin_debugtrap) && !defined(__MSP430__)
+    __builtin_debugtrap();
+#elif defined(__i386__) || defined(__x86_64__)
+    __asm__ __volatile__("int3");
+#elif defined(__aarch64__)
+    __asm__ __volatile__("brk #0xf000");
+#elif defined(__arm__)
+    __asm__ __volatile__("bkpt #0");
+#elif defined(__riscv)
+    __asm__ __volatile__("ebreak");
+#elif defined(__loongarch__)
+    __asm__ __volatile__("break 0");
+#elif defined(__powerpc__)
+    __asm__ __volatile__("trap");
+#elif defined(__mips__)
+    __asm__ __volatile__("break");
+#else
+    __builtin_trap();
+#endif
+}
+
+/* A replaceable function, whose default has no way of knowing whether there
+ * is a debugger. That default is defined as a weak symbol, so that the one
+ * of a program, in a translation unit that does not include this header,
+ * takes its place. */
+__attribute__((__weak__)) bool is_debugger_present() noexcept {
+    return false;
+}
+
+inline void breakpoint_if_debugging() noexcept {
+    if (is_debugger_present()) {
+        breakpoint();
+    }
+}
+
+} /* namespace std */
+
+#endif
+
+#endif

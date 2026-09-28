@@ -1,0 +1,934 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_COMPARE
+#define __FREESTANDING_CXX_HDRS_COMPARE 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2020
+#  error "<compare> requires C++20 or later"
+#elif !_FCXX_HEADER_COMPARE
+#  error "<compare> requires a compiler with the three-way comparison operator"
+#endif
+
+#define _FCXX_VERSION_COMPARE
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_COMPARE
+
+#if _FCXX_HEADER_COMPARE
+
+#include <type_traits>
+#if _FCXX_HEADER_CONCEPTS
+#  include <concepts>
+#endif
+
+#if _FCXX_HAS_CONSTEVAL
+#  define _FCXX_CMP_CONSTEVAL consteval
+#else
+#  define _FCXX_CMP_CONSTEVAL constexpr
+#endif
+
+namespace std {
+
+/* The type the comparison category types are compared with, which only a
+ * literal 0 can be converted to, as a null pointer constant. */
+struct __fcxx_cmp_zero {
+    _FCXX_CMP_CONSTEVAL __fcxx_cmp_zero(__fcxx_cmp_zero*) noexcept {}
+};
+
+/* [cmp.categories], comparison category types. Each holds -1, 0 or 1, and
+ * 2 for unordered. The value is public, as the types have to be structural
+ * for type_order, but has a reserved name. */
+
+class partial_ordering {
+public:
+    signed char __value;
+
+    static const partial_ordering less;
+    static const partial_ordering equivalent;
+    static const partial_ordering greater;
+    static const partial_ordering unordered;
+
+    friend constexpr bool operator==(partial_ordering, partial_ordering) noexcept = default;
+
+    friend constexpr bool operator==(partial_ordering __v, __fcxx_cmp_zero) noexcept { return __v.__value == 0; }
+    friend constexpr bool operator<(partial_ordering __v, __fcxx_cmp_zero) noexcept { return __v.__value == -1; }
+    friend constexpr bool operator>(partial_ordering __v, __fcxx_cmp_zero) noexcept { return __v.__value == 1; }
+    friend constexpr bool operator<=(partial_ordering __v, __fcxx_cmp_zero) noexcept {
+        return __v.__value == -1 || __v.__value == 0;
+    }
+    friend constexpr bool operator>=(partial_ordering __v, __fcxx_cmp_zero) noexcept {
+        return __v.__value == 1 || __v.__value == 0;
+    }
+    friend constexpr bool operator<(__fcxx_cmp_zero, partial_ordering __v) noexcept { return __v.__value == 1; }
+    friend constexpr bool operator>(__fcxx_cmp_zero, partial_ordering __v) noexcept { return __v.__value == -1; }
+    friend constexpr bool operator<=(__fcxx_cmp_zero, partial_ordering __v) noexcept {
+        return __v.__value == 1 || __v.__value == 0;
+    }
+    friend constexpr bool operator>=(__fcxx_cmp_zero, partial_ordering __v) noexcept {
+        return __v.__value == -1 || __v.__value == 0;
+    }
+    friend constexpr partial_ordering operator<=>(partial_ordering __v, __fcxx_cmp_zero) noexcept { return __v; }
+    friend constexpr partial_ordering operator<=>(__fcxx_cmp_zero, partial_ordering __v) noexcept {
+        return __v.__value == 2 ? __v : partial_ordering(static_cast<signed char>(-__v.__value));
+    }
+
+private:
+    friend class weak_ordering;
+    friend class strong_ordering;
+
+    constexpr explicit partial_ordering(signed char __v) noexcept : __value(__v) {}
+};
+
+inline constexpr partial_ordering partial_ordering::less(-1);
+inline constexpr partial_ordering partial_ordering::equivalent(0);
+inline constexpr partial_ordering partial_ordering::greater(1);
+inline constexpr partial_ordering partial_ordering::unordered(2);
+
+class weak_ordering {
+public:
+    signed char __value;
+
+    static const weak_ordering less;
+    static const weak_ordering equivalent;
+    static const weak_ordering greater;
+
+    constexpr operator partial_ordering() const noexcept { return partial_ordering(__value); }
+
+    friend constexpr bool operator==(weak_ordering, weak_ordering) noexcept = default;
+
+    friend constexpr bool operator==(weak_ordering __v, __fcxx_cmp_zero) noexcept { return __v.__value == 0; }
+    friend constexpr bool operator<(weak_ordering __v, __fcxx_cmp_zero) noexcept { return __v.__value < 0; }
+    friend constexpr bool operator>(weak_ordering __v, __fcxx_cmp_zero) noexcept { return __v.__value > 0; }
+    friend constexpr bool operator<=(weak_ordering __v, __fcxx_cmp_zero) noexcept { return __v.__value <= 0; }
+    friend constexpr bool operator>=(weak_ordering __v, __fcxx_cmp_zero) noexcept { return __v.__value >= 0; }
+    friend constexpr bool operator<(__fcxx_cmp_zero, weak_ordering __v) noexcept { return 0 < __v.__value; }
+    friend constexpr bool operator>(__fcxx_cmp_zero, weak_ordering __v) noexcept { return 0 > __v.__value; }
+    friend constexpr bool operator<=(__fcxx_cmp_zero, weak_ordering __v) noexcept { return 0 <= __v.__value; }
+    friend constexpr bool operator>=(__fcxx_cmp_zero, weak_ordering __v) noexcept { return 0 >= __v.__value; }
+    friend constexpr weak_ordering operator<=>(weak_ordering __v, __fcxx_cmp_zero) noexcept { return __v; }
+    friend constexpr weak_ordering operator<=>(__fcxx_cmp_zero, weak_ordering __v) noexcept {
+        return weak_ordering(static_cast<signed char>(-__v.__value));
+    }
+
+private:
+    friend class strong_ordering;
+
+    constexpr explicit weak_ordering(signed char __v) noexcept : __value(__v) {}
+};
+
+inline constexpr weak_ordering weak_ordering::less(-1);
+inline constexpr weak_ordering weak_ordering::equivalent(0);
+inline constexpr weak_ordering weak_ordering::greater(1);
+
+class strong_ordering {
+public:
+    signed char __value;
+
+    static const strong_ordering less;
+    static const strong_ordering equal;
+    static const strong_ordering equivalent;
+    static const strong_ordering greater;
+
+    constexpr operator partial_ordering() const noexcept { return partial_ordering(__value); }
+    constexpr operator weak_ordering() const noexcept { return weak_ordering(__value); }
+
+    friend constexpr bool operator==(strong_ordering, strong_ordering) noexcept = default;
+
+    friend constexpr bool operator==(strong_ordering __v, __fcxx_cmp_zero) noexcept { return __v.__value == 0; }
+    friend constexpr bool operator<(strong_ordering __v, __fcxx_cmp_zero) noexcept { return __v.__value < 0; }
+    friend constexpr bool operator>(strong_ordering __v, __fcxx_cmp_zero) noexcept { return __v.__value > 0; }
+    friend constexpr bool operator<=(strong_ordering __v, __fcxx_cmp_zero) noexcept { return __v.__value <= 0; }
+    friend constexpr bool operator>=(strong_ordering __v, __fcxx_cmp_zero) noexcept { return __v.__value >= 0; }
+    friend constexpr bool operator<(__fcxx_cmp_zero, strong_ordering __v) noexcept { return 0 < __v.__value; }
+    friend constexpr bool operator>(__fcxx_cmp_zero, strong_ordering __v) noexcept { return 0 > __v.__value; }
+    friend constexpr bool operator<=(__fcxx_cmp_zero, strong_ordering __v) noexcept { return 0 <= __v.__value; }
+    friend constexpr bool operator>=(__fcxx_cmp_zero, strong_ordering __v) noexcept { return 0 >= __v.__value; }
+    friend constexpr strong_ordering operator<=>(strong_ordering __v, __fcxx_cmp_zero) noexcept { return __v; }
+    friend constexpr strong_ordering operator<=>(__fcxx_cmp_zero, strong_ordering __v) noexcept {
+        return strong_ordering(static_cast<signed char>(-__v.__value));
+    }
+
+private:
+    constexpr explicit strong_ordering(signed char __v) noexcept : __value(__v) {}
+};
+
+inline constexpr strong_ordering strong_ordering::less(-1);
+inline constexpr strong_ordering strong_ordering::equal(0);
+inline constexpr strong_ordering strong_ordering::equivalent(0);
+inline constexpr strong_ordering strong_ordering::greater(1);
+
+/* named comparison functions */
+constexpr bool is_eq(partial_ordering __cmp) noexcept { return __cmp == 0; }
+constexpr bool is_neq(partial_ordering __cmp) noexcept { return __cmp != 0; }
+constexpr bool is_lt(partial_ordering __cmp) noexcept { return __cmp < 0; }
+constexpr bool is_lteq(partial_ordering __cmp) noexcept { return __cmp <= 0; }
+constexpr bool is_gt(partial_ordering __cmp) noexcept { return __cmp > 0; }
+constexpr bool is_gteq(partial_ordering __cmp) noexcept { return __cmp >= 0; }
+
+/* t <=> u, which the comparisons of the other headers use for their values
+ * too: for arithmetic types of which one at least is a floating-point type,
+ * it is worked out with the compilers below from == and <, testing for the
+ * NaNs first, rather than with the operator.
+ * Workaround: GCC 10 and 11, all targets: an ordered comparison of a NaN is
+ * no constant expression (as it raises the invalid exception), which makes
+ * <=> of a NaN none either, where == and != are.
+ * Workaround: GCC 14 to 16 (the latest), all targets, from -O2 on: of two
+ * evaluations of <=> of the same floating-point values in a function, as
+ * after inlining, the one that reuses the comparisons of the other is
+ * equivalent where the values are unordered (and even greater at -O3). The
+ * same comparisons in the order of ==, <, > are too, but those that test for
+ * the NaNs first are right. */
+template <class _Tp, class _Up>
+struct __fcxx_fp_three_way_operands
+    : bool_constant<is_arithmetic<_Tp>::value && is_arithmetic<_Up>::value
+                    && (is_floating_point<_Tp>::value || is_floating_point<_Up>::value)> {};
+
+template <class _Tp, class _Up>
+constexpr auto __fcxx_three_way(const _Tp& __t, const _Up& __u) noexcept(noexcept(__t <=> __u))
+    -> decltype(__t <=> __u) {
+#if _FCXX_GCC && (_FCXX_GCC < 1200 || _FCXX_GCC >= 1400)
+    if constexpr (__fcxx_fp_three_way_operands<_Tp, _Up>::value) {
+        typedef typename common_type<_Tp, _Up>::type _Cp;
+        const _Cp __a = __t;
+        const _Cp __b = __u;
+        return __a != __a || __b != __b ? partial_ordering::unordered
+             : __a < __b                ? partial_ordering::less
+             : __b < __a                ? partial_ordering::greater
+                                        : partial_ordering::equivalent;
+    } else {
+        return __t <=> __u;
+    }
+#else
+    return __t <=> __u;
+#endif
+}
+
+/* [cmp.common], common comparison category type */
+
+template <class _Tp>
+struct __fcxx_cmp_category_rank : integral_constant<int, 0> {};
+template <> struct __fcxx_cmp_category_rank<partial_ordering> : integral_constant<int, 1> {};
+template <> struct __fcxx_cmp_category_rank<weak_ordering> : integral_constant<int, 2> {};
+template <> struct __fcxx_cmp_category_rank<strong_ordering> : integral_constant<int, 3> {};
+
+template <int _Rank>
+struct __fcxx_cmp_category_of {
+    typedef void type;
+};
+template <> struct __fcxx_cmp_category_of<1> { typedef partial_ordering type; };
+template <> struct __fcxx_cmp_category_of<2> { typedef weak_ordering type; };
+template <> struct __fcxx_cmp_category_of<3> { typedef strong_ordering type; };
+
+constexpr int __fcxx_cmp_min_rank() noexcept { return 3; }
+
+template <class... _Rest>
+constexpr int __fcxx_cmp_min_rank(int __first, _Rest... __rest) noexcept {
+    int __r = __fcxx_cmp_min_rank(__rest...);
+    return __first < __r ? __first : __r;
+}
+
+template <class... _Ts>
+struct common_comparison_category {
+    using type = typename __fcxx_cmp_category_of<__fcxx_cmp_min_rank(__fcxx_cmp_category_rank<_Ts>::value...)>::type;
+};
+
+template <class... _Ts>
+using common_comparison_category_t = typename common_comparison_category<_Ts...>::type;
+
+#if _FCXX_HAS_CONCEPTS
+
+/* [cmp.concept], concept three_way_comparable */
+
+template <class _Tp, class _Cat>
+concept __compares_as = same_as<common_comparison_category_t<_Tp, _Cat>, _Cat>;
+
+template <class _Tp, class _Cat = partial_ordering>
+concept three_way_comparable =
+    __weakly_equality_comparable_with<_Tp, _Tp> && __partially_ordered_with<_Tp, _Tp>
+    && requires(const remove_reference_t<_Tp>& __a, const remove_reference_t<_Tp>& __b) {
+        { __a <=> __b } -> __compares_as<_Cat>;
+    };
+
+template <class _Tp, class _Up, class _Cat = partial_ordering>
+concept three_way_comparable_with =
+    three_way_comparable<_Tp, _Cat> && three_way_comparable<_Up, _Cat>
+    && __comparison_common_type_with<_Tp, _Up>
+    && three_way_comparable<common_reference_t<const remove_reference_t<_Tp>&, const remove_reference_t<_Up>&>, _Cat>
+    && __weakly_equality_comparable_with<_Tp, _Up> && __partially_ordered_with<_Tp, _Up>
+    && requires(const remove_reference_t<_Tp>& __t, const remove_reference_t<_Up>& __u) {
+        { __t <=> __u } -> __compares_as<_Cat>;
+        { __u <=> __t } -> __compares_as<_Cat>;
+    };
+
+#endif
+
+/* [cmp.result], result of three-way comparison */
+
+template <class _Tp, class _Up, class = void>
+struct __fcxx_compare_three_way_result {};
+
+template <class _Tp, class _Up>
+struct __fcxx_compare_three_way_result<
+    _Tp, _Up,
+    __fcxx_void_t<decltype(std::__fcxx_declval<const remove_reference_t<_Tp>&>()
+                           <=> std::__fcxx_declval<const remove_reference_t<_Up>&>())>> {
+    using type = decltype(std::__fcxx_declval<const remove_reference_t<_Tp>&>()
+                          <=> std::__fcxx_declval<const remove_reference_t<_Up>&>());
+};
+
+#    if _FCXX_GCC && _FCXX_GCC < 1203
+/* Workaround: GCC 10 to 12.2, all targets: they crash (with an internal
+ * compiler error in spaceship_comp_cat) on a <=> b of pointers that have no
+ * composite pointer type, in SFINAE. Pointers are only compared there where
+ * they have one, to objects, as the operator requires, which the
+ * conditional operator finds out instead. */
+template <class _Tp, class _Up, class = void>
+struct __fcxx_three_way_pointers : false_type {};
+
+template <class _Tp, class _Up>
+struct __fcxx_three_way_pointers<
+    _Tp, _Up, __fcxx_void_t<decltype(false ? std::__fcxx_declval<_Tp>() : std::__fcxx_declval<_Up>())>>
+    : bool_constant<!is_function<typename remove_pointer<decltype(false ? std::__fcxx_declval<_Tp>()
+                                                                        : std::__fcxx_declval<_Up>())>::type>::value> {
+};
+
+template <class _Tp, class _Up>
+struct __fcxx_three_way_operands
+    : bool_constant<!is_pointer<__fcxx_remove_cvref_t<_Tp> >::value || !is_pointer<__fcxx_remove_cvref_t<_Up> >::value
+                    || __fcxx_three_way_pointers<__fcxx_remove_cvref_t<_Tp>, __fcxx_remove_cvref_t<_Up> >::value> {};
+
+struct __fcxx_no_three_way_result {};
+
+template <class _Tp, class _Up = _Tp>
+struct compare_three_way_result
+    : __fcxx_conditional_t<__fcxx_three_way_operands<_Tp, _Up>::value, __fcxx_compare_three_way_result<_Tp, _Up>,
+                           __fcxx_no_three_way_result> {};
+#else
+template <class _Tp, class _Up = _Tp>
+struct compare_three_way_result : __fcxx_compare_three_way_result<_Tp, _Up> {};
+#endif
+
+template <class _Tp, class _Up = _Tp>
+using compare_three_way_result_t = typename compare_three_way_result<_Tp, _Up>::type;
+
+#if _FCXX_HAS_CONCEPTS
+
+/* [comparisons.three.way], class compare_three_way. The builtin comparison
+ * of pointers is only a total order in constant evaluation, and at run time,
+ * the pointers are ordered by their addresses. */
+
+template <class _Tp, class _Up>
+concept __fcxx_pointer_three_way = is_pointer_v<decay_t<_Tp> > && is_pointer_v<decay_t<_Up> >;
+
+struct compare_three_way {
+    template <class _Tp, class _Up>
+        requires three_way_comparable_with<_Tp, _Up>
+    constexpr auto operator()(_Tp&& __t, _Up&& __u) const
+        noexcept(noexcept(std::__fcxx_forward<_Tp>(__t) <=> std::__fcxx_forward<_Up>(__u))) {
+        if constexpr (__fcxx_pointer_three_way<_Tp, _Up>) {
+            if (!__builtin_is_constant_evaluated()) {
+                auto __a = reinterpret_cast<_FCXX_UINTPTR>(static_cast<const volatile void*>(__t));
+                auto __b = reinterpret_cast<_FCXX_UINTPTR>(static_cast<const volatile void*>(__u));
+                return __a <=> __b;
+            }
+        }
+        if constexpr (__fcxx_fp_three_way_operands<remove_cvref_t<_Tp>, remove_cvref_t<_Up> >::value) {
+            return std::__fcxx_three_way(__t, __u);
+        }
+        return std::__fcxx_forward<_Tp>(__t) <=> std::__fcxx_forward<_Up>(__u);
+    }
+
+    using is_transparent = void;
+};
+
+/* [cmp.alg], comparison algorithms.
+ *
+ * strong_order orders the floating-point types by the totalOrder of IEEE
+ * 754, from the bits of their sign, exponent and significand, where their
+ * format is known: those of IEEE 754 interchange, and the extended formats
+ * of 64 significand bits with an explicit integer bit of the x87 and m68k
+ * units. Otherwise, and in constant evaluation without __builtin_bit_cast,
+ * without which nothing can read the bits there, they are ordered by value,
+ * with -0 before +0, and the NaNs are ordered by their sign alone.
+ * weak_order puts all of the NaNs of each sign together, and the two zeros
+ * together. */
+
+template <size_t _Size> struct __fcxx_fp_bits {};
+template <> struct __fcxx_fp_bits<2> { typedef __UINT16_TYPE__ type; };
+template <> struct __fcxx_fp_bits<4> { typedef __UINT32_TYPE__ type; };
+template <> struct __fcxx_fp_bits<8> { typedef __UINT64_TYPE__ type; };
+#  ifdef __SIZEOF_INT128__
+template <> struct __fcxx_fp_bits<16> { __extension__ typedef unsigned __int128 type; };
+#  endif
+
+/* The bytes of a value, of the order of the target. */
+template <size_t _Size>
+struct __fcxx_fp_bytes {
+    unsigned char __b[_Size];
+};
+
+constexpr int __fcxx_fp_exponent_bits(int __max_exponent) noexcept {
+    int __bits = 1;
+    while ((1 << (__bits - 1)) < __max_exponent) {
+        ++__bits;
+    }
+    return __bits;
+}
+
+template <class _Tp> struct __fcxx_fp_digits : integral_constant<int, 0> {};
+template <> struct __fcxx_fp_digits<float> : integral_constant<int, __FLT_MANT_DIG__> {};
+template <> struct __fcxx_fp_digits<double> : integral_constant<int, __DBL_MANT_DIG__> {};
+template <> struct __fcxx_fp_digits<long double> : integral_constant<int, __LDBL_MANT_DIG__> {};
+
+template <class _Tp> struct __fcxx_fp_max_exponent : integral_constant<int, 0> {};
+template <> struct __fcxx_fp_max_exponent<float> : integral_constant<int, __FLT_MAX_EXP__> {};
+template <> struct __fcxx_fp_max_exponent<double> : integral_constant<int, __DBL_MAX_EXP__> {};
+template <> struct __fcxx_fp_max_exponent<long double> : integral_constant<int, __LDBL_MAX_EXP__> {};
+
+#  if _FCXX_STD >= 2023
+#    ifdef __STDCPP_FLOAT16_T__
+template <> struct __fcxx_fp_digits<_Float16> : integral_constant<int, __FLT16_MANT_DIG__> {};
+template <> struct __fcxx_fp_max_exponent<_Float16> : integral_constant<int, __FLT16_MAX_EXP__> {};
+#    endif
+#    ifdef __STDCPP_FLOAT32_T__
+template <> struct __fcxx_fp_digits<_Float32> : integral_constant<int, __FLT32_MANT_DIG__> {};
+template <> struct __fcxx_fp_max_exponent<_Float32> : integral_constant<int, __FLT32_MAX_EXP__> {};
+#    endif
+#    ifdef __STDCPP_FLOAT64_T__
+template <> struct __fcxx_fp_digits<_Float64> : integral_constant<int, __FLT64_MANT_DIG__> {};
+template <> struct __fcxx_fp_max_exponent<_Float64> : integral_constant<int, __FLT64_MAX_EXP__> {};
+#    endif
+#    ifdef __STDCPP_FLOAT128_T__
+template <> struct __fcxx_fp_digits<_Float128> : integral_constant<int, __FLT128_MANT_DIG__> {};
+template <> struct __fcxx_fp_max_exponent<_Float128> : integral_constant<int, __FLT128_MAX_EXP__> {};
+#    endif
+#    ifdef __STDCPP_BFLOAT16_T__
+template <> struct __fcxx_fp_digits<__bf16> : integral_constant<int, __BFLT16_MANT_DIG__> {};
+template <> struct __fcxx_fp_max_exponent<__bf16> : integral_constant<int, __BFLT16_MAX_EXP__> {};
+#    endif
+#  endif
+
+/* The formats of IEEE 754 interchange, of 2, 4, 8 or 16 bytes, whose bits
+ * are those of an unsigned integer type, or, for those of 16 bytes where
+ * there is no such type, of two of 8 bytes. */
+template <class _Tp>
+struct __fcxx_fp_is_ieee
+    : bool_constant<
+          __FLT_RADIX__ == 2 && (sizeof(_Tp) == 2 || sizeof(_Tp) == 4 || sizeof(_Tp) == 8 || sizeof(_Tp) == 16)
+          && sizeof(_Tp) * __CHAR_BIT__
+              == 1 + __fcxx_fp_exponent_bits(__fcxx_fp_max_exponent<_Tp>::value) + __fcxx_fp_digits<_Tp>::value - 1> {};
+
+/* The extended formats of 64 significand bits with an explicit integer bit,
+ * of the x87 and m68k units, as the offsets in their bytes of their 16 bits
+ * of sign and exponent and of their significand. */
+template <class _Tp>
+struct __fcxx_fp_extended : false_type {};
+
+#  if __LDBL_MANT_DIG__ == 64 && __LDBL_MAX_EXP__ == 16384 && (defined(__i386__) || defined(__x86_64__))
+template <>
+struct __fcxx_fp_extended<long double> : true_type {
+    static constexpr size_t __sign_exponent = 8;
+    static constexpr size_t __significand = 0;
+};
+#  elif __LDBL_MANT_DIG__ == 64 && __LDBL_MAX_EXP__ == 16384 && defined(__m68k__)
+template <>
+struct __fcxx_fp_extended<long double> : true_type {
+    static constexpr size_t __sign_exponent = 0;
+    static constexpr size_t __significand = 4;
+};
+#  endif
+
+/* The targets whose quiet NaNs have the first bit of their fraction clear,
+ * and whose signaling NaNs have it set, the other way round from IEEE
+ * 754-2008: MIPS before its release 6 (but with -mnan=2008), PA-RISC and
+ * SuperH. */
+#  if (defined(__mips__) && !defined(__mips_nan2008)) || defined(__hppa__) || defined(__sh__)
+inline constexpr bool __fcxx_fp_legacy_nan = true;
+#  else
+inline constexpr bool __fcxx_fp_legacy_nan = false;
+#  endif
+
+/* Whether the bits of a value can be read: always with __builtin_bit_cast,
+ * and at run time only without it, with __builtin_memcpy. */
+constexpr bool __fcxx_fp_bits_readable() noexcept {
+#  if _FCXX_HAS_BUILTIN_BIT_CAST
+    return true;
+#  else
+    return !__builtin_is_constant_evaluated();
+#  endif
+}
+
+template <class _To, class _From>
+constexpr _To __fcxx_fp_read(const _From& __x) noexcept {
+#  if _FCXX_HAS_BUILTIN_BIT_CAST
+    return __builtin_bit_cast(_To, __x);
+#  else
+    _To __r;
+    __builtin_memcpy(&__r, &__x, sizeof(_To));
+    return __r;
+#  endif
+}
+
+/* An unsigned value from some of the bytes of a value, of the order of the
+ * target. */
+template <class _Up, size_t _Size>
+constexpr _Up __fcxx_fp_load(const __fcxx_fp_bytes<_Size>& __bytes, size_t __offset, size_t __count) noexcept {
+    _Up __r = 0;
+    for (size_t __i = 0; __i < __count; ++__i) {
+        const size_t __k = __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__ ? __offset + __i : __offset + __count - 1 - __i;
+        __r = static_cast<_Up>(__r << __CHAR_BIT__ | __bytes.__b[__k]);
+    }
+    return __r;
+}
+
+/* totalOrder, from the bits of a format of IEEE 754: the negative values in
+ * the reverse order of their bits, below the positive ones. As totalOrder
+ * orders the signaling NaNs of each sign nearer to the numbers than the quiet
+ * ones, the first bit of the fraction of two NaNs is flipped on the targets
+ * where it is set in the signaling ones. */
+template <class _Tp>
+constexpr strong_ordering __fcxx_fp_ieee_order(const _Tp& __x, const _Tp& __y) noexcept {
+    typedef typename __fcxx_fp_bits<sizeof(_Tp)>::type _Bits;
+    _Bits __a = std::__fcxx_fp_read<_Bits>(__x);
+    _Bits __b = std::__fcxx_fp_read<_Bits>(__y);
+    const _Bits __sign = _Bits(1) << (sizeof(_Bits) * __CHAR_BIT__ - 1);
+    if constexpr (__fcxx_fp_legacy_nan) {
+        const _Bits __quiet = _Bits(1) << (__fcxx_fp_digits<_Tp>::value - 2);
+        const _Bits __infinity = static_cast<_Bits>(~__sign & ~static_cast<_Bits>((__quiet << 1) - 1));
+        if (static_cast<_Bits>(__a & ~__sign) > __infinity && static_cast<_Bits>(__b & ~__sign) > __infinity) {
+            __a = static_cast<_Bits>(__a ^ __quiet);
+            __b = static_cast<_Bits>(__b ^ __quiet);
+        }
+    }
+    __a = (__a & __sign) ? _Bits(~__a) : _Bits(__a | __sign);
+    __b = (__b & __sign) ? _Bits(~__b) : _Bits(__b | __sign);
+    return __a <=> __b;
+}
+
+/* The same for a format of 16 bytes without an integer type of 16 bytes,
+ * from its two halves. */
+template <class _Tp>
+constexpr strong_ordering __fcxx_fp_ieee_halves_order(const _Tp& __x, const _Tp& __y) noexcept {
+    typedef __fcxx_fp_bytes<sizeof(_Tp)> _Bytes;
+    typedef __UINT64_TYPE__ _Half;
+    const _Bytes __a = std::__fcxx_fp_read<_Bytes>(__x);
+    const _Bytes __b = std::__fcxx_fp_read<_Bytes>(__y);
+    const size_t __high = __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__ ? 0 : 8;
+    _Half __ah = std::__fcxx_fp_load<_Half>(__a, __high, 8);
+    _Half __al = std::__fcxx_fp_load<_Half>(__a, 8 - __high, 8);
+    _Half __bh = std::__fcxx_fp_load<_Half>(__b, __high, 8);
+    _Half __bl = std::__fcxx_fp_load<_Half>(__b, 8 - __high, 8);
+    const _Half __sign = _Half(1) << 63;
+    if constexpr (__fcxx_fp_legacy_nan) {
+        const _Half __quiet = _Half(1) << (__fcxx_fp_digits<_Tp>::value - 2 - 64);
+        const _Half __infinity = ~__sign & ~((__quiet << 1) - 1);
+        const bool __a_nan = (__ah & ~__sign) > __infinity || ((__ah & ~__sign) == __infinity && __al != 0);
+        const bool __b_nan = (__bh & ~__sign) > __infinity || ((__bh & ~__sign) == __infinity && __bl != 0);
+        if (__a_nan && __b_nan) {
+            __ah ^= __quiet;
+            __bh ^= __quiet;
+        }
+    }
+    if (__ah & __sign) {
+        __ah = ~__ah;
+        __al = ~__al;
+    } else {
+        __ah |= __sign;
+    }
+    if (__bh & __sign) {
+        __bh = ~__bh;
+        __bl = ~__bl;
+    } else {
+        __bh |= __sign;
+    }
+    if (__ah != __bh) {
+        return __ah <=> __bh;
+    }
+    return __al <=> __bl;
+}
+
+/* totalOrder, from the bits of an extended format: its sign and exponent,
+ * then its significand, which has the integer bit before the quiet bit of
+ * the NaNs, which are those of IEEE 754-2008. */
+template <class _Tp>
+constexpr strong_ordering __fcxx_fp_extended_order(const _Tp& __x, const _Tp& __y) noexcept {
+    typedef __fcxx_fp_extended<_Tp> _Fmt;
+    typedef __fcxx_fp_bytes<sizeof(_Tp)> _Bytes;
+    const _Bytes __a = std::__fcxx_fp_read<_Bytes>(__x);
+    const _Bytes __b = std::__fcxx_fp_read<_Bytes>(__y);
+    unsigned long __ea = std::__fcxx_fp_load<unsigned long>(__a, _Fmt::__sign_exponent, 2);
+    unsigned long __eb = std::__fcxx_fp_load<unsigned long>(__b, _Fmt::__sign_exponent, 2);
+    __UINT64_TYPE__ __sa = std::__fcxx_fp_load<__UINT64_TYPE__>(__a, _Fmt::__significand, 8);
+    __UINT64_TYPE__ __sb = std::__fcxx_fp_load<__UINT64_TYPE__>(__b, _Fmt::__significand, 8);
+    if (__ea & 0x8000u) {
+        __ea = ~__ea & 0xffffu;
+        __sa = ~__sa;
+    } else {
+        __ea |= 0x8000u;
+    }
+    if (__eb & 0x8000u) {
+        __eb = ~__eb & 0xffffu;
+        __sb = ~__sb;
+    } else {
+        __eb |= 0x8000u;
+    }
+    if (__ea != __eb) {
+        return __ea <=> __eb;
+    }
+    return __sa <=> __sb;
+}
+
+#  if _FCXX_CLANG && _FCXX_CLANG < 2000 && _FCXX_HAS_BUILTIN_BIT_CAST
+/* The byte of the sign bit of a format whose bits are known: the highest of
+ * those of IEEE 754, that of the sign and exponent of the extended ones, and
+ * the highest of the first double of the double-double of PowerPC, and 0
+ * for any other. */
+template <class _Tp, bool = __fcxx_fp_is_ieee<_Tp>::value, bool = __fcxx_fp_extended<_Tp>::value>
+struct __fcxx_fp_sign_byte : integral_constant<size_t, 0> {};
+
+template <class _Tp, bool _Extended>
+struct __fcxx_fp_sign_byte<_Tp, true, _Extended>
+    : integral_constant<size_t, __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__ ? 1 : sizeof(_Tp)> {};
+
+template <class _Tp>
+struct __fcxx_fp_sign_byte<_Tp, false, true>
+    : integral_constant<size_t,
+                        __fcxx_fp_extended<_Tp>::__sign_exponent + (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__ ? 1 : 2)> {};
+
+#        if __LDBL_MANT_DIG__ == 106 && __SIZEOF_LONG_DOUBLE__ == 16
+template <>
+struct __fcxx_fp_sign_byte<long double, false, false>
+    : integral_constant<size_t, __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__ ? 1 : 8> {};
+#    endif
+#  endif
+
+/* The sign of a value, which is that of the NaNs too. */
+template <class _Tp>
+constexpr bool __fcxx_fp_signbit(const _Tp& __x) noexcept {
+#  if _FCXX_CLANG && _FCXX_CLANG < 2000 && _FCXX_HAS_BUILTIN_BIT_CAST
+    /* Workaround: Clang 10 to 19, all targets: __builtin_signbit is no
+     * constant expression. The sign bit is read from the bytes of the value
+     * instead, where its format is known (the value of the trait is one more
+     * than the index of the byte). */
+    if constexpr (__fcxx_fp_sign_byte<_Tp>::value != 0) {
+        const __fcxx_fp_bytes<sizeof(_Tp)> __b = __builtin_bit_cast(__fcxx_fp_bytes<sizeof(_Tp)>, __x);
+        return (__b.__b[__fcxx_fp_sign_byte<_Tp>::value - 1] & 0x80) != 0;
+    }
+#  endif
+    return __builtin_signbit(__x);
+}
+
+template <class _Tp>
+constexpr strong_ordering __fcxx_fp_strong_order(_Tp __x, _Tp __y) noexcept {
+    if constexpr (__fcxx_fp_is_ieee<_Tp>::value) {
+        if (std::__fcxx_fp_bits_readable()) {
+#  ifdef __SIZEOF_INT128__
+            return std::__fcxx_fp_ieee_order(__x, __y);
+#  else
+            if constexpr (sizeof(_Tp) == 16) {
+                return std::__fcxx_fp_ieee_halves_order(__x, __y);
+            } else {
+                return std::__fcxx_fp_ieee_order(__x, __y);
+            }
+#  endif
+        }
+    } else if constexpr (__fcxx_fp_extended<_Tp>::value) {
+        if (std::__fcxx_fp_bits_readable()) {
+            return std::__fcxx_fp_extended_order(__x, __y);
+        }
+    }
+    const bool __x_nan = __x != __x;
+    const bool __y_nan = __y != __y;
+    const bool __x_neg = std::__fcxx_fp_signbit(__x);
+    const bool __y_neg = std::__fcxx_fp_signbit(__y);
+    if (__x_nan || __y_nan) {
+        const int __xr = __x_nan ? (__x_neg ? -1 : 1) : 0;
+        const int __yr = __y_nan ? (__y_neg ? -1 : 1) : 0;
+        return __xr <=> __yr;
+    }
+    if (__x < __y) {
+        return strong_ordering::less;
+    }
+    if (__y < __x) {
+        return strong_ordering::greater;
+    }
+    return __y_neg <=> __x_neg;
+}
+
+/* Workaround: GCC 10.1 and 10.2, all targets: the result of the builtin
+ * <=>, converted to another comparison category, is no constant expression
+ * ("'<anonymous>' is not a constant expression"), so the ranks of the NaNs
+ * are compared without it. */
+template <class _Tp>
+constexpr weak_ordering __fcxx_fp_weak_order(_Tp __x, _Tp __y) noexcept {
+    const bool __x_nan = __x != __x;
+    const bool __y_nan = __y != __y;
+    if (__x_nan || __y_nan) {
+        const int __xr = __x_nan ? (std::__fcxx_fp_signbit(__x) ? -1 : 1) : 0;
+        const int __yr = __y_nan ? (std::__fcxx_fp_signbit(__y) ? -1 : 1) : 0;
+        return __xr < __yr ? weak_ordering::less : __yr < __xr ? weak_ordering::greater : weak_ordering::equivalent;
+    }
+    if (__x < __y) {
+        return weak_ordering::less;
+    }
+    if (__y < __x) {
+        return weak_ordering::greater;
+    }
+    return weak_ordering::equivalent;
+}
+
+namespace __fcxx_cmp_cpo {
+
+/* The customizations are only looked for with argument-dependent lookup,
+ * which these declarations leave the only way of finding one. */
+#  if _FCXX_GCC && _FCXX_GCC < 1200
+/* Workaround: GCC 10 and 11, all targets: no argument-dependent lookup is
+ * done where ordinary lookup finds a deleted function that is not a
+ * template, so these are not deleted, but only declared, which their arity
+ * keeps from being called. */
+void strong_order();
+void weak_order();
+void partial_order();
+#  else
+void strong_order() = delete;
+void weak_order() = delete;
+void partial_order() = delete;
+#  endif
+
+template <class _Tp, class _Up>
+concept __same_decayed = is_same_v<decay_t<_Tp>, decay_t<_Up> >;
+
+template <class _Tp, class _Up>
+concept __adl_strong_order = requires(_Tp&& __t, _Up&& __u) {
+    strong_ordering(strong_order(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u)));
+};
+
+template <class _Tp, class _Up>
+concept __adl_weak_order = requires(_Tp&& __t, _Up&& __u) {
+    weak_ordering(weak_order(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u)));
+};
+
+template <class _Tp, class _Up>
+concept __adl_partial_order = requires(_Tp&& __t, _Up&& __u) {
+    partial_ordering(partial_order(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u)));
+};
+
+template <class _Tp, class _Up, class _Cat>
+concept __three_way_as = requires(_Tp&& __t, _Up&& __u) {
+    _Cat(compare_three_way()(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u)));
+};
+
+struct __strong_order_fn {
+    template <class _Tp, class _Up>
+        requires __same_decayed<_Tp, _Up> && __adl_strong_order<_Tp, _Up>
+    constexpr strong_ordering operator()(_Tp&& __t, _Up&& __u) const
+        noexcept(noexcept(strong_ordering(strong_order(std::__fcxx_forward<_Tp>(__t),
+                                                       std::__fcxx_forward<_Up>(__u))))) {
+        return strong_ordering(strong_order(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u)));
+    }
+
+    template <class _Tp, class _Up>
+        requires __same_decayed<_Tp, _Up> && (!__adl_strong_order<_Tp, _Up>) && floating_point<decay_t<_Tp> >
+    constexpr strong_ordering operator()(_Tp&& __t, _Up&& __u) const noexcept {
+        return std::__fcxx_fp_strong_order<decay_t<_Tp> >(__t, __u);
+    }
+
+    template <class _Tp, class _Up>
+        requires __same_decayed<_Tp, _Up> && (!__adl_strong_order<_Tp, _Up>) && (!floating_point<decay_t<_Tp> >)
+              && __three_way_as<_Tp, _Up, strong_ordering>
+    constexpr strong_ordering operator()(_Tp&& __t, _Up&& __u) const
+        noexcept(noexcept(strong_ordering(compare_three_way()(std::__fcxx_forward<_Tp>(__t),
+                                                              std::__fcxx_forward<_Up>(__u))))) {
+        return strong_ordering(compare_three_way()(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u)));
+    }
+};
+
+template <class _Tp, class _Up>
+concept __strong_orderable = requires(_Tp&& __t, _Up&& __u) {
+    __strong_order_fn()(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u));
+};
+
+struct __weak_order_fn {
+    template <class _Tp, class _Up>
+        requires __same_decayed<_Tp, _Up> && __adl_weak_order<_Tp, _Up>
+    constexpr weak_ordering operator()(_Tp&& __t, _Up&& __u) const
+        noexcept(noexcept(weak_ordering(weak_order(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u))))) {
+        return weak_ordering(weak_order(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u)));
+    }
+
+    template <class _Tp, class _Up>
+        requires __same_decayed<_Tp, _Up> && (!__adl_weak_order<_Tp, _Up>) && floating_point<decay_t<_Tp> >
+    constexpr weak_ordering operator()(_Tp&& __t, _Up&& __u) const noexcept {
+        return std::__fcxx_fp_weak_order<decay_t<_Tp> >(__t, __u);
+    }
+
+    template <class _Tp, class _Up>
+        requires __same_decayed<_Tp, _Up> && (!__adl_weak_order<_Tp, _Up>) && (!floating_point<decay_t<_Tp> >)
+              && __three_way_as<_Tp, _Up, weak_ordering>
+    constexpr weak_ordering operator()(_Tp&& __t, _Up&& __u) const
+        noexcept(noexcept(weak_ordering(compare_three_way()(std::__fcxx_forward<_Tp>(__t),
+                                                            std::__fcxx_forward<_Up>(__u))))) {
+        return weak_ordering(compare_three_way()(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u)));
+    }
+
+    template <class _Tp, class _Up>
+        requires __same_decayed<_Tp, _Up> && (!__adl_weak_order<_Tp, _Up>) && (!floating_point<decay_t<_Tp> >)
+              && (!__three_way_as<_Tp, _Up, weak_ordering>) && __strong_orderable<_Tp, _Up>
+    constexpr weak_ordering operator()(_Tp&& __t, _Up&& __u) const
+        noexcept(noexcept(weak_ordering(__strong_order_fn()(std::__fcxx_forward<_Tp>(__t),
+                                                            std::__fcxx_forward<_Up>(__u))))) {
+        return weak_ordering(__strong_order_fn()(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u)));
+    }
+};
+
+template <class _Tp, class _Up>
+concept __weak_orderable = requires(_Tp&& __t, _Up&& __u) {
+    __weak_order_fn()(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u));
+};
+
+struct __partial_order_fn {
+    template <class _Tp, class _Up>
+        requires __same_decayed<_Tp, _Up> && __adl_partial_order<_Tp, _Up>
+    constexpr partial_ordering operator()(_Tp&& __t, _Up&& __u) const
+        noexcept(noexcept(partial_ordering(partial_order(std::__fcxx_forward<_Tp>(__t),
+                                                         std::__fcxx_forward<_Up>(__u))))) {
+        return partial_ordering(partial_order(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u)));
+    }
+
+    template <class _Tp, class _Up>
+        requires __same_decayed<_Tp, _Up> && (!__adl_partial_order<_Tp, _Up>)
+              && __three_way_as<_Tp, _Up, partial_ordering>
+    constexpr partial_ordering operator()(_Tp&& __t, _Up&& __u) const
+        noexcept(noexcept(partial_ordering(compare_three_way()(std::__fcxx_forward<_Tp>(__t),
+                                                               std::__fcxx_forward<_Up>(__u))))) {
+        return partial_ordering(compare_three_way()(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u)));
+    }
+
+    template <class _Tp, class _Up>
+        requires __same_decayed<_Tp, _Up> && (!__adl_partial_order<_Tp, _Up>)
+              && (!__three_way_as<_Tp, _Up, partial_ordering>) && __weak_orderable<_Tp, _Up>
+    constexpr partial_ordering operator()(_Tp&& __t, _Up&& __u) const
+        noexcept(noexcept(partial_ordering(__weak_order_fn()(std::__fcxx_forward<_Tp>(__t),
+                                                             std::__fcxx_forward<_Up>(__u))))) {
+        return partial_ordering(__weak_order_fn()(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u)));
+    }
+};
+
+template <class _Tp, class _Up>
+concept __partial_orderable = requires(_Tp&& __t, _Up&& __u) {
+    __partial_order_fn()(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u));
+};
+
+template <class _Tp, class _Up>
+concept __fallback_equal_less = requires(_Tp&& __t, _Up&& __u) {
+    { std::__fcxx_forward<_Tp>(__t) == std::__fcxx_forward<_Up>(__u) } -> __boolean_testable;
+    { std::__fcxx_forward<_Tp>(__t) < std::__fcxx_forward<_Up>(__u) } -> __boolean_testable;
+};
+
+template <class _Tp, class _Up>
+concept __fallback_equal_less_greater = __fallback_equal_less<_Tp, _Up> && requires(_Tp&& __t, _Up&& __u) {
+    { std::__fcxx_forward<_Up>(__u) < std::__fcxx_forward<_Tp>(__t) } -> __boolean_testable;
+};
+
+struct __strong_fallback_fn {
+    template <class _Tp, class _Up>
+        requires __same_decayed<_Tp, _Up> && __strong_orderable<_Tp, _Up>
+    constexpr strong_ordering operator()(_Tp&& __t, _Up&& __u) const
+        noexcept(noexcept(__strong_order_fn()(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u)))) {
+        return __strong_order_fn()(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u));
+    }
+
+    template <class _Tp, class _Up>
+        requires __same_decayed<_Tp, _Up> && (!__strong_orderable<_Tp, _Up>) && __fallback_equal_less<_Tp, _Up>
+    constexpr strong_ordering operator()(_Tp&& __t, _Up&& __u) const
+        noexcept(noexcept(bool(std::__fcxx_forward<_Tp>(__t) == std::__fcxx_forward<_Up>(__u)))
+                 && noexcept(bool(std::__fcxx_forward<_Tp>(__t) < std::__fcxx_forward<_Up>(__u)))) {
+        return __t == __u ? strong_ordering::equal : __t < __u ? strong_ordering::less : strong_ordering::greater;
+    }
+};
+
+struct __weak_fallback_fn {
+    template <class _Tp, class _Up>
+        requires __same_decayed<_Tp, _Up> && __weak_orderable<_Tp, _Up>
+    constexpr weak_ordering operator()(_Tp&& __t, _Up&& __u) const
+        noexcept(noexcept(__weak_order_fn()(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u)))) {
+        return __weak_order_fn()(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u));
+    }
+
+    template <class _Tp, class _Up>
+        requires __same_decayed<_Tp, _Up> && (!__weak_orderable<_Tp, _Up>) && __fallback_equal_less<_Tp, _Up>
+    constexpr weak_ordering operator()(_Tp&& __t, _Up&& __u) const
+        noexcept(noexcept(bool(std::__fcxx_forward<_Tp>(__t) == std::__fcxx_forward<_Up>(__u)))
+                 && noexcept(bool(std::__fcxx_forward<_Tp>(__t) < std::__fcxx_forward<_Up>(__u)))) {
+        return __t == __u ? weak_ordering::equivalent : __t < __u ? weak_ordering::less : weak_ordering::greater;
+    }
+};
+
+struct __partial_fallback_fn {
+    template <class _Tp, class _Up>
+        requires __same_decayed<_Tp, _Up> && __partial_orderable<_Tp, _Up>
+    constexpr partial_ordering operator()(_Tp&& __t, _Up&& __u) const
+        noexcept(noexcept(__partial_order_fn()(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u)))) {
+        return __partial_order_fn()(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u));
+    }
+
+    template <class _Tp, class _Up>
+        requires __same_decayed<_Tp, _Up> && (!__partial_orderable<_Tp, _Up>) && __fallback_equal_less_greater<_Tp, _Up>
+    constexpr partial_ordering operator()(_Tp&& __t, _Up&& __u) const
+        noexcept(noexcept(bool(std::__fcxx_forward<_Tp>(__t) == std::__fcxx_forward<_Up>(__u)))
+                 && noexcept(bool(std::__fcxx_forward<_Tp>(__t) < std::__fcxx_forward<_Up>(__u)))
+                 && noexcept(bool(std::__fcxx_forward<_Up>(__u) < std::__fcxx_forward<_Tp>(__t)))) {
+        return __t == __u ? partial_ordering::equivalent
+             : __t < __u  ? partial_ordering::less
+             : __u < __t  ? partial_ordering::greater
+                          : partial_ordering::unordered;
+    }
+};
+
+} /* namespace __fcxx_cmp_cpo */
+
+inline namespace __fcxx_cpo {
+inline constexpr __fcxx_cmp_cpo::__strong_order_fn strong_order{};
+inline constexpr __fcxx_cmp_cpo::__weak_order_fn weak_order{};
+inline constexpr __fcxx_cmp_cpo::__partial_order_fn partial_order{};
+inline constexpr __fcxx_cmp_cpo::__strong_fallback_fn compare_strong_order_fallback{};
+inline constexpr __fcxx_cmp_cpo::__weak_fallback_fn compare_weak_order_fallback{};
+inline constexpr __fcxx_cmp_cpo::__partial_fallback_fn compare_partial_order_fallback{};
+}
+
+#  if _FCXX_STD >= 2026 && _FCXX_HAS_BUILTIN(__builtin_type_order)
+/* [compare.type], type ordering */
+template <class _Tp, class _Up>
+struct type_order : integral_constant<strong_ordering, __builtin_type_order(_Tp, _Up)> {};
+
+template <class _Tp, class _Up>
+inline constexpr strong_ordering type_order_v = type_order<_Tp, _Up>::value;
+#  endif
+
+#endif
+
+} /* namespace std */
+
+#undef _FCXX_CMP_CONSTEVAL
+
+#endif
+
+#endif

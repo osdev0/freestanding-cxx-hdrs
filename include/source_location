@@ -1,0 +1,133 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_SOURCE_LOCATION
+#define __FREESTANDING_CXX_HDRS_SOURCE_LOCATION 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2020
+#  error "<source_location> requires C++20 or later"
+#elif !_FCXX_HEADER_SOURCE_LOCATION
+#  error "<source_location> requires a compiler with the builtins for it"
+#endif
+
+#define _FCXX_VERSION_SOURCE_LOCATION
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_SOURCE_LOCATION
+
+#if _FCXX_HEADER_SOURCE_LOCATION
+
+#  if _FCXX_HAS_CONSTEVAL
+#    define _FCXX_SOURCE_LOCATION_CONSTEVAL consteval
+#  else
+#    define _FCXX_SOURCE_LOCATION_CONSTEVAL constexpr
+#  endif
+
+namespace std {
+
+#  if _FCXX_STD >= 2026
+namespace contracts {
+class contract_violation;
+}
+#  endif
+
+struct source_location {
+#  if _FCXX_HAS_BUILTIN_SOURCE_LOCATION
+    /* The compilers fill in objects of this type, whose name and members
+     * they require to be exactly these. */
+    struct __impl {
+        const char* _M_file_name;
+        const char* _M_function_name;
+        unsigned int _M_line;
+        unsigned int _M_column;
+    };
+
+    /* The builtin returns a const void* before GCC 13, which GCC lets be
+     * converted in constant expressions. */
+    static _FCXX_SOURCE_LOCATION_CONSTEVAL source_location
+    current(const __impl* __p = static_cast<const __impl*>(__builtin_source_location())) noexcept {
+        source_location __loc;
+        __loc.__location = __p;
+        return __loc;
+    }
+
+    constexpr source_location() noexcept : __location(nullptr) {}
+
+    constexpr __UINT_LEAST32_TYPE__ line() const noexcept {
+        return __location != nullptr ? __location->_M_line : 0;
+    }
+
+    constexpr __UINT_LEAST32_TYPE__ column() const noexcept {
+        return __location != nullptr ? __location->_M_column : 0;
+    }
+
+    constexpr const char* file_name() const noexcept {
+        return __location != nullptr ? __location->_M_file_name : "";
+    }
+
+    constexpr const char* function_name() const noexcept {
+        return __location != nullptr ? __location->_M_function_name : "";
+    }
+
+private:
+#    if _FCXX_STD >= 2026
+    friend class contracts::contract_violation;
+#    endif
+
+    const __impl* __location;
+
+    constexpr explicit source_location(const __impl* __p) noexcept : __location(__p) {}
+#  else
+    /* Older compilers only have a builtin for each field. */
+    static _FCXX_SOURCE_LOCATION_CONSTEVAL source_location
+    current(__UINT_LEAST32_TYPE__ __line = __builtin_LINE(),
+            __UINT_LEAST32_TYPE__ __column = __builtin_COLUMN(),
+            const char* __file = __builtin_FILE(),
+            const char* __function = __builtin_FUNCTION()) noexcept {
+        source_location __loc;
+        __loc.__line = __line;
+        __loc.__column = __column;
+        __loc.__file = __file;
+        __loc.__function = __function;
+        return __loc;
+    }
+
+    constexpr source_location() noexcept : __line(0), __column(0), __file(""), __function("") {}
+
+    constexpr __UINT_LEAST32_TYPE__ line() const noexcept { return __line; }
+    constexpr __UINT_LEAST32_TYPE__ column() const noexcept { return __column; }
+    constexpr const char* file_name() const noexcept { return __file; }
+    constexpr const char* function_name() const noexcept { return __function; }
+
+private:
+    __UINT_LEAST32_TYPE__ __line;
+    __UINT_LEAST32_TYPE__ __column;
+    const char* __file;
+    const char* __function;
+#  endif
+};
+
+} /* namespace std */
+
+#  undef _FCXX_SOURCE_LOCATION_CONSTEVAL
+
+#endif
+
+#endif

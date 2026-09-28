@@ -1,0 +1,267 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_CWCHAR
+#define __FREESTANDING_CXX_HDRS_CWCHAR 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2026
+#  error "<cwchar> is not a freestanding header before C++26"
+#endif
+
+#define _FCXX_VERSION_CWCHAR
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_CWCHAR
+
+#if _FCXX_STD >= 2026
+
+#undef NULL
+#define NULL __null
+
+#include <__fcxx/wchar_limits.h>
+#if !defined(WCHAR_WIDTH)
+#  define WCHAR_WIDTH __WCHAR_WIDTH__
+#endif
+
+/* WEOF and mbstate_t, which C++26 makes freestanding too, are left out: the
+ * value that the wide-character input and output functions return at the
+ * end of a file, and the state of the conversions between multibyte and
+ * wide characters, are those of the C library of a hosted environment,
+ * which the library cannot know, and which none of the freestanding
+ * functions has any use for. */
+
+namespace std {
+
+typedef __WINT_TYPE__ wint_t;
+
+/* The functions are provided here, with C++ language linkage, as there is
+ * no C library to take them from. */
+
+inline wchar_t* wmemcpy(wchar_t* __s1, const wchar_t* __s2, size_t __n) {
+    return static_cast<wchar_t*>(__builtin_memcpy(__s1, __s2, __n * sizeof(wchar_t)));
+}
+
+inline wchar_t* wmemmove(wchar_t* __s1, const wchar_t* __s2, size_t __n) {
+    return static_cast<wchar_t*>(__builtin_memmove(__s1, __s2, __n * sizeof(wchar_t)));
+}
+
+inline wchar_t* wmemset(wchar_t* __s, wchar_t __c, size_t __n) {
+    for (size_t __i = 0; __i < __n; ++__i) {
+        __s[__i] = __c;
+    }
+    return __s;
+}
+
+inline int wmemcmp(const wchar_t* __s1, const wchar_t* __s2, size_t __n) {
+    for (; __n > 0; --__n, ++__s1, ++__s2) {
+        if (*__s1 != *__s2) {
+            return *__s1 < *__s2 ? -1 : 1;
+        }
+    }
+    return 0;
+}
+
+inline const wchar_t* wmemchr(const wchar_t* __s, wchar_t __c, size_t __n) {
+    for (; __n > 0; --__n, ++__s) {
+        if (*__s == __c) {
+            return __s;
+        }
+    }
+    return 0;
+}
+
+inline wchar_t* wmemchr(wchar_t* __s, wchar_t __c, size_t __n) {
+    return const_cast<wchar_t*>(wmemchr(static_cast<const wchar_t*>(__s), __c, __n));
+}
+
+inline size_t wcslen(const wchar_t* __s) {
+    const wchar_t* __e = __s;
+    while (*__e != L'\0') {
+        ++__e;
+    }
+    return static_cast<size_t>(__e - __s);
+}
+
+inline wchar_t* wcscpy(wchar_t* __s1, const wchar_t* __s2) {
+    wchar_t* __d = __s1;
+    while ((*__d++ = *__s2++) != L'\0') {
+    }
+    return __s1;
+}
+
+inline wchar_t* wcsncpy(wchar_t* __s1, const wchar_t* __s2, size_t __n) {
+    wchar_t* __d = __s1;
+    for (; __n > 0 && *__s2 != L'\0'; --__n) {
+        *__d++ = *__s2++;
+    }
+    for (; __n > 0; --__n) {
+        *__d++ = L'\0';
+    }
+    return __s1;
+}
+
+inline wchar_t* wcscat(wchar_t* __s1, const wchar_t* __s2) {
+    wcscpy(__s1 + wcslen(__s1), __s2);
+    return __s1;
+}
+
+inline wchar_t* wcsncat(wchar_t* __s1, const wchar_t* __s2, size_t __n) {
+    wchar_t* __d = __s1 + wcslen(__s1);
+    for (; __n > 0 && *__s2 != L'\0'; --__n) {
+        *__d++ = *__s2++;
+    }
+    *__d = L'\0';
+    return __s1;
+}
+
+inline int wcscmp(const wchar_t* __s1, const wchar_t* __s2) {
+    for (;; ++__s1, ++__s2) {
+        if (*__s1 != *__s2) {
+            return *__s1 < *__s2 ? -1 : 1;
+        }
+        if (*__s1 == L'\0') {
+            return 0;
+        }
+    }
+}
+
+inline int wcsncmp(const wchar_t* __s1, const wchar_t* __s2, size_t __n) {
+    for (; __n > 0; --__n, ++__s1, ++__s2) {
+        if (*__s1 != *__s2) {
+            return *__s1 < *__s2 ? -1 : 1;
+        }
+        if (*__s1 == L'\0') {
+            return 0;
+        }
+    }
+    return 0;
+}
+
+inline const wchar_t* wcschr(const wchar_t* __s, wchar_t __c) {
+    for (;; ++__s) {
+        if (*__s == __c) {
+            return __s;
+        }
+        if (*__s == L'\0') {
+            return 0;
+        }
+    }
+}
+
+inline wchar_t* wcschr(wchar_t* __s, wchar_t __c) {
+    return const_cast<wchar_t*>(wcschr(static_cast<const wchar_t*>(__s), __c));
+}
+
+inline const wchar_t* wcsrchr(const wchar_t* __s, wchar_t __c) {
+    const wchar_t* __found = 0;
+    for (;; ++__s) {
+        if (*__s == __c) {
+            __found = __s;
+        }
+        if (*__s == L'\0') {
+            return __found;
+        }
+    }
+}
+
+inline wchar_t* wcsrchr(wchar_t* __s, wchar_t __c) {
+    return const_cast<wchar_t*>(wcsrchr(static_cast<const wchar_t*>(__s), __c));
+}
+
+inline size_t wcsspn(const wchar_t* __s1, const wchar_t* __s2) {
+    size_t __n = 0;
+    for (; __s1[__n] != L'\0'; ++__n) {
+        const wchar_t* __a = __s2;
+        while (*__a != L'\0' && *__a != __s1[__n]) {
+            ++__a;
+        }
+        if (*__a == L'\0') {
+            break;
+        }
+    }
+    return __n;
+}
+
+inline size_t wcscspn(const wchar_t* __s1, const wchar_t* __s2) {
+    size_t __n = 0;
+    for (; __s1[__n] != L'\0'; ++__n) {
+        const wchar_t* __r = __s2;
+        while (*__r != L'\0' && *__r != __s1[__n]) {
+            ++__r;
+        }
+        if (*__r != L'\0') {
+            break;
+        }
+    }
+    return __n;
+}
+
+inline const wchar_t* wcspbrk(const wchar_t* __s1, const wchar_t* __s2) {
+    __s1 += wcscspn(__s1, __s2);
+    return *__s1 != L'\0' ? __s1 : 0;
+}
+
+inline wchar_t* wcspbrk(wchar_t* __s1, const wchar_t* __s2) {
+    return const_cast<wchar_t*>(wcspbrk(static_cast<const wchar_t*>(__s1), __s2));
+}
+
+inline const wchar_t* wcsstr(const wchar_t* __s1, const wchar_t* __s2) {
+    const size_t __n = wcslen(__s2);
+    for (;; ++__s1) {
+        if (wcsncmp(__s1, __s2, __n) == 0) {
+            return __s1;
+        }
+        if (*__s1 == L'\0') {
+            return 0;
+        }
+    }
+}
+
+inline wchar_t* wcsstr(wchar_t* __s1, const wchar_t* __s2) {
+    return const_cast<wchar_t*>(wcsstr(static_cast<const wchar_t*>(__s1), __s2));
+}
+
+inline wchar_t* wcstok(wchar_t* __s1, const wchar_t* __s2, wchar_t** __ptr) {
+    if (__s1 == 0) {
+        __s1 = *__ptr;
+        if (__s1 == 0) {
+            return 0;
+        }
+    }
+    __s1 += wcsspn(__s1, __s2);
+    if (*__s1 == L'\0') {
+        *__ptr = 0;
+        return 0;
+    }
+    wchar_t* __end = __s1 + wcscspn(__s1, __s2);
+    if (*__end != L'\0') {
+        *__end = L'\0';
+        *__ptr = __end + 1;
+    } else {
+        *__ptr = 0;
+    }
+    return __s1;
+}
+
+} /* namespace std */
+
+#endif
+
+#endif

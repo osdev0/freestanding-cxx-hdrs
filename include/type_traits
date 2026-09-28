@@ -1,0 +1,2137 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_TYPE_TRAITS
+#define __FREESTANDING_CXX_HDRS_TYPE_TRAITS 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2011
+#  error "<type_traits> requires C++11 or later"
+#endif
+
+#define _FCXX_VERSION_TYPE_TRAITS
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_TYPE_TRAITS
+
+#if _FCXX_STD >= 2011
+
+#include <new>
+#if _FCXX_STD >= 2026
+#  include <__fcxx/integer_sequence.h>
+#endif
+
+namespace std {
+
+/* reference_wrapper, of <functional>, which INVOKE and unwrap_reference see
+ * through, from C++23 on, where <functional> is freestanding. */
+#if _FCXX_STD >= 2023
+template <class _Tp> class reference_wrapper;
+#endif
+
+/* [meta.help], helper class */
+
+template <class _Tp, _Tp __v>
+struct integral_constant {
+    static constexpr _Tp value = __v;
+    typedef _Tp value_type;
+    typedef integral_constant type;
+    constexpr operator value_type() const noexcept { return value; }
+#if _FCXX_STD >= 2014
+    constexpr value_type operator()() const noexcept { return value; }
+#endif
+};
+
+#if !_FCXX_HAS_INLINE_VARIABLES
+template <class _Tp, _Tp __v>
+constexpr _Tp integral_constant<_Tp, __v>::value;
+#endif
+
+typedef integral_constant<bool, true> true_type;
+typedef integral_constant<bool, false> false_type;
+
+template <bool _Bp>
+using __fcxx_bool_constant = integral_constant<bool, _Bp>;
+
+#if _FCXX_STD >= 2017
+template <bool _Bp>
+using bool_constant = integral_constant<bool, _Bp>;
+#endif
+
+/* [meta.rel], is_same, which everything else needs too */
+
+template <class _Tp, class _Up> struct is_same : false_type {};
+template <class _Tp> struct is_same<_Tp, _Tp> : true_type {};
+
+/* [meta.trans.other], the helpers everything else needs */
+
+template <bool, class _Tp = void>
+struct enable_if {};
+
+template <class _Tp>
+struct enable_if<true, _Tp> {
+    typedef _Tp type;
+};
+
+template <bool _Bp, class _Tp = void>
+using __fcxx_enable_if_t = typename enable_if<_Bp, _Tp>::type;
+
+template <bool _Bp, class _If, class _Then>
+struct conditional {
+    typedef _If type;
+};
+
+template <class _If, class _Then>
+struct conditional<false, _If, _Then> {
+    typedef _Then type;
+};
+
+template <bool _Bp, class _If, class _Then>
+using __fcxx_conditional_t = typename conditional<_Bp, _If, _Then>::type;
+
+/* A void_t that also works with the compilers that did not yet consider the
+ * unused arguments of alias templates for SFINAE. */
+template <class...>
+struct __fcxx_make_void {
+    typedef void type;
+};
+
+template <class... _Tp>
+using __fcxx_void_t = typename __fcxx_make_void<_Tp...>::type;
+
+template <class _Tp>
+struct __fcxx_type_identity {
+    typedef _Tp type;
+};
+
+/* [meta.trans.cv], const-volatile modifications */
+
+template <class _Tp> struct remove_const { typedef _Tp type; };
+template <class _Tp> struct remove_const<const _Tp> { typedef _Tp type; };
+
+template <class _Tp> struct remove_volatile { typedef _Tp type; };
+template <class _Tp> struct remove_volatile<volatile _Tp> { typedef _Tp type; };
+
+template <class _Tp> struct remove_cv { typedef _Tp type; };
+template <class _Tp> struct remove_cv<const _Tp> { typedef _Tp type; };
+template <class _Tp> struct remove_cv<volatile _Tp> { typedef _Tp type; };
+template <class _Tp> struct remove_cv<const volatile _Tp> { typedef _Tp type; };
+
+template <class _Tp> struct add_const { typedef const _Tp type; };
+template <class _Tp> struct add_volatile { typedef volatile _Tp type; };
+template <class _Tp> struct add_cv { typedef const volatile _Tp type; };
+
+template <class _Tp>
+using __fcxx_remove_cv_t = typename remove_cv<_Tp>::type;
+
+/* [meta.trans.ref], reference modifications */
+
+template <class _Tp> struct remove_reference { typedef _Tp type; };
+template <class _Tp> struct remove_reference<_Tp&> { typedef _Tp type; };
+template <class _Tp> struct remove_reference<_Tp&&> { typedef _Tp type; };
+
+template <class _Tp>
+using __fcxx_remove_ref_t = typename remove_reference<_Tp>::type;
+
+template <class _Tp>
+struct __fcxx_remove_cvref {
+    typedef typename remove_cv<typename remove_reference<_Tp>::type>::type type;
+};
+
+template <class _Tp>
+using __fcxx_remove_cvref_t = typename __fcxx_remove_cvref<_Tp>::type;
+
+/* A type can be referred to unless it is cv void or a function type with a
+ * cv-qualifier or a ref-qualifier, and pointed to unless it is such a function
+ * type too.
+ * Workaround: GCC 4.8, all targets: it forms the references and the pointers
+ * to the function types with qualifiers in SFINAE, as with
+ * "template <class T, class = void> struct R {}; template <class T> struct
+ * R<T, decltype(void(static_cast<T*>(nullptr)))>;", which picks the second
+ * for R<void() const>, so those function types are told apart by their
+ * forms. */
+#if _FCXX_GCC && _FCXX_GCC < 409
+template <class _Tp>
+struct __fcxx_qualified_function {
+    typedef void type;
+};
+
+#  define _FCXX_QUALIFIED_FUNCTION(q) \
+    template <class _Rp, class... _Args> \
+    struct __fcxx_qualified_function<_Rp(_Args...) q> {}; \
+    template <class _Rp, class... _Args> \
+    struct __fcxx_qualified_function<_Rp(_Args..., ...) q> {};
+_FCXX_QUALIFIED_FUNCTION(const)
+_FCXX_QUALIFIED_FUNCTION(volatile)
+_FCXX_QUALIFIED_FUNCTION(const volatile)
+#  if _FCXX_HAS_REF_QUALIFIERS
+_FCXX_QUALIFIED_FUNCTION(&)
+_FCXX_QUALIFIED_FUNCTION(const&)
+_FCXX_QUALIFIED_FUNCTION(volatile&)
+_FCXX_QUALIFIED_FUNCTION(const volatile&)
+_FCXX_QUALIFIED_FUNCTION(&&)
+_FCXX_QUALIFIED_FUNCTION(const&&)
+_FCXX_QUALIFIED_FUNCTION(volatile&&)
+_FCXX_QUALIFIED_FUNCTION(const volatile&&)
+#  endif
+#  undef _FCXX_QUALIFIED_FUNCTION
+
+template <class _Tp>
+using __fcxx_void_ref_t = __fcxx_void_t<typename __fcxx_qualified_function<_Tp>::type, _Tp&>;
+template <class _Tp>
+using __fcxx_void_ptr_t = __fcxx_void_t<typename __fcxx_qualified_function<_Tp>::type, _Tp*>;
+#else
+template <class _Tp>
+using __fcxx_void_ref_t = __fcxx_void_t<_Tp&>;
+template <class _Tp>
+using __fcxx_void_ptr_t = __fcxx_void_t<_Tp*>;
+#endif
+
+template <class _Tp, class = void>
+struct __add_reference_impl {
+    typedef _Tp __lvalue;
+    typedef _Tp __rvalue;
+};
+
+template <class _Tp>
+struct __add_reference_impl<_Tp, __fcxx_void_ref_t<_Tp> > {
+    typedef _Tp& __lvalue;
+    typedef _Tp&& __rvalue;
+};
+
+template <class _Tp>
+struct add_lvalue_reference {
+    typedef typename __add_reference_impl<_Tp>::__lvalue type;
+};
+
+template <class _Tp>
+struct add_rvalue_reference {
+    typedef typename __add_reference_impl<_Tp>::__rvalue type;
+};
+
+template <class _Tp, class = void>
+struct __fcxx_is_referenceable : false_type {};
+
+template <class _Tp>
+struct __fcxx_is_referenceable<_Tp, __fcxx_void_ref_t<_Tp> > : true_type {};
+
+/* declval, of <utility>, which the traits are described in terms of, under
+ * a name of the library's own, as <utility> is only freestanding from C++23
+ * on, where the name of the standard is declared along with it (below). */
+template <class _Tp>
+typename add_rvalue_reference<_Tp>::type __fcxx_declval() noexcept;
+
+/* [meta.unary.cat], primary type categories */
+
+template <class _Tp> struct __is_void_impl : false_type {};
+template <> struct __is_void_impl<void> : true_type {};
+
+template <class _Tp>
+struct is_void : __is_void_impl<typename remove_cv<_Tp>::type> {};
+
+template <class _Tp> struct __fcxx_is_null_pointer_impl : false_type {};
+template <> struct __fcxx_is_null_pointer_impl<nullptr_t> : true_type {};
+
+template <class _Tp>
+struct __fcxx_is_null_pointer : __fcxx_is_null_pointer_impl<typename remove_cv<_Tp>::type> {};
+
+#if _FCXX_STD >= 2014
+template <class _Tp>
+struct is_null_pointer : __fcxx_is_null_pointer<_Tp> {};
+#endif
+
+/* The integer types include __int128, where there is one, as an extended
+ * integer type. */
+template <class _Tp> struct __is_integral_impl : false_type {};
+template <> struct __is_integral_impl<bool> : true_type {};
+template <> struct __is_integral_impl<char> : true_type {};
+template <> struct __is_integral_impl<signed char> : true_type {};
+template <> struct __is_integral_impl<unsigned char> : true_type {};
+template <> struct __is_integral_impl<wchar_t> : true_type {};
+#if _FCXX_HAS_CHAR8_T
+template <> struct __is_integral_impl<char8_t> : true_type {};
+#endif
+template <> struct __is_integral_impl<char16_t> : true_type {};
+template <> struct __is_integral_impl<char32_t> : true_type {};
+template <> struct __is_integral_impl<short> : true_type {};
+template <> struct __is_integral_impl<unsigned short> : true_type {};
+template <> struct __is_integral_impl<int> : true_type {};
+template <> struct __is_integral_impl<unsigned int> : true_type {};
+template <> struct __is_integral_impl<long> : true_type {};
+template <> struct __is_integral_impl<unsigned long> : true_type {};
+template <> struct __is_integral_impl<long long> : true_type {};
+template <> struct __is_integral_impl<unsigned long long> : true_type {};
+#ifdef __SIZEOF_INT128__
+__extension__ template <> struct __is_integral_impl<__int128> : true_type {};
+__extension__ template <> struct __is_integral_impl<unsigned __int128> : true_type {};
+#endif
+
+template <class _Tp>
+struct is_integral : __is_integral_impl<typename remove_cv<_Tp>::type> {};
+
+template <class _Tp> struct __is_floating_point_impl : false_type {};
+template <> struct __is_floating_point_impl<float> : true_type {};
+template <> struct __is_floating_point_impl<double> : true_type {};
+template <> struct __is_floating_point_impl<long double> : true_type {};
+#if _FCXX_STD >= 2023
+#  ifdef __STDCPP_FLOAT16_T__
+template <> struct __is_floating_point_impl<_Float16> : true_type {};
+#  endif
+#  ifdef __STDCPP_FLOAT32_T__
+template <> struct __is_floating_point_impl<_Float32> : true_type {};
+#  endif
+#  ifdef __STDCPP_FLOAT64_T__
+template <> struct __is_floating_point_impl<_Float64> : true_type {};
+#  endif
+#  ifdef __STDCPP_FLOAT128_T__
+template <> struct __is_floating_point_impl<_Float128> : true_type {};
+#  endif
+#  ifdef __STDCPP_BFLOAT16_T__
+template <> struct __is_floating_point_impl<__bf16> : true_type {};
+#  endif
+#endif
+
+template <class _Tp>
+struct is_floating_point : __is_floating_point_impl<typename remove_cv<_Tp>::type> {};
+
+template <class _Tp> struct is_array : false_type {};
+template <class _Tp> struct is_array<_Tp[]> : true_type {};
+template <class _Tp, size_t _Np> struct is_array<_Tp[_Np]> : true_type {};
+
+template <class _Tp> struct __is_pointer_impl : false_type {};
+template <class _Tp> struct __is_pointer_impl<_Tp*> : true_type {};
+
+template <class _Tp>
+struct is_pointer : __is_pointer_impl<typename remove_cv<_Tp>::type> {};
+
+template <class _Tp> struct is_lvalue_reference : false_type {};
+template <class _Tp> struct is_lvalue_reference<_Tp&> : true_type {};
+
+template <class _Tp> struct is_rvalue_reference : false_type {};
+template <class _Tp> struct is_rvalue_reference<_Tp&&> : true_type {};
+
+template <class _Tp> struct is_reference : false_type {};
+template <class _Tp> struct is_reference<_Tp&> : true_type {};
+template <class _Tp> struct is_reference<_Tp&&> : true_type {};
+
+template <class _Tp> struct is_const : false_type {};
+template <class _Tp> struct is_const<const _Tp> : true_type {};
+
+template <class _Tp> struct is_volatile : false_type {};
+template <class _Tp> struct is_volatile<volatile _Tp> : true_type {};
+
+/* A function type is the only one besides a reference type that does not
+ * become const when made const. */
+template <class _Tp>
+struct is_function : __fcxx_bool_constant<!is_const<const _Tp>::value && !is_reference<_Tp>::value> {};
+
+template <class _Tp> struct __is_member_pointer_impl : false_type {};
+template <class _Tp, class _Cp> struct __is_member_pointer_impl<_Tp _Cp::*> : true_type {};
+
+template <class _Tp>
+struct is_member_pointer : __is_member_pointer_impl<typename remove_cv<_Tp>::type> {};
+
+template <class _Tp> struct __is_member_function_pointer_impl : false_type {};
+template <class _Tp, class _Cp> struct __is_member_function_pointer_impl<_Tp _Cp::*> : is_function<_Tp> {};
+
+template <class _Tp>
+struct is_member_function_pointer : __is_member_function_pointer_impl<typename remove_cv<_Tp>::type> {};
+
+template <class _Tp>
+struct is_member_object_pointer
+    : __fcxx_bool_constant<is_member_pointer<_Tp>::value && !is_member_function_pointer<_Tp>::value> {};
+
+template <class _Tp>
+struct is_enum : __fcxx_bool_constant<__is_enum(_Tp)> {};
+
+template <class _Tp>
+struct is_union : __fcxx_bool_constant<__is_union(_Tp)> {};
+
+template <class _Tp>
+struct is_class : __fcxx_bool_constant<__is_class(_Tp)> {};
+
+/* Reflections exist where the compiler has them. */
+#if _FCXX_STD >= 2026 && defined(__cpp_impl_reflection)
+template <class _Tp> struct __fcxx_is_reflection_impl : false_type {};
+template <> struct __fcxx_is_reflection_impl<decltype(^^int)> : true_type {};
+#else
+template <class _Tp> struct __fcxx_is_reflection_impl : false_type {};
+#endif
+
+template <class _Tp>
+struct __fcxx_is_reflection : __fcxx_is_reflection_impl<typename remove_cv<_Tp>::type> {};
+
+#if _FCXX_STD >= 2026
+template <class _Tp>
+struct is_reflection : __fcxx_is_reflection<_Tp> {};
+#endif
+
+/* [meta.unary.comp], composite type categories */
+
+template <class _Tp>
+struct is_arithmetic : __fcxx_bool_constant<is_integral<_Tp>::value || is_floating_point<_Tp>::value> {};
+
+template <class _Tp>
+struct is_fundamental
+    : __fcxx_bool_constant<is_arithmetic<_Tp>::value || is_void<_Tp>::value || __fcxx_is_null_pointer<_Tp>::value
+                      || __fcxx_is_reflection<_Tp>::value> {};
+
+template <class _Tp>
+struct is_object
+    : __fcxx_bool_constant<!is_function<_Tp>::value && !is_reference<_Tp>::value && !is_void<_Tp>::value> {};
+
+template <class _Tp>
+struct is_scalar
+    : __fcxx_bool_constant<is_arithmetic<_Tp>::value || is_enum<_Tp>::value || is_pointer<_Tp>::value
+                      || is_member_pointer<_Tp>::value || __fcxx_is_null_pointer<_Tp>::value
+                      || __fcxx_is_reflection<_Tp>::value> {};
+
+template <class _Tp>
+struct is_compound : __fcxx_bool_constant<!is_fundamental<_Tp>::value> {};
+
+/* [meta.unary.prop], type properties */
+
+template <class _Tp>
+struct is_standard_layout : __fcxx_bool_constant<__is_standard_layout(_Tp)> {};
+
+template <class _Tp>
+struct is_empty : __fcxx_bool_constant<__is_empty(_Tp)> {};
+
+template <class _Tp>
+struct is_polymorphic : __fcxx_bool_constant<__is_polymorphic(_Tp)> {};
+
+template <class _Tp>
+struct is_abstract : __fcxx_bool_constant<__is_abstract(_Tp)> {};
+
+#if _FCXX_STD >= 2014
+template <class _Tp>
+struct is_final : __fcxx_bool_constant<__is_final(_Tp)> {};
+#endif
+
+#if _FCXX_STD >= 2017 && _FCXX_HAS_IS_AGGREGATE
+template <class _Tp>
+struct is_aggregate : __fcxx_bool_constant<__is_aggregate(typename remove_cv<_Tp>::type)> {};
+#endif
+
+#if _FCXX_STD >= 2026 && _FCXX_HAS_IS_STRUCTURAL
+template <class _Tp>
+struct is_structural : __fcxx_bool_constant<__builtin_is_structural(_Tp)> {};
+#endif
+
+template <class _Tp, bool = is_arithmetic<_Tp>::value>
+struct __fcxx_is_signed_impl : false_type {};
+
+template <class _Tp>
+struct __fcxx_is_signed_impl<_Tp, true> : __fcxx_bool_constant<_Tp(-1) < _Tp(0)> {};
+
+template <class _Tp>
+struct is_signed : __fcxx_is_signed_impl<_Tp> {};
+
+template <class _Tp>
+struct is_unsigned : __fcxx_bool_constant<is_arithmetic<_Tp>::value && !__fcxx_is_signed_impl<_Tp>::value> {};
+
+#if _FCXX_STD >= 2020
+template <class _Tp> struct is_bounded_array : false_type {};
+template <class _Tp, size_t _Np> struct is_bounded_array<_Tp[_Np]> : true_type {};
+
+template <class _Tp> struct is_unbounded_array : false_type {};
+template <class _Tp> struct is_unbounded_array<_Tp[]> : true_type {};
+#endif
+
+/* [meta.trans.arr], array modifications, needed below */
+
+template <class _Tp> struct remove_extent { typedef _Tp type; };
+template <class _Tp> struct remove_extent<_Tp[]> { typedef _Tp type; };
+template <class _Tp, size_t _Np> struct remove_extent<_Tp[_Np]> { typedef _Tp type; };
+
+template <class _Tp> struct remove_all_extents { typedef _Tp type; };
+template <class _Tp> struct remove_all_extents<_Tp[]> { typedef typename remove_all_extents<_Tp>::type type; };
+template <class _Tp, size_t _Np>
+struct remove_all_extents<_Tp[_Np]> {
+    typedef typename remove_all_extents<_Tp>::type type;
+};
+
+/* Whether a type is destructible. */
+
+#if _FCXX_HAS_TYPE_TRAIT(is_destructible, 1400)
+template <class _Tp>
+struct is_destructible : __fcxx_bool_constant<__is_destructible(_Tp)> {};
+#else
+template <class _Tp, class = void>
+struct __fcxx_has_destructor : false_type {};
+
+template <class _Tp>
+struct __fcxx_has_destructor<_Tp, __fcxx_void_t<decltype(__fcxx_declval<_Tp&>().~_Tp())> > : true_type {};
+
+template <class _Tp, bool = is_void<_Tp>::value || is_function<_Tp>::value, bool = is_reference<_Tp>::value>
+struct __fcxx_is_destructible_impl : __fcxx_has_destructor<typename remove_all_extents<_Tp>::type> {};
+
+template <class _Tp, bool _Ref>
+struct __fcxx_is_destructible_impl<_Tp, true, _Ref> : false_type {};
+
+template <class _Tp>
+struct __fcxx_is_destructible_impl<_Tp, false, true> : true_type {};
+
+template <class _Tp>
+struct is_destructible : __fcxx_is_destructible_impl<_Tp> {};
+
+template <class _Tp>
+struct is_destructible<_Tp[]> : false_type {};
+#endif
+
+#if _FCXX_HAS_TYPE_TRAIT(is_trivially_destructible, 1600)
+template <class _Tp>
+struct is_trivially_destructible : __fcxx_bool_constant<__is_trivially_destructible(_Tp)> {};
+#else
+template <class _Tp, bool = is_destructible<_Tp>::value>
+struct __fcxx_is_trivially_destructible_impl : false_type {};
+
+template <class _Tp>
+struct __fcxx_is_trivially_destructible_impl<_Tp, true>
+    : __fcxx_bool_constant<__has_trivial_destructor(
+          typename remove_all_extents<typename remove_reference<_Tp>::type>::type)> {};
+
+template <class _Tp>
+struct is_trivially_destructible : __fcxx_is_trivially_destructible_impl<_Tp> {};
+#endif
+
+#if _FCXX_HAS_TYPE_TRAIT(is_nothrow_destructible, 1400)
+template <class _Tp>
+struct is_nothrow_destructible : __fcxx_bool_constant<__is_nothrow_destructible(_Tp)> {};
+#else
+template <class _Tp>
+struct __fcxx_has_nothrow_destructor : __fcxx_bool_constant<noexcept(__fcxx_declval<_Tp&>().~_Tp())> {};
+
+template <class _Tp, bool = is_destructible<_Tp>::value, bool = is_reference<_Tp>::value>
+struct __fcxx_is_nothrow_destructible_impl : false_type {};
+
+template <class _Tp>
+struct __fcxx_is_nothrow_destructible_impl<_Tp, true, false>
+    : __fcxx_has_nothrow_destructor<typename remove_all_extents<_Tp>::type> {};
+
+template <class _Tp>
+struct __fcxx_is_nothrow_destructible_impl<_Tp, true, true> : true_type {};
+
+template <class _Tp>
+struct is_nothrow_destructible : __fcxx_is_nothrow_destructible_impl<_Tp> {};
+#endif
+
+/* Whether a type is constructible from arguments of given types, which is
+ * whether "T t(declval<Args>()...);" is well-formed. */
+
+#if _FCXX_HAS_TYPE_TRAIT(is_constructible, 800)
+template <class _Tp, class... _Args>
+struct is_constructible : __fcxx_bool_constant<__is_constructible(_Tp, _Args...)> {};
+#  if (_FCXX_GCC >= 801 && _FCXX_GCC <= 803) || _FCXX_GCC == 901
+/* Workaround: GCC 8.1 to 8.3 and 9.1, all targets: the builtin takes the
+ * arrays of unknown bound to be default constructible. */
+template <class _Tp>
+struct is_constructible<_Tp[]> : false_type {};
+#  endif
+#else
+/* A placement new-expression checks the construction of an object type, and
+ * a reference binds as in an implicit conversion, which leaves out only the
+ * explicit conversion functions to a reference. */
+template <class _From, class _To>
+struct __fcxx_binds_implicitly {
+    template <class _Up> static void __take(_Up) noexcept;
+    template <class _F1, class _T1, class = decltype(__take<_T1>(__fcxx_declval<_F1>()))>
+    static true_type __test(int);
+    template <class, class>
+    static false_type __test(...);
+    typedef decltype(__test<_From, _To>(0)) type;
+};
+
+template <class _Void, class _Tp, class... _Args>
+struct __fcxx_is_constructible_object : false_type {};
+
+template <class _Tp, class... _Args>
+struct __fcxx_is_constructible_object<
+    __fcxx_void_t<decltype(::new (__fcxx_declval<void*>()) _Tp(__fcxx_declval<_Args>()...))>, _Tp, _Args...>
+    : true_type {};
+
+template <class _Tp, class... _Args>
+struct __fcxx_is_constructible_impl : __fcxx_is_constructible_object<void, _Tp, _Args...> {};
+
+template <class _Tp, class _Arg>
+struct __fcxx_is_constructible_impl<_Tp&, _Arg> : __fcxx_binds_implicitly<_Arg, _Tp&>::type {};
+
+template <class _Tp, class _Arg>
+struct __fcxx_is_constructible_impl<_Tp&&, _Arg>
+    : __fcxx_bool_constant<__fcxx_binds_implicitly<_Arg, _Tp&&>::type::value
+                           && !(is_lvalue_reference<_Arg>::value && !is_function<_Tp>::value)> {};
+
+template <class _Tp, class... _Args>
+struct is_constructible
+    : __fcxx_bool_constant<!is_void<_Tp>::value && !is_function<_Tp>::value
+                           && __fcxx_is_constructible_impl<_Tp, _Args...>::value> {};
+
+template <class _Tp, class... _Args>
+struct is_constructible<_Tp[], _Args...> : false_type {};
+#endif
+
+template <class _Tp>
+struct is_default_constructible : is_constructible<_Tp> {};
+
+template <class _Tp, bool = __fcxx_is_referenceable<_Tp>::value>
+struct __fcxx_is_copy_constructible_impl : is_constructible<_Tp, const _Tp&> {};
+
+template <class _Tp>
+struct __fcxx_is_copy_constructible_impl<_Tp, false> : false_type {};
+
+template <class _Tp>
+struct is_copy_constructible : __fcxx_is_copy_constructible_impl<_Tp> {};
+
+template <class _Tp, bool = __fcxx_is_referenceable<_Tp>::value>
+struct __fcxx_is_move_constructible_impl : is_constructible<_Tp, _Tp&&> {};
+
+template <class _Tp>
+struct __fcxx_is_move_constructible_impl<_Tp, false> : false_type {};
+
+template <class _Tp>
+struct is_move_constructible : __fcxx_is_move_constructible_impl<_Tp> {};
+
+/* Whether a type is assignable from another. */
+
+#if _FCXX_HAS_TYPE_TRAIT(is_assignable, 800)
+template <class _Tp, class _Up>
+struct is_assignable : __fcxx_bool_constant<__is_assignable(_Tp, _Up)> {};
+#else
+template <class _Tp, class _Up, class = void>
+struct __fcxx_is_assignable_impl : false_type {};
+
+template <class _Tp, class _Up>
+struct __fcxx_is_assignable_impl<_Tp, _Up, __fcxx_void_t<decltype(__fcxx_declval<_Tp>() = __fcxx_declval<_Up>())>>
+    : true_type {};
+
+template <class _Tp, class _Up>
+struct is_assignable : __fcxx_is_assignable_impl<_Tp, _Up> {};
+#endif
+
+template <class _Tp, bool = __fcxx_is_referenceable<_Tp>::value>
+struct __fcxx_is_copy_assignable_impl : is_assignable<_Tp&, const _Tp&> {};
+
+template <class _Tp>
+struct __fcxx_is_copy_assignable_impl<_Tp, false> : false_type {};
+
+template <class _Tp>
+struct is_copy_assignable : __fcxx_is_copy_assignable_impl<_Tp> {};
+
+template <class _Tp, bool = __fcxx_is_referenceable<_Tp>::value>
+struct __fcxx_is_move_assignable_impl : is_assignable<_Tp&, _Tp&&> {};
+
+template <class _Tp>
+struct __fcxx_is_move_assignable_impl<_Tp, false> : false_type {};
+
+template <class _Tp>
+struct is_move_assignable : __fcxx_is_move_assignable_impl<_Tp> {};
+
+/* The trivial versions, which GCC before 5 has no builtins for, and which
+ * are then approximated with the older builtins. */
+
+#if _FCXX_HAS_TYPE_TRAIT(is_trivially_constructible, 500)
+#  define _FCXX_HAS_TRIVIALLY_CONSTRUCTIBLE 1
+/* Workaround: GCC 5.1, all targets: it drops a pack expansion among the
+ * arguments of the builtin where they are in the argument of an alias
+ * template, as they would be in that of __fcxx_bool_constant, which makes
+ * the trait that of default construction (fixed in 5.2). */
+template <class _Tp, class... _Args>
+struct is_trivially_constructible : integral_constant<bool, __is_trivially_constructible(_Tp, _Args...)> {};
+
+template <class _Tp, class _Up>
+struct is_trivially_assignable : __fcxx_bool_constant<__is_trivially_assignable(_Tp, _Up)> {};
+
+template <class _Tp>
+struct is_trivially_copyable : __fcxx_bool_constant<__is_trivially_copyable(_Tp)> {};
+#else
+#  define _FCXX_HAS_TRIVIALLY_CONSTRUCTIBLE 0
+/* An approximation with the older builtins, which only tell about the copy
+ * operations: a class is taken to be trivially movable when it is trivially
+ * copyable and can be copied at all. The scalars are trivially constructible
+ * and assignable in whatever way they are so at all. */
+template <class _Tp>
+struct __fcxx_is_trivially_copyable_approx
+    : __fcxx_bool_constant<__has_trivial_copy(_Tp) && __has_trivial_assign(_Tp) && __has_trivial_destructor(_Tp)> {};
+
+template <class _Tp>
+struct is_trivially_copyable : __fcxx_is_trivially_copyable_approx<typename remove_all_extents<_Tp>::type> {};
+
+template <class _Tp, class... _Args>
+struct __fcxx_trivially_constructible_approx : false_type {};
+
+template <class _Tp>
+struct __fcxx_trivially_constructible_approx<_Tp> : __fcxx_bool_constant<__has_trivial_constructor(_Tp)> {};
+
+template <class _Tp, class _Up>
+struct __fcxx_trivially_constructible_approx<_Tp, _Up>
+    : __fcxx_bool_constant<is_same<typename remove_cv<_Tp>::type, __fcxx_remove_cvref_t<_Up> >::value
+                           && __has_trivial_copy(_Tp)
+                           && (is_lvalue_reference<_Up>::value || is_copy_constructible<_Tp>::value)> {};
+
+template <class _Tp, class... _Args>
+struct is_trivially_constructible
+    : __fcxx_bool_constant<
+          is_constructible<_Tp, _Args...>::value
+          && (is_scalar<typename remove_all_extents<_Tp>::type>::value || is_reference<_Tp>::value
+              || __fcxx_trivially_constructible_approx<typename remove_all_extents<_Tp>::type, _Args...>::value)> {};
+
+template <class _Tp, class _Up>
+struct __fcxx_trivially_assignable_approx
+    : __fcxx_bool_constant<
+          is_same<__fcxx_remove_cvref_t<_Tp>, __fcxx_remove_cvref_t<_Up>>::value&& __has_trivial_assign(
+              __fcxx_remove_cvref_t<_Tp>)
+          && (is_lvalue_reference<_Up>::value || is_copy_assignable<__fcxx_remove_cvref_t<_Tp>>::value)> {};
+
+template <class _Tp, class _Up>
+struct is_trivially_assignable
+    : __fcxx_bool_constant<is_assignable<_Tp, _Up>::value
+                           && (is_scalar<typename remove_reference<_Tp>::type>::value
+                               || __fcxx_trivially_assignable_approx<_Tp, _Up>::value)> {};
+#endif
+
+template <class _Tp>
+struct is_trivially_default_constructible : is_trivially_constructible<_Tp> {};
+
+template <class _Tp, bool = __fcxx_is_referenceable<_Tp>::value>
+struct __fcxx_is_trivially_copy_constructible_impl : is_trivially_constructible<_Tp, const _Tp&> {};
+
+template <class _Tp>
+struct __fcxx_is_trivially_copy_constructible_impl<_Tp, false> : false_type {};
+
+template <class _Tp>
+struct is_trivially_copy_constructible : __fcxx_is_trivially_copy_constructible_impl<_Tp> {};
+
+template <class _Tp, bool = __fcxx_is_referenceable<_Tp>::value>
+struct __fcxx_is_trivially_move_constructible_impl : is_trivially_constructible<_Tp, _Tp&&> {};
+
+template <class _Tp>
+struct __fcxx_is_trivially_move_constructible_impl<_Tp, false> : false_type {};
+
+template <class _Tp>
+struct is_trivially_move_constructible : __fcxx_is_trivially_move_constructible_impl<_Tp> {};
+
+template <class _Tp, bool = __fcxx_is_referenceable<_Tp>::value>
+struct __fcxx_is_trivially_copy_assignable_impl : is_trivially_assignable<_Tp&, const _Tp&> {};
+
+template <class _Tp>
+struct __fcxx_is_trivially_copy_assignable_impl<_Tp, false> : false_type {};
+
+template <class _Tp>
+struct is_trivially_copy_assignable : __fcxx_is_trivially_copy_assignable_impl<_Tp> {};
+
+template <class _Tp, bool = __fcxx_is_referenceable<_Tp>::value>
+struct __fcxx_is_trivially_move_assignable_impl : is_trivially_assignable<_Tp&, _Tp&&> {};
+
+template <class _Tp>
+struct __fcxx_is_trivially_move_assignable_impl<_Tp, false> : false_type {};
+
+template <class _Tp>
+struct is_trivially_move_assignable : __fcxx_is_trivially_move_assignable_impl<_Tp> {};
+
+/* The nothrow versions. */
+
+#if _FCXX_HAS_TYPE_TRAIT(is_nothrow_constructible, 1100)
+template <class _Tp, class... _Args>
+struct is_nothrow_constructible : __fcxx_bool_constant<__is_nothrow_constructible(_Tp, _Args...)> {};
+#else
+template <bool, class _Tp, class... _Args>
+struct __fcxx_is_nothrow_constructible_impl : false_type {};
+
+template <class _Tp, class... _Args>
+struct __fcxx_is_nothrow_constructible_impl<true, _Tp, _Args...>
+    : __fcxx_bool_constant<noexcept(::new (__fcxx_declval<void*>()) _Tp(__fcxx_declval<_Args>()...))> {};
+
+template <class _Tp, class _Arg>
+struct __fcxx_is_nothrow_constructible_impl<true, _Tp&, _Arg>
+    : __fcxx_bool_constant<noexcept(static_cast<_Tp&>(__fcxx_declval<_Arg>()))> {};
+
+template <class _Tp, class _Arg>
+struct __fcxx_is_nothrow_constructible_impl<true, _Tp&&, _Arg>
+    : __fcxx_bool_constant<noexcept(static_cast<_Tp&&>(__fcxx_declval<_Arg>()))> {};
+
+template <class _Tp, class... _Args>
+struct is_nothrow_constructible
+    : __fcxx_is_nothrow_constructible_impl<is_constructible<_Tp, _Args...>::value, _Tp, _Args...> {};
+#endif
+
+template <class _Tp>
+struct is_nothrow_default_constructible : is_nothrow_constructible<_Tp> {};
+
+template <class _Tp, bool = __fcxx_is_referenceable<_Tp>::value>
+struct __fcxx_is_nothrow_copy_constructible_impl : is_nothrow_constructible<_Tp, const _Tp&> {};
+
+template <class _Tp>
+struct __fcxx_is_nothrow_copy_constructible_impl<_Tp, false> : false_type {};
+
+template <class _Tp>
+struct is_nothrow_copy_constructible : __fcxx_is_nothrow_copy_constructible_impl<_Tp> {};
+
+template <class _Tp, bool = __fcxx_is_referenceable<_Tp>::value>
+struct __fcxx_is_nothrow_move_constructible_impl : is_nothrow_constructible<_Tp, _Tp&&> {};
+
+template <class _Tp>
+struct __fcxx_is_nothrow_move_constructible_impl<_Tp, false> : false_type {};
+
+template <class _Tp>
+struct is_nothrow_move_constructible : __fcxx_is_nothrow_move_constructible_impl<_Tp> {};
+
+#if _FCXX_HAS_TYPE_TRAIT(is_nothrow_assignable, 1100)
+template <class _Tp, class _Up>
+struct is_nothrow_assignable : __fcxx_bool_constant<__is_nothrow_assignable(_Tp, _Up)> {};
+#else
+template <bool, class _Tp, class _Up>
+struct __fcxx_is_nothrow_assignable_impl : false_type {};
+
+template <class _Tp, class _Up>
+struct __fcxx_is_nothrow_assignable_impl<true, _Tp, _Up>
+    : __fcxx_bool_constant<noexcept(__fcxx_declval<_Tp>() = __fcxx_declval<_Up>())> {};
+
+template <class _Tp, class _Up>
+struct is_nothrow_assignable : __fcxx_is_nothrow_assignable_impl<is_assignable<_Tp, _Up>::value, _Tp, _Up> {};
+#endif
+
+template <class _Tp, bool = __fcxx_is_referenceable<_Tp>::value>
+struct __fcxx_is_nothrow_copy_assignable_impl : is_nothrow_assignable<_Tp&, const _Tp&> {};
+
+template <class _Tp>
+struct __fcxx_is_nothrow_copy_assignable_impl<_Tp, false> : false_type {};
+
+template <class _Tp>
+struct is_nothrow_copy_assignable : __fcxx_is_nothrow_copy_assignable_impl<_Tp> {};
+
+template <class _Tp, bool = __fcxx_is_referenceable<_Tp>::value>
+struct __fcxx_is_nothrow_move_assignable_impl : is_nothrow_assignable<_Tp&, _Tp&&> {};
+
+template <class _Tp>
+struct __fcxx_is_nothrow_move_assignable_impl<_Tp, false> : false_type {};
+
+template <class _Tp>
+struct is_nothrow_move_assignable : __fcxx_is_nothrow_move_assignable_impl<_Tp> {};
+
+template <class _Tp>
+struct has_virtual_destructor : __fcxx_bool_constant<__has_virtual_destructor(_Tp)> {};
+
+#if _FCXX_STD >= 2017 && _FCXX_HAS_UNIQUE_OBJECT_REPRESENTATIONS
+template <class _Tp>
+struct has_unique_object_representations : __fcxx_bool_constant<__has_unique_object_representations(
+                                               typename remove_cv<typename remove_all_extents<_Tp>::type>::type)> {};
+#    endif
+
+/* The deprecated properties, which were freestanding for as long as the whole
+ * header was, until they were deprecated to Annex D, where they are hosted. */
+
+#if _FCXX_STD < 2026
+template <class _Tp>
+struct _FCXX_DEPRECATED_CXX26("use is_trivially_copyable and is_trivially_default_constructible")
+is_trivial : __fcxx_bool_constant<__is_trivial(_Tp)> {};
+#endif
+
+#if _FCXX_STD < 2023
+template <class _Tp>
+struct _FCXX_DEPRECATED_CXX20("use is_standard_layout and is_trivial")
+is_pod : __fcxx_bool_constant<__is_pod(_Tp)> {};
+#endif
+
+#if _FCXX_STD < 2020
+template <class _Tp>
+struct _FCXX_DEPRECATED_CXX17("removed from the standard")
+is_literal_type : __fcxx_bool_constant<__is_literal_type(_Tp)> {};
+#endif
+
+/* [meta.unary.prop.query], type property queries */
+
+template <class _Tp>
+struct alignment_of : integral_constant<size_t, alignof(_Tp)> {};
+
+template <class _Tp> struct rank : integral_constant<size_t, 0> {};
+template <class _Tp> struct rank<_Tp[]> : integral_constant<size_t, rank<_Tp>::value + 1> {};
+template <class _Tp, size_t _Np> struct rank<_Tp[_Np]> : integral_constant<size_t, rank<_Tp>::value + 1> {};
+
+template <class _Tp, unsigned _Ip = 0> struct extent : integral_constant<size_t, 0> {};
+template <class _Tp> struct extent<_Tp[], 0> : integral_constant<size_t, 0> {};
+template <class _Tp, unsigned _Ip> struct extent<_Tp[], _Ip> : extent<_Tp, _Ip - 1> {};
+template <class _Tp, size_t _Np> struct extent<_Tp[_Np], 0> : integral_constant<size_t, _Np> {};
+template <class _Tp, size_t _Np, unsigned _Ip> struct extent<_Tp[_Np], _Ip> : extent<_Tp, _Ip - 1> {};
+
+/* forward, move and swap, of <utility>, which the swappable traits and other
+ * headers need, under names of the library's own, as for declval. */
+
+template <class _Tp>
+_FCXX_NODISCARD _FCXX_CONSTEXPR14 _Tp&& __fcxx_forward(typename remove_reference<_Tp>::type& __t) noexcept {
+    return static_cast<_Tp&&>(__t);
+}
+
+template <class _Tp>
+_FCXX_NODISCARD _FCXX_CONSTEXPR14 _Tp&& __fcxx_forward(typename remove_reference<_Tp>::type&& __t) noexcept {
+    static_assert(!is_lvalue_reference<_Tp>::value, "std::forward of an rvalue as an lvalue");
+    return static_cast<_Tp&&>(__t);
+}
+
+template <class _Tp>
+_FCXX_NODISCARD _FCXX_CONSTEXPR14 typename remove_reference<_Tp>::type&& __fcxx_move(_Tp&& __t) noexcept {
+    return static_cast<typename remove_reference<_Tp>::type&&>(__t);
+}
+
+template <class _Tp, class _Up>
+struct __fcxx_is_swappable_with_impl;
+
+template <class _Tp, class _Up>
+struct __fcxx_is_nothrow_swappable_with_impl;
+
+/* Swapping is looked up as with "using std::swap;", along with whatever the
+ * arguments bring in, which the two function templates of <utility> are
+ * here for. From C++23 on, std::swap names them (below), so that the
+ * lookup finds the same functions either way. */
+namespace __fcxx_swap_lookup {
+
+template <class _Tp>
+_FCXX_CONSTEXPR20 typename enable_if<is_move_constructible<_Tp>::value && is_move_assignable<_Tp>::value>::type
+swap(_Tp& __a, _Tp& __b) noexcept(is_nothrow_move_constructible<_Tp>::value
+                                  && is_nothrow_move_assignable<_Tp>::value) {
+    _Tp __tmp(std::__fcxx_move(__a));
+    __a = std::__fcxx_move(__b);
+    __b = std::__fcxx_move(__tmp);
+}
+
+template <class _Tp, size_t _Np>
+_FCXX_CONSTEXPR20 typename enable_if<__fcxx_is_swappable_with_impl<_Tp&, _Tp&>::value>::type
+swap(_Tp (&__a)[_Np], _Tp (&__b)[_Np]) noexcept(__fcxx_is_nothrow_swappable_with_impl<_Tp&, _Tp&>::value) {
+    for (size_t __i = 0; __i != _Np; ++__i) {
+        swap(__a[__i], __b[__i]);
+    }
+}
+
+template <class _Tp, class _Up, class = void>
+struct __swappable_with : false_type {};
+
+template <class _Tp, class _Up>
+struct __swappable_with<_Tp, _Up, __fcxx_void_t<decltype(swap(__fcxx_declval<_Tp>(), __fcxx_declval<_Up>())),
+                                                decltype(swap(__fcxx_declval<_Up>(), __fcxx_declval<_Tp>()))> >
+    : true_type {};
+
+template <class _Tp, class _Up, bool = __swappable_with<_Tp, _Up>::value>
+struct __nothrow_swappable_with : false_type {};
+
+template <class _Tp, class _Up>
+struct __nothrow_swappable_with<_Tp, _Up, true>
+    : __fcxx_bool_constant<noexcept(swap(__fcxx_declval<_Tp>(), __fcxx_declval<_Up>()))
+                           && noexcept(swap(__fcxx_declval<_Up>(), __fcxx_declval<_Tp>()))> {};
+
+} /* namespace __fcxx_swap_lookup */
+
+#if _FCXX_STD >= 2023
+/* [declval], [forward] and [utility.swap], of <utility>, which is
+ * freestanding from C++23 on. */
+
+template <class _Tp>
+typename add_rvalue_reference<_Tp>::type declval() noexcept;
+
+template <class _Tp>
+_FCXX_NODISCARD constexpr _Tp&& forward(typename remove_reference<_Tp>::type& __t) noexcept {
+    return static_cast<_Tp&&>(__t);
+}
+
+template <class _Tp>
+_FCXX_NODISCARD constexpr _Tp&& forward(typename remove_reference<_Tp>::type&& __t) noexcept {
+    static_assert(!is_lvalue_reference<_Tp>::value, "std::forward of an rvalue as an lvalue");
+    return static_cast<_Tp&&>(__t);
+}
+
+template <class _Tp>
+_FCXX_NODISCARD constexpr typename remove_reference<_Tp>::type&& move(_Tp&& __t) noexcept {
+    return static_cast<typename remove_reference<_Tp>::type&&>(__t);
+}
+
+using __fcxx_swap_lookup::swap;
+#endif
+
+template <class _Tp, class _Up>
+struct __fcxx_is_swappable_with_impl : __fcxx_swap_lookup::__swappable_with<_Tp, _Up> {};
+
+template <class _Tp, class _Up>
+struct __fcxx_is_nothrow_swappable_with_impl : __fcxx_swap_lookup::__nothrow_swappable_with<_Tp, _Up> {};
+
+template <class _Tp, bool = __fcxx_is_referenceable<_Tp>::value>
+struct __fcxx_is_swappable : __fcxx_is_swappable_with_impl<_Tp&, _Tp&> {};
+
+template <class _Tp>
+struct __fcxx_is_swappable<_Tp, false> : false_type {};
+
+template <class _Tp, bool = __fcxx_is_referenceable<_Tp>::value>
+struct __fcxx_is_nothrow_swappable : __fcxx_is_nothrow_swappable_with_impl<_Tp&, _Tp&> {};
+
+template <class _Tp>
+struct __fcxx_is_nothrow_swappable<_Tp, false> : false_type {};
+
+#if _FCXX_STD >= 2017
+template <class _Tp, class _Up>
+struct is_swappable_with : __fcxx_is_swappable_with_impl<_Tp, _Up> {};
+
+template <class _Tp>
+struct is_swappable : __fcxx_is_swappable<_Tp> {};
+
+template <class _Tp, class _Up>
+struct is_nothrow_swappable_with : __fcxx_is_nothrow_swappable_with_impl<_Tp, _Up> {};
+
+template <class _Tp>
+struct is_nothrow_swappable : __fcxx_is_nothrow_swappable<_Tp> {};
+#endif
+
+/* [meta.rel], type relations */
+
+template <class _Base, class _Derived>
+struct is_base_of : __fcxx_bool_constant<__is_base_of(_Base, _Derived)> {};
+
+#if _FCXX_STD >= 2026 && _FCXX_HAS_IS_VIRTUAL_BASE_OF
+template <class _Base, class _Derived>
+struct is_virtual_base_of : __fcxx_bool_constant<__builtin_is_virtual_base_of(_Base, _Derived)> {};
+#endif
+
+#if _FCXX_HAS_TYPE_TRAIT(is_convertible, 1300)
+template <class _From, class _To>
+struct is_convertible : __fcxx_bool_constant<__is_convertible(_From, _To)> {};
+#elif defined(__clang__)
+template <class _From, class _To>
+struct is_convertible : __fcxx_bool_constant<__is_convertible_to(_From, _To)> {};
+#else
+/* Whether "To test() { return declval<From>(); }" is well-formed, which is
+ * never for a function or an array, as they cannot be returned, and only
+ * for void when both are. */
+template <class _From, class _To>
+struct __fcxx_is_convertible_test {
+    template <class _Up> static void __take(_Up) noexcept;
+    template <class _F1, class _T1, class = decltype(__take<_T1>(__fcxx_declval<_F1>()))>
+    static true_type __test(int);
+    template <class, class>
+    static false_type __test(...);
+    typedef decltype(__test<_From, _To>(0)) type;
+};
+
+template <class _From, class _To, bool = is_void<_From>::value || is_function<_To>::value || is_array<_To>::value>
+struct __fcxx_is_convertible_impl : is_void<_To> {};
+
+template <class _From, class _To>
+struct __fcxx_is_convertible_impl<_From, _To, false> : __fcxx_is_convertible_test<_From, _To>::type {};
+
+template <class _From, class _To>
+struct is_convertible : __fcxx_is_convertible_impl<_From, _To> {};
+#endif
+
+template <class _From, class _To, bool = is_convertible<_From, _To>::value, bool = is_void<_To>::value>
+struct __fcxx_is_nothrow_convertible_impl : false_type {};
+
+template <class _From, class _To>
+struct __fcxx_is_nothrow_convertible_impl<_From, _To, true, true> : true_type {};
+
+template <class _From, class _To>
+struct __fcxx_is_nothrow_convertible_impl<_From, _To, true, false> {
+    template <class _Up> static void __take(_Up) noexcept;
+    static constexpr bool value = noexcept(__take<_To>(__fcxx_declval<_From>()));
+};
+
+#if _FCXX_STD >= 2020
+#  if _FCXX_HAS_BUILTIN(__is_nothrow_convertible)
+template <class _From, class _To>
+struct is_nothrow_convertible : __fcxx_bool_constant<__is_nothrow_convertible(_From, _To)> {};
+#  else
+template <class _From, class _To>
+struct is_nothrow_convertible : __fcxx_bool_constant<__fcxx_is_nothrow_convertible_impl<_From, _To>::value> {};
+#  endif
+
+#  if _FCXX_HAS_IS_LAYOUT_COMPATIBLE
+template <class _Tp, class _Up>
+struct is_layout_compatible : __fcxx_bool_constant<__is_layout_compatible(_Tp, _Up)> {};
+#  endif
+
+#  if _FCXX_HAS_IS_POINTER_INTERCONVERTIBLE
+template <class _Base, class _Derived>
+struct is_pointer_interconvertible_base_of
+    : __fcxx_bool_constant<__is_pointer_interconvertible_base_of(_Base, _Derived)> {};
+#  endif
+
+#  if _FCXX_HAS_IS_POINTER_INTERCONVERTIBLE_WITH_CLASS
+template <class _Sp, class _Mp>
+constexpr bool is_pointer_interconvertible_with_class(_Mp _Sp::*__m) noexcept {
+    return __builtin_is_pointer_interconvertible_with_class(__m);
+}
+#  endif
+
+#  if _FCXX_HAS_IS_CORRESPONDING_MEMBER
+template <class _S1, class _S2, class _M1, class _M2>
+constexpr bool is_corresponding_member(_M1 _S1::*__m1, _M2 _S2::*__m2) noexcept {
+    return __builtin_is_corresponding_member(__m1, __m2);
+}
+#  endif
+#endif
+
+/* [meta.trans.sign], sign modifications, for the integral types but bool,
+ * and the enumerations. The character types and the enumerations take the
+ * type of the smallest rank of the same size. */
+
+template <class _Tp, class _Up>
+struct __fcxx_copy_cv { typedef _Up type; };
+template <class _Tp, class _Up>
+struct __fcxx_copy_cv<const _Tp, _Up> { typedef const _Up type; };
+template <class _Tp, class _Up>
+struct __fcxx_copy_cv<volatile _Tp, _Up> { typedef volatile _Up type; };
+template <class _Tp, class _Up>
+struct __fcxx_copy_cv<const volatile _Tp, _Up> { typedef const volatile _Up type; };
+
+#ifdef __SIZEOF_INT128__
+__extension__ typedef __int128 __fcxx_int128;
+__extension__ typedef unsigned __int128 __fcxx_uint128;
+#endif
+
+template <size_t _Sz>
+struct __fcxx_integer_of_size {
+    typedef __fcxx_conditional_t<sizeof(signed char) == _Sz, signed char,
+            __fcxx_conditional_t<sizeof(short) == _Sz, short,
+            __fcxx_conditional_t<sizeof(int) == _Sz, int,
+            __fcxx_conditional_t<sizeof(long) == _Sz, long,
+#ifdef __SIZEOF_INT128__
+            __fcxx_conditional_t<sizeof(long long) == _Sz, long long, __fcxx_int128> > > > > __signed_type;
+#else
+            long long> > > > __signed_type;
+#endif
+    typedef __fcxx_conditional_t<
+        sizeof(unsigned char) == _Sz, unsigned char,
+        __fcxx_conditional_t<
+            sizeof(unsigned short) == _Sz, unsigned short,
+            __fcxx_conditional_t<sizeof(unsigned int) == _Sz, unsigned int,
+                                 __fcxx_conditional_t<sizeof(unsigned long) == _Sz, unsigned long,
+#    ifdef __SIZEOF_INT128__
+                                                      __fcxx_conditional_t<sizeof(unsigned long long) == _Sz,
+                                                                           unsigned long long, __fcxx_uint128>>>>>
+        __unsigned_type;
+#    else
+            unsigned long long> > > > __unsigned_type;
+#    endif
+};
+
+template <class _Tp, bool = is_enum<_Tp>::value>
+struct __fcxx_sign_pair {};
+
+template <class _Tp>
+struct __fcxx_sign_pair<_Tp, true> {
+    typedef typename __fcxx_integer_of_size<sizeof(_Tp)>::__signed_type __signed_type;
+    typedef typename __fcxx_integer_of_size<sizeof(_Tp)>::__unsigned_type __unsigned_type;
+};
+
+#define _FCXX_SIGN_PAIR(type, s, u) \
+    template <> struct __fcxx_sign_pair<type, false> { typedef s __signed_type; typedef u __unsigned_type; };
+_FCXX_SIGN_PAIR(char, signed char, unsigned char)
+_FCXX_SIGN_PAIR(signed char, signed char, unsigned char)
+_FCXX_SIGN_PAIR(unsigned char, signed char, unsigned char)
+_FCXX_SIGN_PAIR(short, short, unsigned short)
+_FCXX_SIGN_PAIR(unsigned short, short, unsigned short)
+_FCXX_SIGN_PAIR(int, int, unsigned int)
+_FCXX_SIGN_PAIR(unsigned int, int, unsigned int)
+_FCXX_SIGN_PAIR(long, long, unsigned long)
+_FCXX_SIGN_PAIR(unsigned long, long, unsigned long)
+_FCXX_SIGN_PAIR(long long, long long, unsigned long long)
+_FCXX_SIGN_PAIR(unsigned long long, long long, unsigned long long)
+#ifdef __SIZEOF_INT128__
+_FCXX_SIGN_PAIR(__fcxx_int128, __fcxx_int128, __fcxx_uint128)
+_FCXX_SIGN_PAIR(__fcxx_uint128, __fcxx_int128, __fcxx_uint128)
+#endif
+#undef _FCXX_SIGN_PAIR
+
+#define _FCXX_SIGN_BY_SIZE(type) \
+    template <> struct __fcxx_sign_pair<type, false> { \
+        typedef __fcxx_integer_of_size<sizeof(type)>::__signed_type __signed_type; \
+        typedef __fcxx_integer_of_size<sizeof(type)>::__unsigned_type __unsigned_type; \
+    };
+_FCXX_SIGN_BY_SIZE(wchar_t)
+#if _FCXX_HAS_CHAR8_T
+_FCXX_SIGN_BY_SIZE(char8_t)
+#endif
+_FCXX_SIGN_BY_SIZE(char16_t)
+_FCXX_SIGN_BY_SIZE(char32_t)
+#undef _FCXX_SIGN_BY_SIZE
+
+template <class _Tp, class = void>
+struct __fcxx_make_signed_impl {};
+
+template <class _Tp>
+struct __fcxx_make_signed_impl<_Tp,
+                               __fcxx_void_t<typename __fcxx_sign_pair<typename remove_cv<_Tp>::type>::__signed_type>> {
+    typedef typename __fcxx_copy_cv<_Tp, typename __fcxx_sign_pair<typename remove_cv<_Tp>::type>::__signed_type>::type
+        type;
+};
+
+template <class _Tp, class = void>
+struct __fcxx_make_unsigned_impl {};
+
+template <class _Tp>
+struct __fcxx_make_unsigned_impl<
+    _Tp, __fcxx_void_t<typename __fcxx_sign_pair<typename remove_cv<_Tp>::type>::__unsigned_type>> {
+    typedef
+        typename __fcxx_copy_cv<_Tp, typename __fcxx_sign_pair<typename remove_cv<_Tp>::type>::__unsigned_type>::type
+            type;
+};
+
+template <class _Tp>
+struct make_signed : __fcxx_make_signed_impl<_Tp> {};
+
+template <class _Tp>
+struct make_unsigned : __fcxx_make_unsigned_impl<_Tp> {};
+
+/* [meta.trans.ptr], pointer modifications */
+
+template <class _Tp> struct remove_pointer { typedef _Tp type; };
+template <class _Tp> struct remove_pointer<_Tp*> { typedef _Tp type; };
+template <class _Tp> struct remove_pointer<_Tp* const> { typedef _Tp type; };
+template <class _Tp> struct remove_pointer<_Tp* volatile> { typedef _Tp type; };
+template <class _Tp> struct remove_pointer<_Tp* const volatile> { typedef _Tp type; };
+
+template <class _Tp, class = void>
+struct __fcxx_add_pointer_impl {
+    typedef _Tp type;
+};
+
+template <class _Tp>
+struct __fcxx_add_pointer_impl<_Tp, __fcxx_void_ptr_t<typename remove_reference<_Tp>::type> > {
+    typedef typename remove_reference<_Tp>::type* type;
+};
+
+template <class _Tp>
+struct add_pointer : __fcxx_add_pointer_impl<_Tp> {};
+
+/* [meta.trans.other], other transformations */
+
+template <class _Tp, bool = is_array<_Tp>::value, bool = is_function<_Tp>::value>
+struct __fcxx_decay_impl {
+    typedef typename remove_cv<_Tp>::type type;
+};
+
+template <class _Tp>
+struct __fcxx_decay_impl<_Tp, true, false> {
+    typedef typename remove_extent<_Tp>::type* type;
+};
+
+template <class _Tp>
+struct __fcxx_decay_impl<_Tp, false, true> {
+    typedef typename add_pointer<_Tp>::type type;
+};
+
+template <class _Tp>
+struct decay : __fcxx_decay_impl<typename remove_reference<_Tp>::type> {};
+
+template <class _Tp>
+using __fcxx_decay_t = typename decay<_Tp>::type;
+
+/* The logical operations, short-circuiting on the first result that decides
+ * them. */
+
+template <class... _Bp>
+struct __fcxx_and : true_type {};
+
+template <class _B1>
+struct __fcxx_and<_B1> : _B1 {};
+
+template <class _B1, class... _Bn>
+struct __fcxx_and<_B1, _Bn...> : __fcxx_conditional_t<bool(_B1::value), __fcxx_and<_Bn...>, _B1> {};
+
+template <class... _Bp>
+struct __fcxx_or : false_type {};
+
+template <class _B1>
+struct __fcxx_or<_B1> : _B1 {};
+
+template <class _B1, class... _Bn>
+struct __fcxx_or<_B1, _Bn...> : __fcxx_conditional_t<bool(_B1::value), _B1, __fcxx_or<_Bn...> > {};
+
+template <class _Bp>
+struct __fcxx_not : __fcxx_bool_constant<!bool(_Bp::value)> {};
+
+#if _FCXX_STD >= 2017
+template <class... _Bp>
+struct conjunction : __fcxx_and<_Bp...> {};
+
+template <class... _Bp>
+struct disjunction : __fcxx_or<_Bp...> {};
+
+template <class _Bp>
+struct negation : __fcxx_not<_Bp> {};
+#endif
+
+/* The common type, which is looked for among the decayed types, first with
+ * the conditional operator and then with that of the const lvalue references
+ * to them. */
+
+template <class _Tp>
+using __fcxx_cref = typename add_lvalue_reference<const typename remove_reference<_Tp>::type>::type;
+
+template <class _Xp, class _Yp>
+using __fcxx_cond_res = decltype(false ? __fcxx_declval<_Xp (&)()>()() : __fcxx_declval<_Yp (&)()>()());
+
+template <class... _Tp>
+struct common_type;
+
+template <class _T1, class _T2, class = void>
+struct __fcxx_common_type_cond_cref {};
+
+template <class _T1, class _T2>
+struct __fcxx_common_type_cond_cref<_T1, _T2, __fcxx_void_t<__fcxx_cond_res<__fcxx_cref<_T1>, __fcxx_cref<_T2> > > > {
+    typedef __fcxx_decay_t<__fcxx_cond_res<__fcxx_cref<_T1>, __fcxx_cref<_T2> > > type;
+};
+
+template <class _T1, class _T2, class = void>
+struct __fcxx_common_type_cond : __fcxx_common_type_cond_cref<_T1, _T2> {};
+
+template <class _T1, class _T2>
+struct __fcxx_common_type_cond<_T1, _T2,
+                               __fcxx_void_t<decltype(false ? __fcxx_declval<_T1>() : __fcxx_declval<_T2>())>> {
+    typedef __fcxx_decay_t<decltype(false ? __fcxx_declval<_T1>() : __fcxx_declval<_T2>())> type;
+};
+
+template <class _T1, class _T2, class _D1 = __fcxx_decay_t<_T1>, class _D2 = __fcxx_decay_t<_T2> >
+struct __fcxx_common_type2 : common_type<_D1, _D2> {};
+
+template <class _T1, class _T2>
+struct __fcxx_common_type2<_T1, _T2, _T1, _T2> : __fcxx_common_type_cond<_T1, _T2> {};
+
+template <class _Void, class _T1, class _T2, class... _Rest>
+struct __fcxx_common_type_fold {};
+
+template <class _T1, class _T2, class... _Rest>
+struct __fcxx_common_type_fold<__fcxx_void_t<typename common_type<_T1, _T2>::type>, _T1, _T2, _Rest...>
+    : common_type<typename common_type<_T1, _T2>::type, _Rest...> {};
+
+template <class... _Tp>
+struct common_type {};
+
+template <class _Tp>
+struct common_type<_Tp> : common_type<_Tp, _Tp> {};
+
+template <class _T1, class _T2>
+struct common_type<_T1, _T2> : __fcxx_common_type2<_T1, _T2> {};
+
+template <class _T1, class _T2, class _T3, class... _Rest>
+struct common_type<_T1, _T2, _T3, _Rest...> : __fcxx_common_type_fold<void, _T1, _T2, _T3, _Rest...> {};
+
+/* The underlying type of enumerations, and no type for anything else. */
+
+template <class _Tp, bool = is_enum<_Tp>::value>
+struct __fcxx_underlying_type_impl {};
+
+template <class _Tp>
+struct __fcxx_underlying_type_impl<_Tp, true> {
+    typedef __underlying_type(_Tp) type;
+};
+
+template <class _Tp>
+struct underlying_type : __fcxx_underlying_type_impl<_Tp> {};
+
+/* The storage types, which are deprecated, and then hosted, from C++23 on.
+ * The default alignment is that of the most aligned type that fits in the
+ * size, which is that of the largest power of two that does. */
+#if _FCXX_STD < 2023
+template <size_t _Len, size_t _Align = 1, bool = (_Align * 2 <= _Len && _Align * 2 <= _FCXX_BIGGEST_ALIGNMENT)>
+struct __fcxx_default_alignment : integral_constant<size_t, _Align> {};
+
+template <size_t _Len, size_t _Align>
+struct __fcxx_default_alignment<_Len, _Align, true> : __fcxx_default_alignment<_Len, _Align * 2> {};
+
+template <size_t _Len, size_t _Align = __fcxx_default_alignment<_Len>::value>
+struct aligned_storage {
+    struct type {
+        unsigned char __data[_Len] __attribute__((__aligned__(_Align)));
+    };
+};
+
+template <size_t... _Values>
+struct __fcxx_max_of;
+
+template <size_t _Value>
+struct __fcxx_max_of<_Value> : integral_constant<size_t, _Value> {};
+
+template <size_t _V1, size_t _V2, size_t... _Vn>
+struct __fcxx_max_of<_V1, _V2, _Vn...> : __fcxx_max_of<(_V1 > _V2 ? _V1 : _V2), _Vn...> {};
+
+template <size_t _Len, class... _Types>
+struct aligned_union {
+    static_assert(sizeof...(_Types) > 0, "std::aligned_union of no types");
+    static constexpr size_t alignment_value = __fcxx_max_of<alignof(_Types)...>::value;
+    typedef typename aligned_storage<__fcxx_max_of<_Len, sizeof(_Types)...>::value,
+                                     __fcxx_max_of<alignof(_Types)...>::value>::type type;
+};
+
+#  if !_FCXX_HAS_INLINE_VARIABLES
+template <size_t _Len, class... _Types>
+constexpr size_t aligned_union<_Len, _Types...>::alignment_value;
+#  endif
+#endif
+
+/* INVOKE, as [func.require] describes it, for which the members of a class
+ * are called or accessed through an object of the class, a reference wrapper
+ * around one, or something to dereference first. */
+
+template <class _Tp> struct __fcxx_is_reference_wrapper : false_type {};
+#if _FCXX_STD >= 2023
+template <class _Tp> struct __fcxx_is_reference_wrapper<reference_wrapper<_Tp> > : true_type {};
+#endif
+
+struct __fcxx_invoke_function {};
+struct __fcxx_invoke_member_function_object {};
+struct __fcxx_invoke_member_function_wrapper {};
+struct __fcxx_invoke_member_function_pointer {};
+struct __fcxx_invoke_member_object_object {};
+struct __fcxx_invoke_member_object_wrapper {};
+struct __fcxx_invoke_member_object_pointer {};
+
+template <class _Mp>
+struct __fcxx_member_class {};
+
+template <class _Mp, class _Cp>
+struct __fcxx_member_class<_Mp _Cp::*> {
+    typedef _Cp type;
+};
+
+template <class _Mp, class _A1, class _Object, class _Wrapper, class _Pointer>
+struct __fcxx_invoke_member_kind {
+    typedef typename __fcxx_member_class<_Mp>::type _Cp;
+    typedef __fcxx_remove_cvref_t<_A1> _Ap;
+    typedef __fcxx_conditional_t<is_same<_Cp, _Ap>::value || is_base_of<_Cp, _Ap>::value, _Object,
+            __fcxx_conditional_t<__fcxx_is_reference_wrapper<_Ap>::value, _Wrapper, _Pointer> > type;
+};
+
+template <class _Mp, class... _Args>
+struct __fcxx_invoke_kind {
+    typedef __fcxx_invoke_function type;
+};
+
+template <class _Mp, class _A1, class... _Args>
+struct __fcxx_invoke_kind<_Mp, _A1, _Args...> {
+    typedef __fcxx_remove_cvref_t<_Mp> _Dp;
+    typedef typename __fcxx_conditional_t<
+        is_member_function_pointer<_Dp>::value,
+        __fcxx_invoke_member_kind<_Dp, _A1, __fcxx_invoke_member_function_object,
+                                  __fcxx_invoke_member_function_wrapper, __fcxx_invoke_member_function_pointer>,
+        __fcxx_conditional_t<
+            is_member_object_pointer<_Dp>::value && sizeof...(_Args) == 0,
+            __fcxx_invoke_member_kind<_Dp, _A1, __fcxx_invoke_member_object_object,
+                                      __fcxx_invoke_member_object_wrapper, __fcxx_invoke_member_object_pointer>,
+            __fcxx_type_identity<__fcxx_invoke_function> > >::type type;
+};
+
+template <class _Fp, class... _Args>
+constexpr auto __fcxx_invoke_impl(__fcxx_invoke_function, _Fp&& __f, _Args&&... __args)
+    noexcept(noexcept(static_cast<_Fp&&>(__f)(static_cast<_Args&&>(__args)...)))
+    -> decltype(static_cast<_Fp&&>(__f)(static_cast<_Args&&>(__args)...)) {
+    return static_cast<_Fp&&>(__f)(static_cast<_Args&&>(__args)...);
+}
+
+template <class _Fp, class _A1, class... _Args>
+constexpr auto __fcxx_invoke_impl(__fcxx_invoke_member_function_object, _Fp&& __f, _A1&& __a1, _Args&&... __args)
+    noexcept(noexcept((static_cast<_A1&&>(__a1).*__f)(static_cast<_Args&&>(__args)...)))
+    -> decltype((static_cast<_A1&&>(__a1).*__f)(static_cast<_Args&&>(__args)...)) {
+    return (static_cast<_A1&&>(__a1).*__f)(static_cast<_Args&&>(__args)...);
+}
+
+template <class _Fp, class _A1, class... _Args>
+constexpr auto __fcxx_invoke_impl(__fcxx_invoke_member_function_wrapper, _Fp&& __f, _A1&& __a1, _Args&&... __args)
+    noexcept(noexcept((__a1.get().*__f)(static_cast<_Args&&>(__args)...)))
+    -> decltype((__a1.get().*__f)(static_cast<_Args&&>(__args)...)) {
+    return (__a1.get().*__f)(static_cast<_Args&&>(__args)...);
+}
+
+template <class _Fp, class _A1, class... _Args>
+constexpr auto __fcxx_invoke_impl(__fcxx_invoke_member_function_pointer, _Fp&& __f, _A1&& __a1, _Args&&... __args)
+    noexcept(noexcept(((*static_cast<_A1&&>(__a1)).*__f)(static_cast<_Args&&>(__args)...)))
+    -> decltype(((*static_cast<_A1&&>(__a1)).*__f)(static_cast<_Args&&>(__args)...)) {
+    return ((*static_cast<_A1&&>(__a1)).*__f)(static_cast<_Args&&>(__args)...);
+}
+
+template <class _Fp, class _A1>
+constexpr auto __fcxx_invoke_impl(__fcxx_invoke_member_object_object, _Fp&& __f, _A1&& __a1) noexcept
+    -> decltype(static_cast<_A1&&>(__a1).*__f) {
+    return static_cast<_A1&&>(__a1).*__f;
+}
+
+template <class _Fp, class _A1>
+constexpr auto __fcxx_invoke_impl(__fcxx_invoke_member_object_wrapper, _Fp&& __f, _A1&& __a1) noexcept
+    -> decltype(__a1.get().*__f) {
+    return __a1.get().*__f;
+}
+
+template <class _Fp, class _A1>
+constexpr auto __fcxx_invoke_impl(__fcxx_invoke_member_object_pointer, _Fp&& __f, _A1&& __a1)
+    noexcept(noexcept((*static_cast<_A1&&>(__a1)).*__f))
+    -> decltype((*static_cast<_A1&&>(__a1)).*__f) {
+    return (*static_cast<_A1&&>(__a1)).*__f;
+}
+
+template <class _Fp, class... _Args>
+constexpr auto __fcxx_invoke(_Fp&& __f, _Args&&... __args)
+    noexcept(noexcept(std::__fcxx_invoke_impl(typename __fcxx_invoke_kind<_Fp, _Args...>::type(),
+                                              static_cast<_Fp&&>(__f), static_cast<_Args&&>(__args)...)))
+    -> decltype(std::__fcxx_invoke_impl(typename __fcxx_invoke_kind<_Fp, _Args...>::type(),
+                                        static_cast<_Fp&&>(__f), static_cast<_Args&&>(__args)...)) {
+    return std::__fcxx_invoke_impl(typename __fcxx_invoke_kind<_Fp, _Args...>::type(),
+                                   static_cast<_Fp&&>(__f), static_cast<_Args&&>(__args)...);
+}
+
+template <class _Void, class _Fp, class... _Args>
+struct __fcxx_invoke_result_impl {};
+
+template <class _Fp, class... _Args>
+struct __fcxx_invoke_result_impl<
+    __fcxx_void_t<decltype(std::__fcxx_invoke(__fcxx_declval<_Fp>(), __fcxx_declval<_Args>()...))>, _Fp, _Args...> {
+    typedef decltype(std::__fcxx_invoke(__fcxx_declval<_Fp>(), __fcxx_declval<_Args>()...)) type;
+};
+
+template <class _Fp, class... _Args>
+struct __fcxx_invoke_result : __fcxx_invoke_result_impl<void, _Fp, _Args...> {};
+
+template <class _Void, class _Fp, class... _Args>
+struct __fcxx_is_invocable_impl : false_type {};
+
+template <class _Fp, class... _Args>
+struct __fcxx_is_invocable_impl<__fcxx_void_t<typename __fcxx_invoke_result<_Fp, _Args...>::type>, _Fp, _Args...>
+    : true_type {};
+
+template <class _Fp, class... _Args>
+struct __fcxx_is_invocable : __fcxx_is_invocable_impl<void, _Fp, _Args...> {};
+
+template <class _Fp, class... _Args>
+struct __fcxx_is_nothrow_invocable_call
+    : __fcxx_bool_constant<noexcept(std::__fcxx_invoke(__fcxx_declval<_Fp>(), __fcxx_declval<_Args>()...))> {};
+
+template <class _Fp, class... _Args>
+struct __fcxx_is_nothrow_invocable
+    : __fcxx_and<__fcxx_is_invocable<_Fp, _Args...>, __fcxx_is_nothrow_invocable_call<_Fp, _Args...> > {};
+
+/* Whether a reference is bound to a temporary object when it is initialized
+ * from a value, which the compilers can tell. Those without the builtins are
+ * told whether the value is a prvalue, or has a type the reference cannot
+ * refer to directly, which misses the conversions to a reference. */
+template <class _Tp, class _Up, bool = is_reference<_Tp>::value>
+struct __fcxx_binds_to_temporary : false_type {};
+
+template <class _Tp, class _Up>
+struct __fcxx_binds_to_temporary<_Tp, _Up, true>
+    : __fcxx_bool_constant<!is_reference<_Up>::value
+                           || !is_convertible<typename remove_reference<_Up>::type*,
+                                              typename remove_reference<_Tp>::type*>::value> {};
+
+#if _FCXX_HAS_BUILTIN(__reference_constructs_from_temporary)
+template <class _Tp, class _Up>
+struct __fcxx_reference_constructs_from_temporary
+    : __fcxx_bool_constant<__reference_constructs_from_temporary(_Tp, _Up)> {};
+#else
+template <class _Tp, class _Up>
+struct __fcxx_reference_constructs_from_temporary
+    : __fcxx_bool_constant<is_constructible<_Tp, _Up>::value && __fcxx_binds_to_temporary<_Tp, _Up>::value> {};
+#endif
+
+#if _FCXX_HAS_BUILTIN(__reference_converts_from_temporary)
+template <class _Tp, class _Up>
+struct __fcxx_reference_converts_from_temporary
+    : __fcxx_bool_constant<__reference_converts_from_temporary(_Tp, _Up)> {};
+#else
+template <class _Tp, class _Up>
+struct __fcxx_reference_converts_from_temporary
+    : __fcxx_bool_constant<is_convertible<_Up, _Tp>::value && __fcxx_binds_to_temporary<_Tp, _Up>::value> {};
+#endif
+
+/* Invoking with a result converted to a type, which from C++23 on may not
+ * bind a reference to a temporary. */
+template <class _Rp, class _Fp, class... _Args>
+struct __fcxx_is_invocable_r_impl {
+    typedef typename __fcxx_invoke_result<_Fp, _Args...>::type _Res;
+    static constexpr bool value = is_void<_Rp>::value
+                               || (is_convertible<_Res, _Rp>::value
+#if _FCXX_STD >= 2023
+                                   && !__fcxx_reference_converts_from_temporary<_Rp, _Res>::value
+#endif
+                                  );
+    static constexpr bool __nothrow = is_void<_Rp>::value || __fcxx_is_nothrow_convertible_impl<_Res, _Rp>::value;
+};
+
+template <bool, class _Rp, class _Fp, class... _Args>
+struct __fcxx_is_invocable_r_check : false_type {};
+
+template <class _Rp, class _Fp, class... _Args>
+struct __fcxx_is_invocable_r_check<true, _Rp, _Fp, _Args...>
+    : __fcxx_bool_constant<__fcxx_is_invocable_r_impl<_Rp, _Fp, _Args...>::value> {};
+
+template <class _Rp, class _Fp, class... _Args>
+struct __fcxx_is_invocable_r
+    : __fcxx_is_invocable_r_check<__fcxx_is_invocable<_Fp, _Args...>::value, _Rp, _Fp, _Args...> {};
+
+template <bool, class _Rp, class _Fp, class... _Args>
+struct __fcxx_is_nothrow_invocable_r_check : false_type {};
+
+template <class _Rp, class _Fp, class... _Args>
+struct __fcxx_is_nothrow_invocable_r_check<true, _Rp, _Fp, _Args...>
+    : __fcxx_bool_constant<__fcxx_is_nothrow_invocable_call<_Fp, _Args...>::value
+                           && __fcxx_is_invocable_r_impl<_Rp, _Fp, _Args...>::__nothrow> {};
+
+template <class _Rp, class _Fp, class... _Args>
+struct __fcxx_is_nothrow_invocable_r
+    : __fcxx_is_nothrow_invocable_r_check<__fcxx_is_invocable_r<_Rp, _Fp, _Args...>::value, _Rp, _Fp, _Args...> {};
+
+#if _FCXX_STD < 2020
+template <class _Tp>
+struct _FCXX_DEPRECATED_CXX17("use std::invoke_result instead") result_of;
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+template <class _Fp, class... _Args>
+struct _FCXX_DEPRECATED_CXX17("use std::invoke_result instead") result_of<_Fp(_Args...)>
+    : __fcxx_invoke_result<_Fp, _Args...> {};
+#pragma GCC diagnostic pop
+#endif
+
+#if _FCXX_STD >= 2017
+template <class _Fp, class... _Args>
+struct invoke_result : __fcxx_invoke_result<_Fp, _Args...> {};
+
+template <class _Fp, class... _Args>
+struct is_invocable : __fcxx_is_invocable<_Fp, _Args...> {};
+
+template <class _Rp, class _Fp, class... _Args>
+struct is_invocable_r : __fcxx_is_invocable_r<_Rp, _Fp, _Args...> {};
+
+template <class _Fp, class... _Args>
+struct is_nothrow_invocable : __fcxx_is_nothrow_invocable<_Fp, _Args...> {};
+
+template <class _Rp, class _Fp, class... _Args>
+struct is_nothrow_invocable_r : __fcxx_is_nothrow_invocable_r<_Rp, _Fp, _Args...> {};
+
+template <class...>
+using void_t = void;
+#endif
+
+#if _FCXX_STD >= 2020
+template <class _Tp>
+struct remove_cvref {
+    typedef __fcxx_remove_cvref_t<_Tp> type;
+};
+
+template <class _Tp>
+struct type_identity {
+    typedef _Tp type;
+};
+
+template <class _Tp>
+struct unwrap_reference {
+    typedef _Tp type;
+};
+
+#  if _FCXX_STD >= 2023
+template <class _Tp>
+struct unwrap_reference<reference_wrapper<_Tp> > {
+    typedef _Tp& type;
+};
+#  endif
+
+template <class _Tp>
+struct unwrap_ref_decay : unwrap_reference<__fcxx_decay_t<_Tp> > {};
+
+/* The common reference type. XREF(A) applies the qualifiers of A to a type,
+ * and COMMON-REF is the simple common reference type of two references. */
+
+template <class _Ap>
+struct __fcxx_xref {
+    template <class _Up> using __apply = typename __fcxx_copy_cv<_Ap, _Up>::type;
+};
+
+template <class _Ap>
+struct __fcxx_xref<_Ap&> {
+    template <class _Up> using __apply = typename add_lvalue_reference<typename __fcxx_copy_cv<_Ap, _Up>::type>::type;
+};
+
+template <class _Ap>
+struct __fcxx_xref<_Ap&&> {
+    template <class _Up> using __apply = typename add_rvalue_reference<typename __fcxx_copy_cv<_Ap, _Up>::type>::type;
+};
+
+/* COMMON-REF, of [meta.trans.other]. Each of the four kinds of pairs of
+ * references is a specialization that derives from a helper, as GCC 11 to
+ * 14 fail to match partial specializations whose conditions name other
+ * specializations of the same template once those are instantiated. */
+template <class _Ap, class _Bp>
+struct __fcxx_common_ref {};
+
+template <class _Xp, class _Yp>
+using __fcxx_common_ref_ll_t =
+    __fcxx_cond_res<typename __fcxx_copy_cv<_Xp, _Yp>::type&, typename __fcxx_copy_cv<_Yp, _Xp>::type&>;
+
+template <class _Xp, class _Yp, class = void>
+struct __fcxx_common_ref_ll {};
+
+template <class _Xp, class _Yp>
+struct __fcxx_common_ref_ll<_Xp, _Yp, __fcxx_enable_if_t<is_reference<__fcxx_common_ref_ll_t<_Xp, _Yp> >::value> > {
+    typedef __fcxx_common_ref_ll_t<_Xp, _Yp> type;
+};
+
+template <class _Xp, class _Yp>
+struct __fcxx_common_ref<_Xp&, _Yp&> : __fcxx_common_ref_ll<_Xp, _Yp> {};
+
+template <class _Xp, class _Yp, class = void>
+struct __fcxx_common_ref_rr {};
+
+template <class _Xp, class _Yp>
+struct __fcxx_common_ref_rr<_Xp, _Yp, __fcxx_void_t<typename __fcxx_common_ref_ll<_Xp, _Yp>::type> > {
+    typedef typename remove_reference<typename __fcxx_common_ref_ll<_Xp, _Yp>::type>::type&& __result;
+};
+
+template <class _Xp, class _Yp, class = void>
+struct __fcxx_common_ref_rr_checked {};
+
+template <class _Xp, class _Yp>
+struct __fcxx_common_ref_rr_checked<
+    _Xp, _Yp,
+    __fcxx_enable_if_t<is_convertible<_Xp&&, typename __fcxx_common_ref_rr<_Xp, _Yp>::__result>::value
+                       && is_convertible<_Yp&&, typename __fcxx_common_ref_rr<_Xp, _Yp>::__result>::value> > {
+    typedef typename __fcxx_common_ref_rr<_Xp, _Yp>::__result type;
+};
+
+template <class _Xp, class _Yp>
+struct __fcxx_common_ref<_Xp&&, _Yp&&> : __fcxx_common_ref_rr_checked<_Xp, _Yp> {};
+
+template <class _Xp, class _Yp, class = void>
+struct __fcxx_common_ref_rl {};
+
+template <class _Xp, class _Yp>
+struct __fcxx_common_ref_rl<
+    _Xp, _Yp,
+    __fcxx_enable_if_t<is_convertible<_Xp&&, typename __fcxx_common_ref_ll<const _Xp, _Yp>::type>::value> > {
+    typedef typename __fcxx_common_ref_ll<const _Xp, _Yp>::type type;
+};
+
+template <class _Xp, class _Yp>
+struct __fcxx_common_ref<_Xp&&, _Yp&> : __fcxx_common_ref_rl<_Xp, _Yp> {};
+
+template <class _Xp, class _Yp>
+struct __fcxx_common_ref<_Xp&, _Yp&&> : __fcxx_common_ref_rl<_Yp, _Xp> {};
+
+template <class _Tp, class _Up, template <class> class _TQual, template <class> class _UQual>
+struct basic_common_reference {};
+
+template <class... _Tp>
+struct common_reference;
+
+template <class _T1, class _T2, class = void>
+struct __fcxx_common_reference4 : common_type<_T1, _T2> {};
+
+template <class _T1, class _T2, class = void>
+struct __fcxx_common_reference3 : __fcxx_common_reference4<_T1, _T2> {};
+
+template <class _T1, class _T2>
+struct __fcxx_common_reference3<_T1, _T2, __fcxx_void_t<__fcxx_cond_res<_T1, _T2> > > {
+    typedef __fcxx_cond_res<_T1, _T2> type;
+};
+
+template <class _T1, class _T2>
+using __fcxx_basic_common_reference_t =
+    typename basic_common_reference<__fcxx_remove_cvref_t<_T1>, __fcxx_remove_cvref_t<_T2>,
+                                    __fcxx_xref<_T1>::template __apply, __fcxx_xref<_T2>::template __apply>::type;
+
+template <class _T1, class _T2, class = void>
+struct __fcxx_common_reference2 : __fcxx_common_reference3<_T1, _T2> {};
+
+template <class _T1, class _T2>
+struct __fcxx_common_reference2<_T1, _T2, __fcxx_void_t<__fcxx_basic_common_reference_t<_T1, _T2> > > {
+    typedef __fcxx_basic_common_reference_t<_T1, _T2> type;
+};
+
+template <class _T1, class _T2, class = void>
+struct __fcxx_common_reference1 : __fcxx_common_reference2<_T1, _T2> {};
+
+template <class _T1, class _T2>
+struct __fcxx_common_reference1<
+    _T1, _T2,
+    __fcxx_enable_if_t<
+        is_convertible<typename add_pointer<_T1>::type,
+                       typename add_pointer<typename __fcxx_common_ref<_T1, _T2>::type>::type>::value
+        && is_convertible<typename add_pointer<_T2>::type,
+                          typename add_pointer<typename __fcxx_common_ref<_T1, _T2>::type>::type>::value>> {
+    typedef typename __fcxx_common_ref<_T1, _T2>::type type;
+};
+
+template <class _Void, class _T1, class _T2, class... _Rest>
+struct __fcxx_common_reference_fold {};
+
+template <class _T1, class _T2, class... _Rest>
+struct __fcxx_common_reference_fold<__fcxx_void_t<typename common_reference<_T1, _T2>::type>, _T1, _T2, _Rest...>
+    : common_reference<typename common_reference<_T1, _T2>::type, _Rest...> {};
+
+template <class... _Tp>
+struct common_reference {};
+
+template <class _Tp>
+struct common_reference<_Tp> {
+    typedef _Tp type;
+};
+
+template <class _T1, class _T2>
+struct common_reference<_T1, _T2> : __fcxx_common_reference1<_T1, _T2> {};
+
+template <class _T1, class _T2, class _T3, class... _Rest>
+struct common_reference<_T1, _T2, _T3, _Rest...> : __fcxx_common_reference_fold<void, _T1, _T2, _T3, _Rest...> {};
+
+/* [meta.const.eval], constant evaluation context */
+#  if _FCXX_HAS_IS_CONSTANT_EVALUATED
+constexpr bool is_constant_evaluated() noexcept {
+    return __builtin_is_constant_evaluated();
+}
+#  endif
+#endif
+
+#if _FCXX_STD >= 2023
+#  if _FCXX_HAS_BUILTIN(__is_scoped_enum)
+template <class _Tp>
+struct is_scoped_enum : __fcxx_bool_constant<__is_scoped_enum(_Tp)> {};
+#  else
+template <class _Tp, bool = is_enum<_Tp>::value>
+struct __fcxx_is_scoped_enum_impl : false_type {};
+
+template <class _Tp>
+struct __fcxx_is_scoped_enum_impl<_Tp, true>
+    : __fcxx_bool_constant<!is_convertible<_Tp, typename underlying_type<_Tp>::type>::value> {};
+
+template <class _Tp>
+struct is_scoped_enum : __fcxx_is_scoped_enum_impl<_Tp> {};
+#  endif
+
+template <class _Tp, class _Up>
+struct reference_constructs_from_temporary : __fcxx_reference_constructs_from_temporary<_Tp, _Up> {};
+
+template <class _Tp, class _Up>
+struct reference_converts_from_temporary : __fcxx_reference_converts_from_temporary<_Tp, _Up> {};
+
+/* Without the builtin, the aggregates and the classes with a trivial
+ * constructor and destructor are taken to be the implicit-lifetime ones,
+ * which misses the aggregates with a user-provided destructor. */
+#  if _FCXX_HAS_BUILTIN(__builtin_is_implicit_lifetime)
+template <class _Tp>
+struct is_implicit_lifetime : __fcxx_bool_constant<__builtin_is_implicit_lifetime(_Tp)> {};
+#  else
+template <class _Tp, bool = is_class<_Tp>::value || is_union<_Tp>::value>
+struct __fcxx_is_implicit_lifetime_impl : __fcxx_bool_constant<is_scalar<_Tp>::value || is_array<_Tp>::value> {};
+
+template <class _Tp>
+struct __fcxx_is_implicit_lifetime_impl<_Tp, true>
+    : __fcxx_bool_constant<
+#    if _FCXX_HAS_IS_AGGREGATE
+          is_aggregate<_Tp>::value ||
+#    endif
+          (is_trivially_destructible<_Tp>::value
+           && (is_trivially_default_constructible<_Tp>::value || is_trivially_copy_constructible<_Tp>::value
+               || is_trivially_move_constructible<_Tp>::value))> {};
+
+template <class _Tp>
+struct is_implicit_lifetime : __fcxx_is_implicit_lifetime_impl<_Tp> {};
+#  endif
+#endif
+
+#if _FCXX_STD >= 2026
+#  if _FCXX_HAS_IS_WITHIN_LIFETIME
+template <class _Tp>
+consteval bool is_within_lifetime(const _Tp* __p) noexcept {
+    return __builtin_is_within_lifetime(__p);
+}
+#  endif
+#endif
+
+/* The tuple-like types, which the headers defining them register here. */
+template <class _Tp>
+struct __fcxx_is_tuple_like_impl : false_type {};
+
+template <class _Tp>
+struct __fcxx_is_tuple_like : __fcxx_is_tuple_like_impl<__fcxx_remove_cvref_t<_Tp> > {};
+
+#if _FCXX_STD >= 2026
+template <class _Tp>
+struct tuple_size;
+
+template <class _Fp, class _Tuple, class _Seq, class = void>
+struct __fcxx_apply_result_impl {
+    static constexpr bool __applicable = false;
+    static constexpr bool __nothrow = false;
+};
+
+template <class _Fp, class _Tuple, size_t... _Ip>
+struct __fcxx_apply_result_impl<
+    _Fp, _Tuple, index_sequence<_Ip...>,
+    __fcxx_void_t<decltype(std::__fcxx_invoke(__fcxx_declval<_Fp>(), get<_Ip>(__fcxx_declval<_Tuple>())...))>> {
+    typedef decltype(std::__fcxx_invoke(__fcxx_declval<_Fp>(), get<_Ip>(__fcxx_declval<_Tuple>())...)) type;
+    static constexpr bool __applicable = true;
+    static constexpr bool __nothrow =
+        noexcept(std::__fcxx_invoke(__fcxx_declval<_Fp>(), get<_Ip>(__fcxx_declval<_Tuple>())...));
+};
+
+template <class _Fp, class _Tuple, bool = __fcxx_is_tuple_like<_Tuple>::value>
+struct __fcxx_apply_result {
+    static constexpr bool __applicable = false;
+    static constexpr bool __nothrow = false;
+};
+
+template <class _Fp, class _Tuple>
+struct __fcxx_apply_result<_Fp, _Tuple, true>
+    : __fcxx_apply_result_impl<_Fp, _Tuple, make_index_sequence<tuple_size<__fcxx_remove_ref_t<_Tuple> >::value> > {};
+
+template <class _Fp, class _Tuple>
+struct is_applicable : __fcxx_bool_constant<__fcxx_apply_result<_Fp, _Tuple>::__applicable> {};
+
+template <class _Fp, class _Tuple>
+struct is_nothrow_applicable : __fcxx_bool_constant<__fcxx_apply_result<_Fp, _Tuple>::__nothrow> {};
+
+template <class _Void, class _Fp, class _Tuple>
+struct __fcxx_apply_result_type {};
+
+template <class _Fp, class _Tuple>
+struct __fcxx_apply_result_type<__fcxx_void_t<typename __fcxx_apply_result<_Fp, _Tuple>::type>, _Fp, _Tuple> {
+    typedef typename __fcxx_apply_result<_Fp, _Tuple>::type type;
+};
+
+template <class _Fp, class _Tuple>
+struct apply_result : __fcxx_apply_result_type<void, _Fp, _Tuple> {};
+#endif
+
+/* The type aliases. */
+
+#if _FCXX_STD >= 2014
+template <class _Tp> using remove_const_t = typename remove_const<_Tp>::type;
+template <class _Tp> using remove_volatile_t = typename remove_volatile<_Tp>::type;
+template <class _Tp> using remove_cv_t = typename remove_cv<_Tp>::type;
+template <class _Tp> using add_const_t = typename add_const<_Tp>::type;
+template <class _Tp> using add_volatile_t = typename add_volatile<_Tp>::type;
+template <class _Tp> using add_cv_t = typename add_cv<_Tp>::type;
+template <class _Tp> using remove_reference_t = typename remove_reference<_Tp>::type;
+template <class _Tp> using add_lvalue_reference_t = typename add_lvalue_reference<_Tp>::type;
+template <class _Tp> using add_rvalue_reference_t = typename add_rvalue_reference<_Tp>::type;
+template <class _Tp> using make_signed_t = typename make_signed<_Tp>::type;
+template <class _Tp> using make_unsigned_t = typename make_unsigned<_Tp>::type;
+template <class _Tp> using remove_extent_t = typename remove_extent<_Tp>::type;
+template <class _Tp> using remove_all_extents_t = typename remove_all_extents<_Tp>::type;
+template <class _Tp> using remove_pointer_t = typename remove_pointer<_Tp>::type;
+template <class _Tp> using add_pointer_t = typename add_pointer<_Tp>::type;
+template <class _Tp> using decay_t = typename decay<_Tp>::type;
+template <bool _Bp, class _Tp = void> using enable_if_t = typename enable_if<_Bp, _Tp>::type;
+template <bool _Bp, class _Tp, class _Fp> using conditional_t = typename conditional<_Bp, _Tp, _Fp>::type;
+template <class... _Tp> using common_type_t = typename common_type<_Tp...>::type;
+template <class _Tp> using underlying_type_t = typename underlying_type<_Tp>::type;
+#  if _FCXX_STD < 2023
+template <size_t _Len, size_t _Align = __fcxx_default_alignment<_Len>::value>
+using aligned_storage_t = typename aligned_storage<_Len, _Align>::type;
+template <size_t _Len, class... _Types>
+using aligned_union_t = typename aligned_union<_Len, _Types...>::type;
+#  endif
+#  if _FCXX_STD < 2020
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+template <class _Tp>
+using result_of_t _FCXX_DEPRECATED_CXX17("use std::invoke_result_t instead") = typename result_of<_Tp>::type;
+#pragma GCC diagnostic pop
+#  endif
+#endif
+
+#if _FCXX_STD >= 2017
+template <class _Fp, class... _Args> using invoke_result_t = typename invoke_result<_Fp, _Args...>::type;
+#endif
+
+#if _FCXX_STD >= 2020
+template <class _Tp> using remove_cvref_t = typename remove_cvref<_Tp>::type;
+template <class _Tp> using type_identity_t = typename type_identity<_Tp>::type;
+template <class... _Tp> using common_reference_t = typename common_reference<_Tp...>::type;
+template <class _Tp> using unwrap_reference_t = typename unwrap_reference<_Tp>::type;
+template <class _Tp> using unwrap_ref_decay_t = typename unwrap_ref_decay<_Tp>::type;
+#endif
+
+#if _FCXX_STD >= 2026
+template <class _Fp, class _Tuple> using apply_result_t = typename apply_result<_Fp, _Tuple>::type;
+#endif
+
+/* The variable templates. */
+
+#if _FCXX_STD >= 2017 && _FCXX_HAS_VARIABLE_TEMPLATES
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_void_v = is_void<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_null_pointer_v = is_null_pointer<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_integral_v = is_integral<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_floating_point_v = is_floating_point<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_array_v = is_array<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_pointer_v = is_pointer<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_lvalue_reference_v = is_lvalue_reference<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_rvalue_reference_v = is_rvalue_reference<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_member_object_pointer_v = is_member_object_pointer<_Tp>::value;
+template <class _Tp>
+_FCXX_INLINE_VAR constexpr bool is_member_function_pointer_v = is_member_function_pointer<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_enum_v = is_enum<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_union_v = is_union<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_class_v = is_class<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_function_v = is_function<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_reference_v = is_reference<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_arithmetic_v = is_arithmetic<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_fundamental_v = is_fundamental<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_object_v = is_object<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_scalar_v = is_scalar<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_compound_v = is_compound<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_member_pointer_v = is_member_pointer<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_const_v = is_const<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_volatile_v = is_volatile<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_trivially_copyable_v = is_trivially_copyable<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_standard_layout_v = is_standard_layout<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_empty_v = is_empty<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_polymorphic_v = is_polymorphic<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_abstract_v = is_abstract<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_final_v = is_final<_Tp>::value;
+#  if _FCXX_HAS_IS_AGGREGATE
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_aggregate_v = is_aggregate<_Tp>::value;
+#  endif
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_signed_v = is_signed<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_unsigned_v = is_unsigned<_Tp>::value;
+template <class _Tp, class... _Args>
+_FCXX_INLINE_VAR constexpr bool is_constructible_v = is_constructible<_Tp, _Args...>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_default_constructible_v = is_default_constructible<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_copy_constructible_v = is_copy_constructible<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_move_constructible_v = is_move_constructible<_Tp>::value;
+template <class _Tp, class _Up> _FCXX_INLINE_VAR constexpr bool is_assignable_v = is_assignable<_Tp, _Up>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_copy_assignable_v = is_copy_assignable<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_move_assignable_v = is_move_assignable<_Tp>::value;
+template <class _Tp, class _Up>
+_FCXX_INLINE_VAR constexpr bool is_swappable_with_v = is_swappable_with<_Tp, _Up>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_swappable_v = is_swappable<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_destructible_v = is_destructible<_Tp>::value;
+template <class _Tp, class... _Args>
+_FCXX_INLINE_VAR constexpr bool is_trivially_constructible_v = is_trivially_constructible<_Tp, _Args...>::value;
+template <class _Tp>
+_FCXX_INLINE_VAR constexpr bool is_trivially_default_constructible_v = is_trivially_default_constructible<_Tp>::value;
+template <class _Tp>
+_FCXX_INLINE_VAR constexpr bool is_trivially_copy_constructible_v = is_trivially_copy_constructible<_Tp>::value;
+template <class _Tp>
+_FCXX_INLINE_VAR constexpr bool is_trivially_move_constructible_v = is_trivially_move_constructible<_Tp>::value;
+template <class _Tp, class _Up>
+_FCXX_INLINE_VAR constexpr bool is_trivially_assignable_v = is_trivially_assignable<_Tp, _Up>::value;
+template <class _Tp>
+_FCXX_INLINE_VAR constexpr bool is_trivially_copy_assignable_v = is_trivially_copy_assignable<_Tp>::value;
+template <class _Tp>
+_FCXX_INLINE_VAR constexpr bool is_trivially_move_assignable_v = is_trivially_move_assignable<_Tp>::value;
+template <class _Tp>
+_FCXX_INLINE_VAR constexpr bool is_trivially_destructible_v = is_trivially_destructible<_Tp>::value;
+template <class _Tp, class... _Args>
+_FCXX_INLINE_VAR constexpr bool is_nothrow_constructible_v = is_nothrow_constructible<_Tp, _Args...>::value;
+template <class _Tp>
+_FCXX_INLINE_VAR constexpr bool is_nothrow_default_constructible_v = is_nothrow_default_constructible<_Tp>::value;
+template <class _Tp>
+_FCXX_INLINE_VAR constexpr bool is_nothrow_copy_constructible_v = is_nothrow_copy_constructible<_Tp>::value;
+template <class _Tp>
+_FCXX_INLINE_VAR constexpr bool is_nothrow_move_constructible_v = is_nothrow_move_constructible<_Tp>::value;
+template <class _Tp, class _Up>
+_FCXX_INLINE_VAR constexpr bool is_nothrow_assignable_v = is_nothrow_assignable<_Tp, _Up>::value;
+template <class _Tp>
+_FCXX_INLINE_VAR constexpr bool is_nothrow_copy_assignable_v = is_nothrow_copy_assignable<_Tp>::value;
+template <class _Tp>
+_FCXX_INLINE_VAR constexpr bool is_nothrow_move_assignable_v = is_nothrow_move_assignable<_Tp>::value;
+template <class _Tp, class _Up>
+_FCXX_INLINE_VAR constexpr bool is_nothrow_swappable_with_v = is_nothrow_swappable_with<_Tp, _Up>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_nothrow_swappable_v = is_nothrow_swappable<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_nothrow_destructible_v = is_nothrow_destructible<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool has_virtual_destructor_v = has_virtual_destructor<_Tp>::value;
+#  if _FCXX_HAS_UNIQUE_OBJECT_REPRESENTATIONS
+template <class _Tp>
+_FCXX_INLINE_VAR constexpr bool has_unique_object_representations_v = has_unique_object_representations<_Tp>::value;
+#      endif
+template <class _Tp> _FCXX_INLINE_VAR constexpr size_t alignment_of_v = alignment_of<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr size_t rank_v = rank<_Tp>::value;
+template <class _Tp, unsigned _Ip = 0> _FCXX_INLINE_VAR constexpr size_t extent_v = extent<_Tp, _Ip>::value;
+template <class _Tp, class _Up> _FCXX_INLINE_VAR constexpr bool is_same_v = is_same<_Tp, _Up>::value;
+template <class _Base, class _Derived>
+_FCXX_INLINE_VAR constexpr bool is_base_of_v = is_base_of<_Base, _Derived>::value;
+template <class _From, class _To> _FCXX_INLINE_VAR constexpr bool is_convertible_v = is_convertible<_From, _To>::value;
+template <class _Fp, class... _Args>
+_FCXX_INLINE_VAR constexpr bool is_invocable_v = is_invocable<_Fp, _Args...>::value;
+template <class _Rp, class _Fp, class... _Args>
+_FCXX_INLINE_VAR constexpr bool is_invocable_r_v = is_invocable_r<_Rp, _Fp, _Args...>::value;
+template <class _Fp, class... _Args>
+_FCXX_INLINE_VAR constexpr bool is_nothrow_invocable_v = is_nothrow_invocable<_Fp, _Args...>::value;
+template <class _Rp, class _Fp, class... _Args>
+_FCXX_INLINE_VAR constexpr bool is_nothrow_invocable_r_v = is_nothrow_invocable_r<_Rp, _Fp, _Args...>::value;
+template <class... _Bp> _FCXX_INLINE_VAR constexpr bool conjunction_v = conjunction<_Bp...>::value;
+template <class... _Bp> _FCXX_INLINE_VAR constexpr bool disjunction_v = disjunction<_Bp...>::value;
+template <class _Bp> _FCXX_INLINE_VAR constexpr bool negation_v = negation<_Bp>::value;
+#  if _FCXX_STD < 2026
+template <class _Tp>
+_FCXX_DEPRECATED_CXX26("use is_trivially_copyable_v and is_trivially_default_constructible_v")
+_FCXX_INLINE_VAR constexpr bool is_trivial_v = is_trivial<_Tp>::value;
+#  endif
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#  if _FCXX_STD < 2023
+template <class _Tp>
+_FCXX_DEPRECATED_CXX20("use is_standard_layout_v and is_trivial_v")
+_FCXX_INLINE_VAR constexpr bool is_pod_v = is_pod<_Tp>::value;
+#  endif
+#  if _FCXX_STD < 2020
+template <class _Tp>
+_FCXX_DEPRECATED_CXX17("removed from the standard")
+_FCXX_INLINE_VAR constexpr bool is_literal_type_v = is_literal_type<_Tp>::value;
+#  endif
+#pragma GCC diagnostic pop
+
+#  if _FCXX_STD >= 2020
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_bounded_array_v = is_bounded_array<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_unbounded_array_v = is_unbounded_array<_Tp>::value;
+template <class _From, class _To>
+_FCXX_INLINE_VAR constexpr bool is_nothrow_convertible_v = is_nothrow_convertible<_From, _To>::value;
+#        if _FCXX_HAS_IS_LAYOUT_COMPATIBLE
+template <class _Tp, class _Up>
+_FCXX_INLINE_VAR constexpr bool is_layout_compatible_v = is_layout_compatible<_Tp, _Up>::value;
+#        endif
+#        if _FCXX_HAS_IS_POINTER_INTERCONVERTIBLE
+template <class _Base, class _Derived>
+_FCXX_INLINE_VAR constexpr bool is_pointer_interconvertible_base_of_v =
+    is_pointer_interconvertible_base_of<_Base, _Derived>::value;
+#        endif
+#      endif
+
+#      if _FCXX_STD >= 2023
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_scoped_enum_v = is_scoped_enum<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_implicit_lifetime_v = is_implicit_lifetime<_Tp>::value;
+template <class _Tp, class _Up>
+_FCXX_INLINE_VAR constexpr bool reference_constructs_from_temporary_v =
+    reference_constructs_from_temporary<_Tp, _Up>::value;
+template <class _Tp, class _Up>
+_FCXX_INLINE_VAR constexpr bool reference_converts_from_temporary_v =
+    reference_converts_from_temporary<_Tp, _Up>::value;
+#      endif
+
+#      if _FCXX_STD >= 2026
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_reflection_v = is_reflection<_Tp>::value;
+#    if _FCXX_HAS_IS_STRUCTURAL
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_structural_v = is_structural<_Tp>::value;
+#    endif
+#    if _FCXX_HAS_IS_VIRTUAL_BASE_OF
+template <class _Base, class _Derived>
+_FCXX_INLINE_VAR constexpr bool is_virtual_base_of_v = is_virtual_base_of<_Base, _Derived>::value;
+#        endif
+template <class _Fp, class _Tuple> _FCXX_INLINE_VAR constexpr bool is_applicable_v = is_applicable<_Fp, _Tuple>::value;
+template <class _Fp, class _Tuple>
+_FCXX_INLINE_VAR constexpr bool is_nothrow_applicable_v = is_nothrow_applicable<_Fp, _Tuple>::value;
+#      endif
+#    endif
+
+} /* namespace std */
+
+#endif
+
+#endif

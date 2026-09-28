@@ -1,0 +1,110 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_CONTRACTS
+#define __FREESTANDING_CXX_HDRS_CONTRACTS 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2026
+#  error "<contracts> requires C++26 or later"
+#endif
+
+#define _FCXX_VERSION_CONTRACTS
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_CONTRACTS
+
+#if _FCXX_STD >= 2026
+
+#include <source_location>
+
+namespace std {
+namespace contracts {
+
+enum class assertion_kind : __UINT16_TYPE__ {
+    pre = 1,
+    post = 2,
+    assert = 3
+};
+
+enum class evaluation_semantic : __UINT16_TYPE__ {
+    ignore = 1,
+    observe = 2,
+    enforce = 3,
+    quick_enforce = 4
+};
+
+enum class detection_mode : __UINT16_TYPE__ {
+    predicate_false = 1,
+    evaluation_exception = 2
+};
+
+/* The compiler creates the objects of this type, which have the layout it
+ * gives them (the order and the types of the members, not their names),
+ * and passes them to ::handle_contract_violation(), which the program
+ * provides. The destructor is trivial. */
+class contract_violation {
+public:
+    contract_violation(const contract_violation&) = delete;
+    contract_violation& operator=(const contract_violation&) = delete;
+
+    ~contract_violation() = default;
+
+    const char* comment() const noexcept { return __comment; }
+
+    contracts::detection_mode detection_mode() const noexcept { return __mode; }
+
+    bool is_terminating() const noexcept {
+        return __semantic == evaluation_semantic::enforce
+            || __semantic == evaluation_semantic::quick_enforce;
+    }
+
+    assertion_kind kind() const noexcept { return __kind; }
+
+    source_location location() const noexcept {
+#  if _FCXX_HAS_BUILTIN_SOURCE_LOCATION
+        return source_location(static_cast<const source_location::__impl*>(__location));
+#  else
+        return source_location();
+#  endif
+    }
+
+    evaluation_semantic semantic() const noexcept { return __semantic; }
+
+private:
+    /* The version of the layout, and the room for extensions, which the
+     * compiler fills in, and nothing here uses. */
+    [[maybe_unused]] __UINT16_TYPE__ __version;
+    assertion_kind __kind;
+    evaluation_semantic __semantic;
+    contracts::detection_mode __mode;
+    const char* __comment;
+    const void* __location;
+    [[maybe_unused]] void* __extensions;
+};
+
+/* The default handler, which has nowhere to report the violation to. */
+inline void invoke_default_contract_violation_handler(const contract_violation&) {}
+
+} /* namespace contracts */
+} /* namespace std */
+
+#endif
+
+#endif

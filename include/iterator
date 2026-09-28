@@ -1,0 +1,987 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_ITERATOR
+#define __FREESTANDING_CXX_HDRS_ITERATOR 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2023
+#  error "<iterator> is not a freestanding header before C++23"
+#endif
+
+#define _FCXX_VERSION_ITERATOR
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_ITERATOR
+
+#if _FCXX_STD >= 2023
+
+#include <compare>
+#include <concepts>
+#include <initializer_list>
+#include <type_traits>
+#include <__fcxx/addressof.h>
+
+#include <__fcxx/iterator_base.h>
+#include <__fcxx/iterator_ops.h>
+#include <__fcxx/reverse_iterator.h>
+#include <__fcxx/range_access.h>
+#include <__fcxx/construct_at.h>
+#include <__fcxx/pointer_traits.h>
+#include <__fcxx/ranges_access.h>
+#include <__fcxx/const_iterator.h>
+
+namespace std {
+
+/* [insert.iterators], insert iterators */
+
+template <class _Cont>
+class back_insert_iterator {
+protected:
+    _Cont* container;
+
+public:
+    typedef output_iterator_tag iterator_category;
+    typedef void value_type;
+    typedef ptrdiff_t difference_type;
+    typedef void pointer;
+    typedef void reference;
+    typedef _Cont container_type;
+
+    constexpr explicit back_insert_iterator(_Cont& __x) : container(std::addressof(__x)) {}
+
+    constexpr back_insert_iterator& operator=(const typename _Cont::value_type& __value) {
+        container->push_back(__value);
+        return *this;
+    }
+
+    constexpr back_insert_iterator& operator=(typename _Cont::value_type&& __value) {
+        container->push_back(std::move(__value));
+        return *this;
+    }
+
+    constexpr back_insert_iterator& operator*() { return *this; }
+
+    constexpr back_insert_iterator& operator++() { return *this; }
+
+    constexpr back_insert_iterator operator++(int) { return *this; }
+};
+
+template <class _Cont>
+constexpr back_insert_iterator<_Cont> back_inserter(_Cont& __x) {
+    return back_insert_iterator<_Cont>(__x);
+}
+
+template <class _Cont>
+class front_insert_iterator {
+protected:
+    _Cont* container;
+
+public:
+    typedef output_iterator_tag iterator_category;
+    typedef void value_type;
+    typedef ptrdiff_t difference_type;
+    typedef void pointer;
+    typedef void reference;
+    typedef _Cont container_type;
+
+    constexpr explicit front_insert_iterator(_Cont& __x) : container(std::addressof(__x)) {}
+
+    constexpr front_insert_iterator& operator=(const typename _Cont::value_type& __value) {
+        container->push_front(__value);
+        return *this;
+    }
+
+    constexpr front_insert_iterator& operator=(typename _Cont::value_type&& __value) {
+        container->push_front(std::move(__value));
+        return *this;
+    }
+
+    constexpr front_insert_iterator& operator*() { return *this; }
+
+    constexpr front_insert_iterator& operator++() { return *this; }
+
+    constexpr front_insert_iterator operator++(int) { return *this; }
+};
+
+template <class _Cont>
+constexpr front_insert_iterator<_Cont> front_inserter(_Cont& __x) {
+    return front_insert_iterator<_Cont>(__x);
+}
+
+template <class _Cont>
+class insert_iterator {
+protected:
+    _Cont* container;
+    ranges::iterator_t<_Cont> iter;
+
+public:
+    typedef output_iterator_tag iterator_category;
+    typedef void value_type;
+    typedef ptrdiff_t difference_type;
+    typedef void pointer;
+    typedef void reference;
+    typedef _Cont container_type;
+
+    constexpr insert_iterator(_Cont& __x, ranges::iterator_t<_Cont> __i)
+        : container(std::addressof(__x)), iter(__i) {}
+
+    constexpr insert_iterator& operator=(const typename _Cont::value_type& __value) {
+        iter = container->insert(iter, __value);
+        ++iter;
+        return *this;
+    }
+
+    constexpr insert_iterator& operator=(typename _Cont::value_type&& __value) {
+        iter = container->insert(iter, std::move(__value));
+        ++iter;
+        return *this;
+    }
+
+    constexpr insert_iterator& operator*() { return *this; }
+
+    constexpr insert_iterator& operator++() { return *this; }
+
+    constexpr insert_iterator& operator++(int) { return *this; }
+};
+
+template <class _Cont>
+constexpr insert_iterator<_Cont> inserter(_Cont& __x, ranges::iterator_t<_Cont> __i) {
+    return insert_iterator<_Cont>(__x, __i);
+}
+
+/* [move.iterators], move iterators and sentinels */
+
+template <semiregular _Sp>
+class move_sentinel;
+
+/* The iterator category of a move_iterator, which it only has where the
+ * iterator has one, and its iterator concept, which follows the iterator,
+ * as P2520 has it. */
+template <class _It>
+struct __fcxx_move_iterator_category {};
+
+template <class _It>
+    requires requires { typename iterator_traits<_It>::iterator_category; }
+struct __fcxx_move_iterator_category<_It> {
+    using iterator_category =
+        conditional_t<derived_from<typename iterator_traits<_It>::iterator_category, random_access_iterator_tag>,
+                      random_access_iterator_tag, typename iterator_traits<_It>::iterator_category>;
+};
+
+template <class _It>
+class move_iterator : public __fcxx_move_iterator_category<_It> {
+    template <class _Up>
+    friend class move_iterator;
+
+public:
+    using iterator_type = _It;
+    using iterator_concept =
+        conditional_t<random_access_iterator<_It>, random_access_iterator_tag,
+                      conditional_t<bidirectional_iterator<_It>, bidirectional_iterator_tag,
+                                    conditional_t<forward_iterator<_It>, forward_iterator_tag, input_iterator_tag> > >;
+    using value_type = iter_value_t<_It>;
+    using difference_type = iter_difference_t<_It>;
+    using pointer = _It;
+    using reference = iter_rvalue_reference_t<_It>;
+
+    constexpr move_iterator() : __current() {}
+
+    constexpr explicit move_iterator(_It __i) : __current(std::move(__i)) {}
+
+    template <class _Up>
+        requires(!is_same_v<_Up, _It>) && convertible_to<const _Up&, _It>
+    constexpr move_iterator(const move_iterator<_Up>& __u) : __current(__u.__current) {}
+
+    template <class _Up>
+        requires(!is_same_v<_Up, _It>) && convertible_to<const _Up&, _It> && assignable_from<_It&, const _Up&>
+    constexpr move_iterator& operator=(const move_iterator<_Up>& __u) {
+        __current = __u.__current;
+        return *this;
+    }
+
+    constexpr const _It& base() const& noexcept { return __current; }
+
+    constexpr _It base() && { return std::move(__current); }
+
+    constexpr reference operator*() const { return ranges::iter_move(__current); }
+
+    _FCXX_DEPRECATED("std::move_iterator::operator-> is deprecated") constexpr pointer operator->() const {
+        return __current;
+    }
+
+    constexpr move_iterator& operator++() {
+        ++__current;
+        return *this;
+    }
+
+    constexpr auto operator++(int) {
+        if constexpr (forward_iterator<_It>) {
+            move_iterator __tmp = *this;
+            ++__current;
+            return __tmp;
+        } else {
+            ++__current;
+        }
+    }
+
+    constexpr move_iterator& operator--() {
+        --__current;
+        return *this;
+    }
+
+    constexpr move_iterator operator--(int) {
+        move_iterator __tmp = *this;
+        --__current;
+        return __tmp;
+    }
+
+    constexpr move_iterator operator+(difference_type __n) const { return move_iterator(__current + __n); }
+
+    constexpr move_iterator& operator+=(difference_type __n) {
+        __current += __n;
+        return *this;
+    }
+
+    constexpr move_iterator operator-(difference_type __n) const { return move_iterator(__current - __n); }
+
+    constexpr move_iterator& operator-=(difference_type __n) {
+        __current -= __n;
+        return *this;
+    }
+
+    constexpr reference operator[](difference_type __n) const { return ranges::iter_move(__current + __n); }
+
+    template <sentinel_for<_It> _Sp>
+        requires requires(const _It& __i, const move_sentinel<_Sp>& __s) {
+            { __i == __s.base() } -> __fcxx_convertible_to_bool;
+        }
+    friend constexpr bool operator==(const move_iterator& __x, const move_sentinel<_Sp>& __y) {
+        return __x.base() == __y.base();
+    }
+
+    template <sized_sentinel_for<_It> _Sp>
+    friend constexpr iter_difference_t<_It> operator-(const move_sentinel<_Sp>& __x, const move_iterator& __y) {
+        return __x.base() - __y.base();
+    }
+
+    template <sized_sentinel_for<_It> _Sp>
+    friend constexpr iter_difference_t<_It> operator-(const move_iterator& __x, const move_sentinel<_Sp>& __y) {
+        return __x.base() - __y.base();
+    }
+
+    friend constexpr iter_rvalue_reference_t<_It> iter_move(const move_iterator& __i) noexcept(
+        noexcept(ranges::iter_move(__i.__current))) {
+        return ranges::iter_move(__i.__current);
+    }
+
+    template <indirectly_swappable<_It> _It2>
+    friend constexpr void iter_swap(const move_iterator& __x, const move_iterator<_It2>& __y) noexcept(
+        noexcept(ranges::iter_swap(__x.__current, __y.base()))) {
+        ranges::iter_swap(__x.__current, __y.base());
+    }
+
+private:
+    _It __current;
+};
+
+template <class _I1, class _I2>
+    requires requires(const _I1& __x, const _I2& __y) {
+        { __x == __y } -> __fcxx_convertible_to_bool;
+    }
+constexpr bool operator==(const move_iterator<_I1>& __x, const move_iterator<_I2>& __y) {
+    return __x.base() == __y.base();
+}
+
+template <class _I1, class _I2>
+    requires requires(const _I1& __x, const _I2& __y) {
+        { __x < __y } -> __fcxx_convertible_to_bool;
+    }
+constexpr bool operator<(const move_iterator<_I1>& __x, const move_iterator<_I2>& __y) {
+    return __x.base() < __y.base();
+}
+
+template <class _I1, class _I2>
+    requires requires(const _I1& __x, const _I2& __y) {
+        { __y < __x } -> __fcxx_convertible_to_bool;
+    }
+constexpr bool operator>(const move_iterator<_I1>& __x, const move_iterator<_I2>& __y) {
+    return __y < __x;
+}
+
+template <class _I1, class _I2>
+    requires requires(const _I1& __x, const _I2& __y) {
+        { __y < __x } -> __fcxx_convertible_to_bool;
+    }
+constexpr bool operator<=(const move_iterator<_I1>& __x, const move_iterator<_I2>& __y) {
+    return !(__y < __x);
+}
+
+template <class _I1, class _I2>
+    requires requires(const _I1& __x, const _I2& __y) {
+        { __x < __y } -> __fcxx_convertible_to_bool;
+    }
+constexpr bool operator>=(const move_iterator<_I1>& __x, const move_iterator<_I2>& __y) {
+    return !(__x < __y);
+}
+
+template <class _I1, three_way_comparable_with<_I1> _I2>
+constexpr compare_three_way_result_t<_I1, _I2> operator<=>(const move_iterator<_I1>& __x,
+                                                           const move_iterator<_I2>& __y) {
+    return __x.base() <=> __y.base();
+}
+
+template <class _I1, class _I2>
+constexpr auto operator-(const move_iterator<_I1>& __x, const move_iterator<_I2>& __y)
+    -> decltype(__x.base() - __y.base()) {
+    return __x.base() - __y.base();
+}
+
+template <class _It>
+    requires requires(const _It& __i, iter_difference_t<_It> __n) {
+        { __i + __n } -> same_as<_It>;
+    }
+constexpr move_iterator<_It> operator+(iter_difference_t<_It> __n, const move_iterator<_It>& __x) {
+    return __x + __n;
+}
+
+template <class _It>
+constexpr move_iterator<_It> make_move_iterator(_It __i) {
+    return move_iterator<_It>(std::move(__i));
+}
+
+template <class _I1, class _I2>
+    requires(!sized_sentinel_for<_I1, _I2>)
+inline constexpr bool disable_sized_sentinel_for<move_iterator<_I1>, move_iterator<_I2> > = true;
+
+template <semiregular _Sp>
+class move_sentinel {
+    template <semiregular>
+    friend class move_sentinel;
+
+public:
+    constexpr move_sentinel() : __last() {}
+
+    constexpr explicit move_sentinel(_Sp __s) : __last(std::move(__s)) {}
+
+    template <class _S2>
+        requires convertible_to<const _S2&, _Sp>
+    constexpr move_sentinel(const move_sentinel<_S2>& __s) : __last(__s.__last) {}
+
+    template <class _S2>
+        requires assignable_from<_Sp&, const _S2&>
+    constexpr move_sentinel& operator=(const move_sentinel<_S2>& __s) {
+        __last = __s.__last;
+        return *this;
+    }
+
+    constexpr _Sp base() const { return __last; }
+
+private:
+    _Sp __last;
+};
+
+/* [default.sentinel], default sentinel */
+struct default_sentinel_t {};
+
+inline constexpr default_sentinel_t default_sentinel{};
+
+/* [iterators.common], common iterators. The iterator or the sentinel is
+ * kept in a union, with its index, instead of the variant of the
+ * standard's wording, which <iterator> does not need. The index is 2 when
+ * the construction of the iterator or the sentinel exited with an
+ * exception. */
+template <input_or_output_iterator _It, sentinel_for<_It> _Sp>
+    requires(!same_as<_It, _Sp> && copyable<_It>)
+class common_iterator;
+
+struct __fcxx_common_iterator_access {
+    template <class _Ci>
+    static constexpr unsigned char __index(const _Ci& __c) noexcept {
+        return __c.__index_;
+    }
+
+    template <class _Ci>
+    static constexpr auto& __iter(const _Ci& __c) noexcept {
+        return __c.__iter_;
+    }
+
+    template <class _Ci>
+    static constexpr auto& __sent(const _Ci& __c) noexcept {
+        return __c.__sent_;
+    }
+
+    template <class _Ci>
+    static constexpr void __expect_iter(const _Ci& __c) noexcept {
+        __c.__expect_iter();
+    }
+
+    template <class _Ci>
+    static constexpr void __expect_valid(const _Ci& __c) noexcept {
+        __c.__expect_valid();
+    }
+};
+
+template <input_or_output_iterator _It, sentinel_for<_It> _Sp>
+    requires(!same_as<_It, _Sp> && copyable<_It>)
+class common_iterator {
+    template <input_or_output_iterator _I2, sentinel_for<_I2> _S2>
+        requires(!same_as<_I2, _S2> && copyable<_I2>)
+    friend class common_iterator;
+
+    friend struct __fcxx_common_iterator_access;
+
+    using __access = __fcxx_common_iterator_access;
+
+    union {
+        _It __iter_;
+        _Sp __sent_;
+    };
+    unsigned char __index_;
+
+    constexpr void __destroy() noexcept {
+        if (__index_ == 0) {
+            __iter_.~_It();
+        } else if (__index_ == 1) {
+            __sent_.~_Sp();
+        }
+        __index_ = 2;
+    }
+
+    /* The index of x is read once, by the caller, so that the compiler can
+     * tell which member __assign_from constructs. */
+    template <class _Other>
+    constexpr void __construct_from(_Other&& __x, unsigned char __index) {
+        if (__index == 0) {
+            std::construct_at(std::addressof(__iter_), static_cast<_Other&&>(__x).__iter_);
+        } else if (__index == 1) {
+            std::construct_at(std::addressof(__sent_), static_cast<_Other&&>(__x).__sent_);
+        }
+        __index_ = __index;
+    }
+
+    template <class _Other>
+    constexpr void __assign_from(_Other&& __x) {
+        const unsigned char __index = __access::__index(__x);
+        if (__index_ == __index) {
+            if (__index == 0) {
+                __iter_ = static_cast<_Other&&>(__x).__iter_;
+            } else if (__index == 1) {
+                __sent_ = static_cast<_Other&&>(__x).__sent_;
+            }
+        } else {
+            __destroy();
+            __construct_from(static_cast<_Other&&>(__x), __index);
+        }
+    }
+
+    /* Workaround: GCC 11 to 16, all targets: where it cannot tell what a
+     * common_iterator holds, as in a copy of one whose state it does not
+     * know, which an exception could have left holding neither, it warns in
+     * the code of the caller that the iterator or the sentinel may be used
+     * uninitialized (-Wmaybe-uninitialized), so the operations tell it their
+     * preconditions: that it holds an iterator, or that it holds either. */
+    constexpr void __expect_iter() const noexcept {
+#if _FCXX_GCC
+        if (__index_ != 0) {
+            _FCXX_UNREACHABLE();
+        }
+#endif
+    }
+
+    constexpr void __expect_valid() const noexcept {
+#if _FCXX_GCC
+        if (__index_ > 1) {
+            _FCXX_UNREACHABLE();
+        }
+#endif
+    }
+
+    class __proxy {
+        friend class common_iterator;
+
+        iter_value_t<_It> __keep_;
+
+        constexpr __proxy(iter_reference_t<_It>&& __x) : __keep_(std::move(__x)) {}
+
+    public:
+        constexpr const iter_value_t<_It>* operator->() const noexcept { return std::addressof(__keep_); }
+    };
+
+    class __postfix_proxy {
+        friend class common_iterator;
+
+        iter_value_t<_It> __keep_;
+
+        constexpr __postfix_proxy(iter_reference_t<_It>&& __x)
+            : __keep_(std::forward<iter_reference_t<_It> >(__x)) {}
+
+    public:
+        constexpr const iter_value_t<_It>& operator*() const noexcept { return __keep_; }
+    };
+
+public:
+    constexpr common_iterator()
+        requires default_initializable<_It>
+        : __iter_(), __index_(0) {}
+
+    constexpr common_iterator(_It __i) : __iter_(std::move(__i)), __index_(0) {}
+
+    constexpr common_iterator(_Sp __s) : __sent_(std::move(__s)), __index_(1) {}
+
+    template <class _I2, class _S2>
+        requires convertible_to<const _I2&, _It> && convertible_to<const _S2&, _Sp>
+    constexpr common_iterator(const common_iterator<_I2, _S2>& __x) : __index_(2) {
+        __construct_from(__x, __access::__index(__x));
+    }
+
+    constexpr common_iterator(const common_iterator& __x) noexcept(
+        is_nothrow_copy_constructible_v<_It> && is_nothrow_copy_constructible_v<_Sp>)
+        : __index_(2) {
+        __construct_from(__x, __access::__index(__x));
+    }
+
+    constexpr common_iterator(common_iterator&& __x) noexcept(
+        is_nothrow_move_constructible_v<_It> && is_nothrow_move_constructible_v<_Sp>)
+        : __index_(2) {
+        __construct_from(std::move(__x), __x.__index_);
+    }
+
+    template <class _I2, class _S2>
+        requires convertible_to<const _I2&, _It> && convertible_to<const _S2&, _Sp> && assignable_from<_It&, const _I2&>
+              && assignable_from<_Sp&, const _S2&>
+    constexpr common_iterator& operator=(const common_iterator<_I2, _S2>& __x) {
+        __assign_from(__x);
+        return *this;
+    }
+
+    constexpr common_iterator& operator=(const common_iterator& __x) {
+        if (this != std::addressof(__x)) {
+            __assign_from(__x);
+        }
+        return *this;
+    }
+
+    constexpr common_iterator& operator=(common_iterator&& __x) noexcept(
+        is_nothrow_move_constructible_v<_It> && is_nothrow_move_assignable_v<_It>
+        && is_nothrow_move_constructible_v<_Sp> && is_nothrow_move_assignable_v<_Sp>) {
+        if (this != std::addressof(__x)) {
+            __assign_from(std::move(__x));
+        }
+        return *this;
+    }
+
+    constexpr ~common_iterator() { __destroy(); }
+
+    constexpr decltype(auto) operator*() {
+        __expect_iter();
+        return *__iter_;
+    }
+
+    constexpr decltype(auto) operator*() const
+        requires __fcxx_dereferenceable<const _It>
+    {
+        __expect_iter();
+        return *__iter_;
+    }
+
+    constexpr auto operator->() const
+        requires indirectly_readable<const _It>
+              && (requires(const _It& __i) { __i.operator->(); } || is_reference_v<iter_reference_t<_It> >
+                  || constructible_from<iter_value_t<_It>, iter_reference_t<_It> >)
+    {
+        __expect_iter();
+        if constexpr (is_pointer_v<_It> || requires(const _It& __i) { __i.operator->(); }) {
+            return __iter_;
+        } else if constexpr (is_reference_v<iter_reference_t<_It> >) {
+            auto&& __tmp = *__iter_;
+            return std::addressof(__tmp);
+        } else {
+            return __proxy(*__iter_);
+        }
+    }
+
+    constexpr common_iterator& operator++() {
+        __expect_iter();
+        ++__iter_;
+        return *this;
+    }
+
+    constexpr decltype(auto) operator++(int) {
+        __expect_iter();
+        if constexpr (forward_iterator<_It>) {
+            common_iterator __tmp = *this;
+            ++*this;
+            return __tmp;
+        } else if constexpr (requires(_It& __i) {
+                                 { *__i++ } -> __fcxx_can_reference;
+                             }
+                             || !(indirectly_readable<_It>
+                                  && constructible_from<iter_value_t<_It>, iter_reference_t<_It>>
+                                  && move_constructible<iter_value_t<_It>>)) {
+            return __iter_++;
+        } else {
+            __postfix_proxy __p(**this);
+            ++*this;
+            return __p;
+        }
+    }
+
+    template <class _I2, sentinel_for<_It> _S2>
+        requires sentinel_for<_Sp, _I2>
+    friend constexpr bool operator==(const common_iterator& __x, const common_iterator<_I2, _S2>& __y) {
+        __x.__expect_valid();
+        __access::__expect_valid(__y);
+        const unsigned char __i = __x.__index_;
+        const unsigned char __j = __access::__index(__y);
+        if (__i == 0 && __j == 1) {
+            return __x.__iter_ == __access::__sent(__y);
+        }
+        if (__i == 1 && __j == 0) {
+            return __x.__sent_ == __access::__iter(__y);
+        }
+        return true;
+    }
+
+    template <class _I2, sentinel_for<_It> _S2>
+        requires sentinel_for<_Sp, _I2> && equality_comparable_with<_It, _I2>
+    friend constexpr bool operator==(const common_iterator& __x, const common_iterator<_I2, _S2>& __y) {
+        __x.__expect_valid();
+        __access::__expect_valid(__y);
+        const unsigned char __i = __x.__index_;
+        const unsigned char __j = __access::__index(__y);
+        if (__i == 0 && __j == 0) {
+            return __x.__iter_ == __access::__iter(__y);
+        }
+        if (__i == 0 && __j == 1) {
+            return __x.__iter_ == __access::__sent(__y);
+        }
+        if (__i == 1 && __j == 0) {
+            return __x.__sent_ == __access::__iter(__y);
+        }
+        return true;
+    }
+
+    template <sized_sentinel_for<_It> _I2, sized_sentinel_for<_It> _S2>
+        requires sized_sentinel_for<_Sp, _I2>
+    friend constexpr iter_difference_t<_I2> operator-(const common_iterator& __x,
+                                                      const common_iterator<_I2, _S2>& __y) {
+        __x.__expect_valid();
+        __access::__expect_valid(__y);
+        const unsigned char __i = __x.__index_;
+        const unsigned char __j = __access::__index(__y);
+        if (__i == 0 && __j == 0) {
+            return __x.__iter_ - __access::__iter(__y);
+        }
+        if (__i == 0 && __j == 1) {
+            return __x.__iter_ - __access::__sent(__y);
+        }
+        if (__i == 1 && __j == 0) {
+            return __x.__sent_ - __access::__iter(__y);
+        }
+        return 0;
+    }
+
+    /* It returns what ranges::iter_move does, as LWG 3953 has it. */
+    friend constexpr decltype(auto) iter_move(const common_iterator& __i) noexcept(
+        noexcept(ranges::iter_move(std::declval<const _It&>())))
+        requires input_iterator<_It>
+    {
+        __i.__expect_iter();
+        return ranges::iter_move(__i.__iter_);
+    }
+
+    template <indirectly_swappable<_It> _I2, class _S2>
+    friend constexpr void iter_swap(const common_iterator& __x, const common_iterator<_I2, _S2>& __y) noexcept(
+        noexcept(ranges::iter_swap(std::declval<const _It&>(), std::declval<const _I2&>()))) {
+        __x.__expect_iter();
+        __access::__expect_iter(__y);
+        ranges::iter_swap(__x.__iter_, __access::__iter(__y));
+    }
+};
+
+template <class _It, class _Sp>
+struct incrementable_traits<common_iterator<_It, _Sp> > {
+    using difference_type = iter_difference_t<_It>;
+};
+
+/* [common.iter.types], the iterator category of common_iterator, which it
+ * only has for integral difference types, as LWG 3749 has it. */
+template <class _It>
+concept __fcxx_forward_iterator_category = requires {
+    typename iterator_traits<_It>::iterator_category;
+    requires derived_from<typename iterator_traits<_It>::iterator_category, forward_iterator_tag>;
+};
+
+template <class _It>
+struct __fcxx_common_iterator_category {};
+
+template <class _It>
+    requires integral<iter_difference_t<_It> >
+struct __fcxx_common_iterator_category<_It> {
+    using iterator_category =
+        conditional_t<__fcxx_forward_iterator_category<_It>, forward_iterator_tag, input_iterator_tag>;
+};
+
+template <class _Ci>
+struct __fcxx_common_iterator_pointer {
+    using type = void;
+};
+
+template <class _Ci>
+    requires requires(const _Ci& __a) { __a.operator->(); }
+struct __fcxx_common_iterator_pointer<_Ci> {
+    using type = decltype(std::declval<const _Ci&>().operator->());
+};
+
+template <input_iterator _It, class _Sp>
+struct iterator_traits<common_iterator<_It, _Sp> > : __fcxx_common_iterator_category<_It> {
+    using iterator_concept = conditional_t<forward_iterator<_It>, forward_iterator_tag, input_iterator_tag>;
+    using value_type = iter_value_t<_It>;
+    using difference_type = iter_difference_t<_It>;
+    using pointer = typename __fcxx_common_iterator_pointer<common_iterator<_It, _Sp> >::type;
+    using reference = iter_reference_t<_It>;
+};
+
+/* [iterators.counted], counted iterators. Their member types follow those
+ * of the iterator, as P2259 has it. */
+template <class _It>
+struct __fcxx_counted_iterator_value_type {};
+
+template <indirectly_readable _It>
+struct __fcxx_counted_iterator_value_type<_It> {
+    using value_type = iter_value_t<_It>;
+};
+
+template <class _It>
+struct __fcxx_counted_iterator_concept : __fcxx_counted_iterator_value_type<_It> {};
+
+template <class _It>
+    requires requires { typename _It::iterator_concept; }
+struct __fcxx_counted_iterator_concept<_It> : __fcxx_counted_iterator_value_type<_It> {
+    using iterator_concept = typename _It::iterator_concept;
+};
+
+template <class _It>
+struct __fcxx_counted_iterator_types : __fcxx_counted_iterator_concept<_It> {};
+
+template <class _It>
+    requires requires { typename _It::iterator_category; }
+struct __fcxx_counted_iterator_types<_It> : __fcxx_counted_iterator_concept<_It> {
+    using iterator_category = typename _It::iterator_category;
+};
+
+template <input_or_output_iterator _It>
+class counted_iterator : public __fcxx_counted_iterator_types<_It> {
+    template <input_or_output_iterator>
+    friend class counted_iterator;
+
+public:
+    using iterator_type = _It;
+    using difference_type = iter_difference_t<_It>;
+
+    constexpr counted_iterator()
+        requires default_initializable<_It>
+    = default;
+
+    constexpr counted_iterator(_It __x, iter_difference_t<_It> __n) : __current(std::move(__x)), __length(__n) {}
+
+    template <class _I2>
+        requires convertible_to<const _I2&, _It>
+    constexpr counted_iterator(const counted_iterator<_I2>& __x) : __current(__x.__current), __length(__x.__length) {}
+
+    template <class _I2>
+        requires assignable_from<_It&, const _I2&>
+    constexpr counted_iterator& operator=(const counted_iterator<_I2>& __x) {
+        __current = __x.__current;
+        __length = __x.__length;
+        return *this;
+    }
+
+    constexpr const _It& base() const& noexcept { return __current; }
+
+    constexpr _It base() && { return std::move(__current); }
+
+    constexpr iter_difference_t<_It> count() const noexcept { return __length; }
+
+    constexpr decltype(auto) operator*() { return *__current; }
+
+    constexpr decltype(auto) operator*() const
+        requires __fcxx_dereferenceable<const _It>
+    {
+        return *__current;
+    }
+
+    constexpr auto operator->() const noexcept
+        requires contiguous_iterator<_It>
+    {
+        return std::to_address(__current);
+    }
+
+    constexpr counted_iterator& operator++() {
+        ++__current;
+        --__length;
+        return *this;
+    }
+
+    constexpr decltype(auto) operator++(int) {
+        --__length;
+#if _FCXX_HAS_EXCEPTIONS
+        try {
+            return __current++;
+        } catch (...) {
+            ++__length;
+            throw;
+        }
+#else
+        return __current++;
+#endif
+    }
+
+    constexpr counted_iterator operator++(int)
+        requires forward_iterator<_It>
+    {
+        counted_iterator __tmp = *this;
+        ++*this;
+        return __tmp;
+    }
+
+    constexpr counted_iterator& operator--()
+        requires bidirectional_iterator<_It>
+    {
+        --__current;
+        ++__length;
+        return *this;
+    }
+
+    constexpr counted_iterator operator--(int)
+        requires bidirectional_iterator<_It>
+    {
+        counted_iterator __tmp = *this;
+        --*this;
+        return __tmp;
+    }
+
+    constexpr counted_iterator operator+(iter_difference_t<_It> __n) const
+        requires random_access_iterator<_It>
+    {
+        return counted_iterator(__current + __n, __length - __n);
+    }
+
+    friend constexpr counted_iterator operator+(iter_difference_t<_It> __n, const counted_iterator& __x)
+        requires random_access_iterator<_It>
+    {
+        return __x + __n;
+    }
+
+    constexpr counted_iterator& operator+=(iter_difference_t<_It> __n)
+        requires random_access_iterator<_It>
+    {
+        __current += __n;
+        __length -= __n;
+        return *this;
+    }
+
+    constexpr counted_iterator operator-(iter_difference_t<_It> __n) const
+        requires random_access_iterator<_It>
+    {
+        return counted_iterator(__current - __n, __length + __n);
+    }
+
+    template <common_with<_It> _I2>
+    friend constexpr iter_difference_t<_I2> operator-(const counted_iterator& __x, const counted_iterator<_I2>& __y) {
+        return __y.count() - __x.__length;
+    }
+
+    /* These are noexcept, as LWG 4245 has it. */
+    friend constexpr iter_difference_t<_It> operator-(const counted_iterator& __x, default_sentinel_t) noexcept {
+        return -__x.__length;
+    }
+
+    friend constexpr iter_difference_t<_It> operator-(default_sentinel_t, const counted_iterator& __y) noexcept {
+        return __y.__length;
+    }
+
+    constexpr counted_iterator& operator-=(iter_difference_t<_It> __n)
+        requires random_access_iterator<_It>
+    {
+        __current -= __n;
+        __length += __n;
+        return *this;
+    }
+
+    constexpr decltype(auto) operator[](iter_difference_t<_It> __n) const
+        requires random_access_iterator<_It>
+    {
+        return __current[__n];
+    }
+
+    template <common_with<_It> _I2>
+    friend constexpr bool operator==(const counted_iterator& __x, const counted_iterator<_I2>& __y) {
+        return __x.__length == __y.count();
+    }
+
+    friend constexpr bool operator==(const counted_iterator& __x, default_sentinel_t) noexcept {
+        return __x.__length == 0;
+    }
+
+    template <common_with<_It> _I2>
+    friend constexpr strong_ordering operator<=>(const counted_iterator& __x, const counted_iterator<_I2>& __y) {
+        return __y.count() <=> __x.__length;
+    }
+
+    friend constexpr decltype(auto) iter_move(const counted_iterator& __i) noexcept(
+        noexcept(ranges::iter_move(__i.__current)))
+        requires input_iterator<_It>
+    {
+        return ranges::iter_move(__i.__current);
+    }
+
+    template <indirectly_swappable<_It> _I2>
+    friend constexpr void iter_swap(const counted_iterator& __x, const counted_iterator<_I2>& __y) noexcept(
+        noexcept(ranges::iter_swap(__x.__current, __y.base()))) {
+        ranges::iter_swap(__x.__current, __y.base());
+    }
+
+private:
+    _It __current = _It();
+    iter_difference_t<_It> __length = 0;
+};
+
+template <input_iterator _It>
+    requires same_as<__fcxx_iter_traits_t<_It>, iterator_traits<_It> >
+struct iterator_traits<counted_iterator<_It> > : iterator_traits<_It> {
+    using pointer = conditional_t<contiguous_iterator<_It>, add_pointer_t<iter_reference_t<_It> >, void>;
+};
+
+/* [unreachable.sentinel], unreachable sentinel */
+struct unreachable_sentinel_t {
+    template <weakly_incrementable _It>
+    friend constexpr bool operator==(unreachable_sentinel_t, const _It&) noexcept {
+        return false;
+    }
+};
+
+inline constexpr unreachable_sentinel_t unreachable_sentinel{};
+
+} /* namespace std */
+
+#endif
+
+#endif

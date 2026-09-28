@@ -1,0 +1,192 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_NEW
+#define __FREESTANDING_CXX_HDRS_NEW 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#define _FCXX_VERSION_NEW
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_NEW
+#include <__fcxx/exception.h>
+
+namespace std {
+
+class bad_alloc : public exception {
+public:
+#if _FCXX_CONSTEXPR_EXCEPTION_CLASSES
+    constexpr bad_alloc() noexcept {}
+    constexpr bad_alloc(const bad_alloc&) noexcept = default;
+    constexpr bad_alloc& operator=(const bad_alloc&) noexcept = default;
+    constexpr const char* what() const noexcept override { return "std::bad_alloc"; }
+#else
+    bad_alloc() _FCXX_NOEXCEPT {}
+#  if _FCXX_STD >= 2011
+    bad_alloc(const bad_alloc&) noexcept = default;
+    bad_alloc& operator=(const bad_alloc&) noexcept = default;
+#  endif
+    virtual ~bad_alloc() _FCXX_NOEXCEPT;
+    virtual const char* what() const _FCXX_NOEXCEPT;
+#endif
+};
+
+#if _FCXX_STD >= 2011
+class bad_array_new_length : public bad_alloc {
+public:
+#  if _FCXX_CONSTEXPR_EXCEPTION_CLASSES
+    constexpr bad_array_new_length() noexcept {}
+    constexpr bad_array_new_length(const bad_array_new_length&) noexcept = default;
+    constexpr bad_array_new_length& operator=(const bad_array_new_length&) noexcept = default;
+    constexpr const char* what() const noexcept override { return "std::bad_array_new_length"; }
+#  else
+    bad_array_new_length() noexcept {}
+    bad_array_new_length(const bad_array_new_length&) noexcept = default;
+    bad_array_new_length& operator=(const bad_array_new_length&) noexcept = default;
+    virtual ~bad_array_new_length() noexcept;
+    virtual const char* what() const noexcept;
+#  endif
+};
+#endif
+
+#if _FCXX_STD >= 2020
+struct destroying_delete_t {
+    explicit destroying_delete_t() = default;
+};
+
+_FCXX_INLINE_VAR constexpr destroying_delete_t destroying_delete{};
+#endif
+
+#if _FCXX_STD >= 2017 || defined(__cpp_aligned_new)
+enum class align_val_t : size_t {};
+#endif
+
+struct nothrow_t {
+#if _FCXX_STD >= 2017
+    explicit nothrow_t() = default;
+#endif
+};
+
+/* Provided by the C++ runtime, or by the program. */
+extern const nothrow_t nothrow;
+
+typedef void (*new_handler)();
+new_handler set_new_handler(new_handler __new_p) _FCXX_NOEXCEPT;
+#if _FCXX_STD >= 2011
+new_handler get_new_handler() noexcept;
+#endif
+
+#if _FCXX_STD >= 2017
+template <class _Tp> struct __launder_is_void { static constexpr bool value = false; };
+template <> struct __launder_is_void<const volatile void> { static constexpr bool value = true; };
+
+template <class _Tp> struct __launder_is_const { static constexpr bool value = false; };
+template <class _Tp> struct __launder_is_const<const _Tp> { static constexpr bool value = true; };
+
+template <class _Tp>
+_FCXX_NODISCARD constexpr _Tp* launder(_Tp* __p) noexcept {
+    static_assert(!__launder_is_void<const volatile _Tp>::value, "std::launder of a pointer to void");
+    /* A function type is the only one that does not become const when made
+     * const, as a pointer cannot point to a reference. */
+    static_assert(__launder_is_const<const _Tp>::value, "std::launder of a pointer to a function");
+#  if _FCXX_HAS_BUILTIN_LAUNDER
+    return __builtin_launder(__p);
+#  else
+    return __p;
+#  endif
+}
+
+#  ifdef __GCC_DESTRUCTIVE_SIZE
+_FCXX_INLINE_VAR constexpr size_t hardware_destructive_interference_size = __GCC_DESTRUCTIVE_SIZE;
+#  else
+_FCXX_INLINE_VAR constexpr size_t hardware_destructive_interference_size = 64;
+#  endif
+#  ifdef __GCC_CONSTRUCTIVE_SIZE
+_FCXX_INLINE_VAR constexpr size_t hardware_constructive_interference_size = __GCC_CONSTRUCTIVE_SIZE;
+#  else
+_FCXX_INLINE_VAR constexpr size_t hardware_constructive_interference_size = 64;
+#  endif
+#endif
+
+} /* namespace std */
+
+/* The replaceable allocation and deallocation functions. A freestanding
+ * implementation need not provide their definitions, so they are left to
+ * the program to provide, or to a C++ runtime it links against. */
+
+#if _FCXX_STD >= 2011
+#  define _FCXX_THROW_BAD_ALLOC
+#else
+#  define _FCXX_THROW_BAD_ALLOC throw(std::bad_alloc)
+#endif
+
+_FCXX_NODISCARD void* operator new(std::size_t __size) _FCXX_THROW_BAD_ALLOC;
+_FCXX_NODISCARD void* operator new(std::size_t __size, const std::nothrow_t&) _FCXX_NOEXCEPT;
+void operator delete(void* __ptr) _FCXX_NOEXCEPT;
+void operator delete(void* __ptr, const std::nothrow_t&) _FCXX_NOEXCEPT;
+_FCXX_NODISCARD void* operator new[](std::size_t __size) _FCXX_THROW_BAD_ALLOC;
+_FCXX_NODISCARD void* operator new[](std::size_t __size, const std::nothrow_t&) _FCXX_NOEXCEPT;
+void operator delete[](void* __ptr) _FCXX_NOEXCEPT;
+void operator delete[](void* __ptr, const std::nothrow_t&) _FCXX_NOEXCEPT;
+
+#if _FCXX_STD >= 2014
+void operator delete(void* __ptr, std::size_t __size) noexcept;
+void operator delete[](void* __ptr, std::size_t __size) noexcept;
+#endif
+
+#if _FCXX_STD >= 2017 || defined(__cpp_aligned_new)
+_FCXX_NODISCARD void* operator new(std::size_t __size, std::align_val_t __alignment);
+_FCXX_NODISCARD void* operator new(std::size_t __size, std::align_val_t __alignment,
+                                   const std::nothrow_t&) noexcept;
+void operator delete(void* __ptr, std::align_val_t __alignment) noexcept;
+void operator delete(void* __ptr, std::size_t __size, std::align_val_t __alignment) noexcept;
+void operator delete(void* __ptr, std::align_val_t __alignment, const std::nothrow_t&) noexcept;
+_FCXX_NODISCARD void* operator new[](std::size_t __size, std::align_val_t __alignment);
+_FCXX_NODISCARD void* operator new[](std::size_t __size, std::align_val_t __alignment,
+                                     const std::nothrow_t&) noexcept;
+void operator delete[](void* __ptr, std::align_val_t __alignment) noexcept;
+void operator delete[](void* __ptr, std::size_t __size, std::align_val_t __alignment) noexcept;
+void operator delete[](void* __ptr, std::align_val_t __alignment, const std::nothrow_t&) noexcept;
+#endif
+
+#undef _FCXX_THROW_BAD_ALLOC
+
+/* The non-allocating forms, which cannot be replaced. */
+
+#if _FCXX_STD >= 2026 && defined(__cpp_constexpr) && __cpp_constexpr >= 202406L
+#  define _FCXX_CONSTEXPR_PLACEMENT_NEW constexpr
+#else
+#  define _FCXX_CONSTEXPR_PLACEMENT_NEW inline
+#endif
+
+_FCXX_NODISCARD _FCXX_CONSTEXPR_PLACEMENT_NEW void* operator new(std::size_t, void* __ptr) _FCXX_NOEXCEPT {
+    return __ptr;
+}
+
+_FCXX_NODISCARD _FCXX_CONSTEXPR_PLACEMENT_NEW void* operator new[](std::size_t, void* __ptr) _FCXX_NOEXCEPT {
+    return __ptr;
+}
+
+_FCXX_CONSTEXPR_PLACEMENT_NEW void operator delete(void*, void*) _FCXX_NOEXCEPT {}
+
+_FCXX_CONSTEXPR_PLACEMENT_NEW void operator delete[](void*, void*) _FCXX_NOEXCEPT {}
+
+#undef _FCXX_CONSTEXPR_PLACEMENT_NEW
+
+#endif

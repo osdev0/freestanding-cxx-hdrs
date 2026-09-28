@@ -1,0 +1,292 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_ARRAY
+#define __FREESTANDING_CXX_HDRS_ARRAY 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2026
+#  error "<array> is not a freestanding header before C++26"
+#endif
+
+#define _FCXX_VERSION_ARRAY
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_ARRAY
+
+#if _FCXX_STD >= 2026
+
+#include <initializer_list>
+#include <type_traits>
+#include <__fcxx/integer_sequence.h>
+#include <__fcxx/range_access.h>
+#include <__fcxx/reverse_iterator.h>
+#include <__fcxx/tuple_like.h>
+#include <compare>
+#include <__fcxx/synth_three_way.h>
+
+namespace std {
+
+/* [array], class template array. The elements are a public member, as an
+ * aggregate has them, which also makes array a structural type when its
+ * elements are. */
+template <class _Tp, size_t _Np>
+struct array {
+    typedef _Tp value_type;
+    typedef _Tp* pointer;
+    typedef const _Tp* const_pointer;
+    typedef _Tp& reference;
+    typedef const _Tp& const_reference;
+    typedef size_t size_type;
+    typedef ptrdiff_t difference_type;
+    typedef _Tp* iterator;
+    typedef const _Tp* const_iterator;
+    typedef std::reverse_iterator<iterator> reverse_iterator;
+    typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
+
+    _Tp __elems[_Np];
+
+    constexpr void fill(const _Tp& __u) {
+        for (size_t __i = 0; __i != _Np; ++__i) {
+            __elems[__i] = __u;
+        }
+    }
+
+    constexpr void swap(array& __other) noexcept(__fcxx_is_nothrow_swappable<_Tp>::value) {
+        using std::swap;
+        for (size_t __i = 0; __i != _Np; ++__i) {
+            swap(__elems[__i], __other.__elems[__i]);
+        }
+    }
+
+    /* iterators */
+    constexpr iterator begin() noexcept { return __elems; }
+    constexpr const_iterator begin() const noexcept { return __elems; }
+    constexpr iterator end() noexcept { return __elems + _Np; }
+    constexpr const_iterator end() const noexcept { return __elems + _Np; }
+
+    constexpr reverse_iterator rbegin() noexcept { return reverse_iterator(end()); }
+    constexpr const_reverse_iterator rbegin() const noexcept { return const_reverse_iterator(end()); }
+    constexpr reverse_iterator rend() noexcept { return reverse_iterator(begin()); }
+    constexpr const_reverse_iterator rend() const noexcept { return const_reverse_iterator(begin()); }
+
+    constexpr const_iterator cbegin() const noexcept { return begin(); }
+    constexpr const_iterator cend() const noexcept { return end(); }
+    constexpr const_reverse_iterator crbegin() const noexcept { return rbegin(); }
+    constexpr const_reverse_iterator crend() const noexcept { return rend(); }
+
+    /* capacity */
+    [[nodiscard]] constexpr bool empty() const noexcept { return false; }
+    constexpr size_type size() const noexcept { return _Np; }
+    constexpr size_type max_size() const noexcept { return _Np; }
+
+    /* element access */
+    constexpr reference operator[](size_type __n) { return __elems[__n]; }
+    constexpr const_reference operator[](size_type __n) const { return __elems[__n]; }
+    /* freestanding-deleted */
+    constexpr reference at(size_type) = delete;
+    constexpr const_reference at(size_type) const = delete;
+    constexpr reference front() { return __elems[0]; }
+    constexpr const_reference front() const { return __elems[0]; }
+    constexpr reference back() { return __elems[_Np - 1]; }
+    constexpr const_reference back() const { return __elems[_Np - 1]; }
+
+    constexpr _Tp* data() noexcept { return __elems; }
+    constexpr const _Tp* data() const noexcept { return __elems; }
+};
+
+/* What the empty arrays have instead of elements, so that they can be
+ * initialized with {{}} as well as with {}. */
+struct __fcxx_array_no_elements {};
+
+/* [array.zero], zero-sized arrays, where begin() and end() are the null
+ * pointer, and what calling front() or back() does is undefined. */
+template <class _Tp>
+struct array<_Tp, 0> {
+    typedef _Tp value_type;
+    typedef _Tp* pointer;
+    typedef const _Tp* const_pointer;
+    typedef _Tp& reference;
+    typedef const _Tp& const_reference;
+    typedef size_t size_type;
+    typedef ptrdiff_t difference_type;
+    typedef _Tp* iterator;
+    typedef const _Tp* const_iterator;
+    typedef std::reverse_iterator<iterator> reverse_iterator;
+    typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
+
+    __fcxx_array_no_elements __elems;
+
+    constexpr void fill(const _Tp&) {}
+
+    constexpr void swap(array&) noexcept {}
+
+    /* iterators */
+    constexpr iterator begin() noexcept { return __no_element(); }
+    constexpr const_iterator begin() const noexcept { return __no_element(); }
+    constexpr iterator end() noexcept { return __no_element(); }
+    constexpr const_iterator end() const noexcept { return __no_element(); }
+
+    constexpr reverse_iterator rbegin() noexcept { return reverse_iterator(end()); }
+    constexpr const_reverse_iterator rbegin() const noexcept { return const_reverse_iterator(end()); }
+    constexpr reverse_iterator rend() noexcept { return reverse_iterator(begin()); }
+    constexpr const_reverse_iterator rend() const noexcept { return const_reverse_iterator(begin()); }
+
+    constexpr const_iterator cbegin() const noexcept { return begin(); }
+    constexpr const_iterator cend() const noexcept { return end(); }
+    constexpr const_reverse_iterator crbegin() const noexcept { return rbegin(); }
+    constexpr const_reverse_iterator crend() const noexcept { return rend(); }
+
+    /* capacity */
+    [[nodiscard]] constexpr bool empty() const noexcept { return true; }
+    constexpr size_type size() const noexcept { return 0; }
+    constexpr size_type max_size() const noexcept { return 0; }
+
+    /* element access */
+    constexpr reference operator[](size_type) { return *__no_element(); }
+    constexpr const_reference operator[](size_type) const { return *__no_element(); }
+    /* freestanding-deleted */
+    constexpr reference at(size_type) = delete;
+    constexpr const_reference at(size_type) const = delete;
+    constexpr reference front() { return *__no_element(); }
+    constexpr const_reference front() const { return *__no_element(); }
+    constexpr reference back() { return *__no_element(); }
+    constexpr const_reference back() const { return *__no_element(); }
+
+    constexpr _Tp* data() noexcept { return __no_element(); }
+    constexpr const _Tp* data() const noexcept { return __no_element(); }
+
+private:
+    static constexpr _Tp* __no_element() noexcept { return nullptr; }
+};
+
+/* The guide deduces the arrays of elements of the same type only. */
+template <class _Tp, class... _Up>
+struct __fcxx_array_deduce {
+    static_assert(__fcxx_and<is_same<_Tp, _Up>...>::value,
+                  "std::array deduced from initializers of different types");
+    typedef _Tp type;
+};
+
+template <class _Tp, class... _Up>
+array(_Tp, _Up...) -> array<typename __fcxx_array_deduce<_Tp, _Up...>::type, 1 + sizeof...(_Up)>;
+
+/* [container.reqmts], [container.opt.reqmts], the comparisons, == and <=> */
+template <class _Tp, size_t _Np>
+constexpr bool operator==(const array<_Tp, _Np>& __x, const array<_Tp, _Np>& __y) {
+    for (size_t __i = 0; __i != _Np; ++__i) {
+        if (!(__x[__i] == __y[__i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+template <class _Tp, size_t _Np>
+constexpr __fcxx_synth_three_way_result<_Tp> operator<=>(const array<_Tp, _Np>& __x, const array<_Tp, _Np>& __y) {
+    for (size_t __i = 0; __i != _Np; ++__i) {
+        __fcxx_synth_three_way_result<_Tp> __c = __fcxx_synth_three_way(__x[__i], __y[__i]);
+        if (__c != 0) {
+            return __c;
+        }
+    }
+    return strong_ordering::equal;
+}
+
+/* [array.special], specialized algorithms */
+template <class _Tp, size_t _Np>
+constexpr __fcxx_enable_if_t<__fcxx_or<__fcxx_bool_constant<_Np == 0>, __fcxx_is_swappable<_Tp> >::value>
+swap(array<_Tp, _Np>& __x, array<_Tp, _Np>& __y) noexcept(noexcept(__x.swap(__y))) {
+    __x.swap(__y);
+}
+
+/* [array.creation], array creation functions */
+
+template <class _Tp, size_t _Np, size_t... _Ip>
+constexpr array<remove_cv_t<_Tp>, _Np> __fcxx_to_array_copy(_Tp (&__a)[_Np], index_sequence<_Ip...>) {
+    return {{__a[_Ip]...}};
+}
+
+template <class _Tp, size_t _Np, size_t... _Ip>
+constexpr array<remove_cv_t<_Tp>, _Np> __fcxx_to_array_move(_Tp (&__a)[_Np], index_sequence<_Ip...>) {
+    return {{std::move(__a[_Ip])...}};
+}
+
+template <class _Tp, size_t _Np>
+constexpr array<remove_cv_t<_Tp>, _Np> to_array(_Tp (&__a)[_Np]) {
+    static_assert(!is_array_v<_Tp>, "std::to_array of a multidimensional array");
+    static_assert(is_constructible_v<remove_cv_t<_Tp>, _Tp&>,
+                  "std::to_array of an array whose elements cannot be copied");
+    return std::__fcxx_to_array_copy(__a, make_index_sequence<_Np>());
+}
+
+template <class _Tp, size_t _Np>
+constexpr array<remove_cv_t<_Tp>, _Np> to_array(_Tp (&&__a)[_Np]) {
+    static_assert(!is_array_v<_Tp>, "std::to_array of a multidimensional array");
+    static_assert(is_constructible_v<remove_cv_t<_Tp>, _Tp>,
+                  "std::to_array of an array whose elements cannot be moved");
+    return std::__fcxx_to_array_move(__a, make_index_sequence<_Np>());
+}
+
+/* [array.tuple], tuple interface */
+
+template <class _Tp, size_t _Np>
+struct tuple_size<array<_Tp, _Np> > : integral_constant<size_t, _Np> {};
+
+template <size_t _Ip, class _Tp, size_t _Np>
+struct tuple_element<_Ip, array<_Tp, _Np> > {
+    static_assert(_Ip < _Np, "std::tuple_element of an index out of the bounds of the std::array");
+    typedef _Tp type;
+};
+
+/* array is tuple-like, which the functions taking tuple-like types, such as
+ * apply and tuple_cat, see in every revision. */
+template <class _Tp, size_t _Np>
+struct __fcxx_is_tuple_like_impl<array<_Tp, _Np> > : true_type {};
+
+template <size_t _Ip, class _Tp, size_t _Np>
+constexpr _Tp& get(array<_Tp, _Np>& __a) noexcept {
+    static_assert(_Ip < _Np, "std::get of an index out of the bounds of the std::array");
+    return __a.__elems[_Ip];
+}
+
+template <size_t _Ip, class _Tp, size_t _Np>
+constexpr _Tp&& get(array<_Tp, _Np>&& __a) noexcept {
+    static_assert(_Ip < _Np, "std::get of an index out of the bounds of the std::array");
+    return static_cast<_Tp&&>(__a.__elems[_Ip]);
+}
+
+template <size_t _Ip, class _Tp, size_t _Np>
+constexpr const _Tp& get(const array<_Tp, _Np>& __a) noexcept {
+    static_assert(_Ip < _Np, "std::get of an index out of the bounds of the std::array");
+    return __a.__elems[_Ip];
+}
+
+/* The overload for const rvalues, of LWG 2485 */
+template <size_t _Ip, class _Tp, size_t _Np>
+constexpr const _Tp&& get(const array<_Tp, _Np>&& __a) noexcept {
+    static_assert(_Ip < _Np, "std::get of an index out of the bounds of the std::array");
+    return static_cast<const _Tp&&>(__a.__elems[_Ip]);
+}
+
+} /* namespace std */
+
+#endif
+
+#endif

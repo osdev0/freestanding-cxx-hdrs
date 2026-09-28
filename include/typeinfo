@@ -1,0 +1,155 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_TYPEINFO
+#define __FREESTANDING_CXX_HDRS_TYPEINFO 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#define _FCXX_VERSION_TYPEINFO
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_TYPEINFO
+#include <__fcxx/exception.h>
+
+namespace std {
+
+/* The layout is that of the Itanium C++ ABI: the virtual table pointer and
+ * the name, which the compilers emit for every type. The C++ runtime defines
+ * the destructor, which is the key function, and the classes deriving from
+ * this one to describe each kind of type.
+ *
+ * The names of types that are local to a translation unit start with '*',
+ * and the objects describing such types are then only equal to themselves,
+ * whereas the others are equal when their names are. */
+class type_info {
+public:
+    virtual ~type_info();
+
+    _FCXX_CONSTEXPR23 bool operator==(const type_info& __rhs) const _FCXX_NOEXCEPT11 {
+#if _FCXX_STD >= 2023 && _FCXX_HAS_IS_CONSTANT_EVALUATED
+        if (__builtin_is_constant_evaluated()) {
+            return this == &__rhs;
+        }
+#endif
+        return this == &__rhs || __name == __rhs.__name
+            || (__name[0] != '*' && __compare(__name, __rhs.__name) == 0);
+    }
+
+    /* Rewritten from operator== from C++20 on, by the compilers that can. */
+#if !_FCXX_HAS_THREE_WAY_COMPARISON
+    bool operator!=(const type_info& __rhs) const _FCXX_NOEXCEPT11 {
+        return !(*this == __rhs);
+    }
+#endif
+
+    bool before(const type_info& __rhs) const _FCXX_NOEXCEPT11 {
+        if (__name[0] == '*' && __rhs.__name[0] == '*') {
+            return reinterpret_cast<_FCXX_UINTPTR>(__name) < reinterpret_cast<_FCXX_UINTPTR>(__rhs.__name);
+        }
+        return __compare(__name, __rhs.__name) < 0;
+    }
+
+#if _FCXX_STD >= 2011
+    size_t hash_code() const noexcept {
+        /* FNV-1a of the name: that of 64 bits where size_t has them, and that
+         * of 32 bits otherwise, folded into a size_t of 16 bits. */
+#  if __SIZEOF_SIZE_T__ >= 8
+        unsigned long long __hash = 14695981039346656037ULL;
+        for (const char* __p = __name; *__p != '\0'; ++__p) {
+            __hash = (__hash ^ static_cast<unsigned char>(*__p)) * 1099511628211ULL;
+        }
+        return static_cast<size_t>(__hash);
+#  else
+        unsigned long __hash = 2166136261UL;
+        for (const char* __p = __name; *__p != '\0'; ++__p) {
+            __hash = ((__hash ^ static_cast<unsigned char>(*__p)) * 16777619UL) & 0xFFFFFFFFUL;
+        }
+        return static_cast<size_t>(__SIZEOF_SIZE_T__ >= 4 ? __hash : __hash ^ (__hash >> 16));
+#  endif
+    }
+#endif
+
+    const char* name() const _FCXX_NOEXCEPT11 {
+        return __name[0] == '*' ? __name + 1 : __name;
+    }
+
+#if _FCXX_STD >= 2011
+    type_info(const type_info&) = delete;
+    type_info& operator=(const type_info&) = delete;
+#else
+private:
+    type_info(const type_info&);
+    type_info& operator=(const type_info&);
+#endif
+
+protected:
+    const char* __name;
+
+    explicit type_info(const char* __n) _FCXX_NOEXCEPT : __name(__n) {}
+
+private:
+    static int __compare(const char* __a, const char* __b) _FCXX_NOEXCEPT {
+        for (; *__a == *__b; ++__a, ++__b) {
+            if (*__a == '\0') {
+                return 0;
+            }
+        }
+        return static_cast<unsigned char>(*__a) < static_cast<unsigned char>(*__b) ? -1 : 1;
+    }
+};
+
+class bad_cast : public exception {
+public:
+#if _FCXX_CONSTEXPR_EXCEPTION_CLASSES
+    constexpr bad_cast() noexcept {}
+    constexpr bad_cast(const bad_cast&) noexcept = default;
+    constexpr bad_cast& operator=(const bad_cast&) noexcept = default;
+    constexpr const char* what() const noexcept override { return "std::bad_cast"; }
+#else
+    bad_cast() _FCXX_NOEXCEPT {}
+#  if _FCXX_STD >= 2011
+    bad_cast(const bad_cast&) noexcept = default;
+    bad_cast& operator=(const bad_cast&) noexcept = default;
+#  endif
+    virtual ~bad_cast() _FCXX_NOEXCEPT;
+    virtual const char* what() const _FCXX_NOEXCEPT;
+#endif
+};
+
+class bad_typeid : public exception {
+public:
+#if _FCXX_CONSTEXPR_EXCEPTION_CLASSES
+    constexpr bad_typeid() noexcept {}
+    constexpr bad_typeid(const bad_typeid&) noexcept = default;
+    constexpr bad_typeid& operator=(const bad_typeid&) noexcept = default;
+    constexpr const char* what() const noexcept override { return "std::bad_typeid"; }
+#else
+    bad_typeid() _FCXX_NOEXCEPT {}
+#  if _FCXX_STD >= 2011
+    bad_typeid(const bad_typeid&) noexcept = default;
+    bad_typeid& operator=(const bad_typeid&) noexcept = default;
+#  endif
+    virtual ~bad_typeid() _FCXX_NOEXCEPT;
+    virtual const char* what() const _FCXX_NOEXCEPT;
+#endif
+};
+
+} /* namespace std */
+
+#endif

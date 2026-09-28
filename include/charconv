@@ -1,0 +1,398 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_CHARCONV
+#define __FREESTANDING_CXX_HDRS_CHARCONV 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2026
+#  error "<charconv> is not a freestanding header before C++26"
+#endif
+
+#define _FCXX_VERSION_CHARCONV
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_CHARCONV
+
+#if _FCXX_STD >= 2026
+
+#include <__fcxx/errc.h>
+
+namespace std {
+
+/* [charconv.syn], the formats of the floating-point conversions. They are
+ * not freestanding items themselves, but the declarations of those
+ * conversions, which are freestanding deleted functions, need them. */
+enum class chars_format {
+    scientific = 1,
+    fixed = 2,
+    hex = 4,
+    general = fixed | scientific
+};
+
+/* [bitmask.types], the operators of a bitmask type. */
+
+constexpr chars_format operator&(chars_format __x, chars_format __y) {
+    return static_cast<chars_format>(static_cast<int>(__x) & static_cast<int>(__y));
+}
+
+constexpr chars_format operator|(chars_format __x, chars_format __y) {
+    return static_cast<chars_format>(static_cast<int>(__x) | static_cast<int>(__y));
+}
+
+constexpr chars_format operator^(chars_format __x, chars_format __y) {
+    return static_cast<chars_format>(static_cast<int>(__x) ^ static_cast<int>(__y));
+}
+
+constexpr chars_format operator~(chars_format __x) {
+    return static_cast<chars_format>(~static_cast<int>(__x));
+}
+
+inline chars_format& operator&=(chars_format& __x, chars_format __y) {
+    __x = __x & __y;
+    return __x;
+}
+
+inline chars_format& operator|=(chars_format& __x, chars_format __y) {
+    __x = __x | __y;
+    return __x;
+}
+
+inline chars_format& operator^=(chars_format& __x, chars_format __y) {
+    __x = __x ^ __y;
+    return __x;
+}
+
+/* [charconv.to.chars] and [charconv.from.chars], the results. */
+
+struct to_chars_result {
+    char* ptr;
+    errc ec;
+    friend bool operator==(const to_chars_result&, const to_chars_result&) = default;
+    constexpr explicit operator bool() const noexcept { return ec == errc{}; }
+};
+
+struct from_chars_result {
+    const char* ptr;
+    errc ec;
+    friend bool operator==(const from_chars_result&, const from_chars_result&) = default;
+    constexpr explicit operator bool() const noexcept { return ec == errc{}; }
+};
+
+/* The conversions are done in the narrowest of unsigned int, unsigned long
+ * long and unsigned __int128 that holds the magnitude of the value, as the
+ * wider divisions are slower, or even calls into the compiler runtime. */
+
+#ifdef __SIZEOF_INT128__
+__extension__ typedef __int128 __fcxx_int128;
+__extension__ typedef unsigned __int128 __fcxx_uint128;
+#endif
+
+template <size_t _Size, bool = (_Size <= sizeof(unsigned int)), bool = (_Size <= sizeof(unsigned long long))>
+struct __fcxx_charconv_uint {
+    typedef unsigned long long type;
+};
+
+template <size_t _Size, bool _Wide>
+struct __fcxx_charconv_uint<_Size, true, _Wide> {
+    typedef unsigned int type;
+};
+
+#ifdef __SIZEOF_INT128__
+template <size_t _Size>
+struct __fcxx_charconv_uint<_Size, false, false> {
+    typedef __fcxx_uint128 type;
+};
+#endif
+
+/* The types to narrow the arithmetic to, once the value fits in them. */
+template <class _Up>
+struct __fcxx_charconv_narrower {
+    typedef unsigned int type;
+};
+
+#ifdef __SIZEOF_INT128__
+template <>
+struct __fcxx_charconv_narrower<__fcxx_uint128> {
+    typedef unsigned long long type;
+};
+#endif
+
+constexpr char __fcxx_charconv_digit(unsigned int __d) {
+    return "0123456789abcdefghijklmnopqrstuvwxyz"[__d];
+}
+
+/* The two decimal digits of the numbers from 0 to 99, one after the other. */
+constexpr char __fcxx_charconv_pair_digit(unsigned int __i) {
+    return "00010203040506070809101112131415161718192021222324252627282930313233343536373839"
+           "40414243444546474849505152535455565758596061626364656667686970717273747576777879"
+           "8081828384858687888990919293949596979899"[__i];
+}
+
+/* The number of digits of a value, of at least one. The powers of the base
+ * are compared with it until the next one would overflow. */
+template <class _Up>
+constexpr unsigned int __fcxx_to_chars_length(_Up __value, unsigned int __base) {
+    const _Up __limit = static_cast<_Up>(~_Up(0)) / __base;
+    unsigned int __n = 1;
+    _Up __power = __base;
+    while (__value >= __power) {
+        ++__n;
+        if (__power > __limit) {
+            break;
+        }
+        __power *= __base;
+    }
+    return __n;
+}
+
+/* Writes the digits of a value backwards from the end of a range of exactly
+ * their number. */
+constexpr inline void __fcxx_to_chars_write(char* __first, char* __last, unsigned int __value,
+                                                     unsigned int __base) {
+    if (__base == 10) {
+        /* Two digits at a time. */
+        while (__last - __first >= 2) {
+            const unsigned int __pair = __value % 100 * 2;
+            __value /= 100;
+            *--__last = std::__fcxx_charconv_pair_digit(__pair + 1);
+            *--__last = std::__fcxx_charconv_pair_digit(__pair);
+        }
+        if (__last != __first) {
+            *--__last = static_cast<char>('0' + __value);
+        }
+    } else {
+        while (__last != __first) {
+            *--__last = std::__fcxx_charconv_digit(__value % __base);
+            __value /= __base;
+        }
+    }
+}
+
+template <class _Up>
+constexpr void __fcxx_to_chars_write(char* __first, char* __last, _Up __value, unsigned int __base) {
+    typedef typename __fcxx_charconv_narrower<_Up>::type _Np;
+    const _Up __narrow_max = static_cast<_Up>(static_cast<_Np>(~_Np(0)));
+    if (__base == 10) {
+        /* A constant divisor, which the compilers turn into a multiplication. */
+        while (__value > __narrow_max) {
+            *--__last = static_cast<char>('0' + static_cast<unsigned int>(__value % 10));
+            __value /= 10;
+        }
+    } else {
+        while (__value > __narrow_max) {
+            *--__last = std::__fcxx_charconv_digit(static_cast<unsigned int>(__value % __base));
+            __value /= __base;
+        }
+    }
+    std::__fcxx_to_chars_write(__first, __last, static_cast<_Np>(__value), __base);
+}
+
+template <class _Up>
+constexpr to_chars_result __fcxx_to_chars(char* __first, char* __last, bool __negative, _Up __value,
+                                                  int __base) {
+    const unsigned int __ubase = static_cast<unsigned int>(__base);
+    const unsigned int __n = std::__fcxx_to_chars_length(__value, __ubase);
+    if (__last - __first < static_cast<ptrdiff_t>(__n + (__negative ? 1u : 0u))) {
+        return to_chars_result{__last, errc::value_too_large};
+    }
+    if (__negative) {
+        *__first++ = '-';
+    }
+    if ((__ubase & (__ubase - 1)) == 0) {
+        /* The powers of two, with shifts. */
+        unsigned int __shift = 0;
+        while ((1u << __shift) != __ubase) {
+            ++__shift;
+        }
+        for (char* __p = __first + __n; __p != __first; __value >>= __shift) {
+            *--__p = std::__fcxx_charconv_digit(static_cast<unsigned int>(__value) & (__ubase - 1));
+        }
+    } else {
+        std::__fcxx_to_chars_write(__first, __first + __n, __value, __ubase);
+    }
+    return to_chars_result{__first + __n, errc{}};
+}
+
+/* The value of a digit, which is 36 for the characters that are no digit in
+ * any base. */
+constexpr unsigned int __fcxx_from_chars_digit(char __c) {
+    return __c >= '0' && __c <= '9' ? static_cast<unsigned int>(__c - '0')
+         : __c >= 'a' && __c <= 'z' ? static_cast<unsigned int>(__c - 'a' + 10)
+         : __c >= 'A' && __c <= 'Z' ? static_cast<unsigned int>(__c - 'A' + 10)
+         : 36u;
+}
+
+/* Parses the digits at the start of a range as a value of at most __max,
+ * consuming all of them even when the value is too large. */
+template <class _Up>
+constexpr from_chars_result __fcxx_from_chars_digits(const char* __first, const char* __last, _Up& __result,
+                                                             _Up __max, int __base) {
+    const unsigned int __ubase = static_cast<unsigned int>(__base);
+    const _Up __cutoff = __max / __ubase;
+    const unsigned int __cutlim = static_cast<unsigned int>(__max % __ubase);
+    _Up __value = 0;
+    bool __overflow = false;
+    const char* __p = __first;
+    for (; __p != __last; ++__p) {
+        const unsigned int __d = std::__fcxx_from_chars_digit(*__p);
+        if (__d >= __ubase) {
+            break;
+        }
+        if (__value < __cutoff || (__value == __cutoff && __d <= __cutlim)) {
+            __value = __value * __ubase + __d;
+        } else {
+            __overflow = true;
+        }
+    }
+    if (__p == __first) {
+        return from_chars_result{__first, errc::invalid_argument};
+    }
+    if (__overflow) {
+        return from_chars_result{__p, errc::result_out_of_range};
+    }
+    __result = __value;
+    return from_chars_result{__p, errc{}};
+}
+
+template <class _Tp, class _Up>
+constexpr from_chars_result __fcxx_from_chars_unsigned(const char* __first, const char* __last, _Tp& __value,
+                                                               _Up __max, int __base) {
+    _Up __result = 0;
+    const from_chars_result __r = std::__fcxx_from_chars_digits(__first, __last, __result, __max, __base);
+    if (__r.ec == errc{}) {
+        __value = static_cast<_Tp>(__result);
+    }
+    return __r;
+}
+
+/* Only a minus sign may precede the digits of a signed value, whose
+ * magnitude may then be one more than its maximum. */
+template <class _Tp, class _Up>
+constexpr from_chars_result __fcxx_from_chars_signed(const char* __first, const char* __last, _Tp& __value,
+                                                             _Up __max, int __base) {
+    const bool __negative = __first != __last && *__first == '-';
+    _Up __result = 0;
+    from_chars_result __r = std::__fcxx_from_chars_digits(__first + (__negative ? 1 : 0), __last, __result,
+                                                          static_cast<_Up>(__max + (__negative ? 1u : 0u)), __base);
+    if (__r.ec == errc::invalid_argument) {
+        __r.ptr = __first;
+    } else if (__r.ec == errc{}) {
+        if (!__negative) {
+            __value = static_cast<_Tp>(__result);
+        } else if (__result == 0) {
+            __value = 0;
+        } else {
+            __value = static_cast<_Tp>(-static_cast<_Tp>(__result - 1) - 1);
+        }
+    }
+    return __r;
+}
+
+/* [charconv.to.chars] and [charconv.from.chars], the conversions of char and
+ * of the signed and unsigned integer types. */
+
+#define _FCXX_CHARCONV_UNSIGNED(_Tx, _Mx)                                                                            \
+    constexpr to_chars_result to_chars(char* __first, char* __last, _Tx __value, int __base = 10) {          \
+        typedef __fcxx_charconv_uint<sizeof(_Tx)>::type _Up;                                                         \
+        return std::__fcxx_to_chars(__first, __last, false, static_cast<_Up>(__value), __base);                      \
+    }                                                                                                                \
+    constexpr from_chars_result from_chars(const char* __first, const char* __last, _Tx& __value,            \
+                                                   int __base = 10) {                                                \
+        typedef __fcxx_charconv_uint<sizeof(_Tx)>::type _Up;                                                         \
+        return std::__fcxx_from_chars_unsigned(__first, __last, __value, static_cast<_Up>(_Mx), __base);             \
+    }
+
+#define _FCXX_CHARCONV_SIGNED(_Tx, _Mx)                                                                              \
+    constexpr to_chars_result to_chars(char* __first, char* __last, _Tx __value, int __base = 10) {          \
+        typedef __fcxx_charconv_uint<sizeof(_Tx)>::type _Up;                                                         \
+        return std::__fcxx_to_chars(__first, __last, __value < 0,                                                    \
+                                    __value < 0 ? static_cast<_Up>(static_cast<_Up>(-(__value + 1)) + 1u)            \
+                                                : static_cast<_Up>(__value),                                         \
+                                    __base);                                                                         \
+    }                                                                                                                \
+    constexpr from_chars_result from_chars(const char* __first, const char* __last, _Tx& __value,            \
+                                                   int __base = 10) {                                                \
+        typedef __fcxx_charconv_uint<sizeof(_Tx)>::type _Up;                                                         \
+        return std::__fcxx_from_chars_signed(__first, __last, __value, static_cast<_Up>(_Mx), __base);               \
+    }
+
+#ifdef __CHAR_UNSIGNED__
+_FCXX_CHARCONV_UNSIGNED(char, __SCHAR_MAX__ * 2u + 1u)
+#else
+_FCXX_CHARCONV_SIGNED(char, __SCHAR_MAX__)
+#endif
+_FCXX_CHARCONV_SIGNED(signed char, __SCHAR_MAX__)
+_FCXX_CHARCONV_UNSIGNED(unsigned char, __SCHAR_MAX__ * 2u + 1u)
+_FCXX_CHARCONV_SIGNED(short, __SHRT_MAX__)
+_FCXX_CHARCONV_UNSIGNED(unsigned short, __SHRT_MAX__ * 2u + 1u)
+_FCXX_CHARCONV_SIGNED(int, __INT_MAX__)
+_FCXX_CHARCONV_UNSIGNED(unsigned int, __INT_MAX__ * 2u + 1u)
+_FCXX_CHARCONV_SIGNED(long, __LONG_MAX__)
+_FCXX_CHARCONV_UNSIGNED(unsigned long, __LONG_MAX__ * 2ul + 1ul)
+_FCXX_CHARCONV_SIGNED(long long, __LONG_LONG_MAX__)
+_FCXX_CHARCONV_UNSIGNED(unsigned long long, __LONG_LONG_MAX__ * 2ull + 1ull)
+#ifdef __SIZEOF_INT128__
+_FCXX_CHARCONV_SIGNED(__fcxx_int128, static_cast<__fcxx_uint128>(~__fcxx_uint128(0)) >> 1)
+_FCXX_CHARCONV_UNSIGNED(__fcxx_uint128, ~__fcxx_uint128(0))
+#endif
+
+#undef _FCXX_CHARCONV_UNSIGNED
+#undef _FCXX_CHARCONV_SIGNED
+
+to_chars_result to_chars(char* __first, char* __last, bool __value, int __base = 10) = delete;
+
+/* The conversions of the floating-point types, which are freestanding
+ * deleted functions. Those of the extended floating-point types exist from
+ * C++23 on. */
+
+#define _FCXX_CHARCONV_DELETED(_Tx)                                                                                  \
+    to_chars_result to_chars(char* __first, char* __last, _Tx __value) = delete;                                     \
+    to_chars_result to_chars(char* __first, char* __last, _Tx __value, chars_format __fmt) = delete;                 \
+    to_chars_result to_chars(char* __first, char* __last, _Tx __value, chars_format __fmt, int __precision)          \
+        = delete;                                                                                                    \
+    from_chars_result from_chars(const char* __first, const char* __last, _Tx& __value,                              \
+                                 chars_format __fmt = chars_format::general) = delete;
+
+_FCXX_CHARCONV_DELETED(float)
+_FCXX_CHARCONV_DELETED(double)
+_FCXX_CHARCONV_DELETED(long double)
+#ifdef __STDCPP_FLOAT16_T__
+_FCXX_CHARCONV_DELETED(_Float16)
+#endif
+#ifdef __STDCPP_FLOAT32_T__
+_FCXX_CHARCONV_DELETED(_Float32)
+#endif
+#ifdef __STDCPP_FLOAT64_T__
+_FCXX_CHARCONV_DELETED(_Float64)
+#endif
+#ifdef __STDCPP_FLOAT128_T__
+_FCXX_CHARCONV_DELETED(_Float128)
+#endif
+#ifdef __STDCPP_BFLOAT16_T__
+_FCXX_CHARCONV_DELETED(__bf16)
+#endif
+
+#undef _FCXX_CHARCONV_DELETED
+
+} /* namespace std */
+
+#endif
+
+#endif

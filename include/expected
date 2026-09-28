@@ -1,0 +1,1387 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_EXPECTED
+#define __FREESTANDING_CXX_HDRS_EXPECTED 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2026
+#  error "<expected> is not a freestanding header before C++26"
+#endif
+
+#define _FCXX_VERSION_EXPECTED
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_EXPECTED
+
+#if _FCXX_STD >= 2026
+
+#include <concepts>
+#include <initializer_list>
+#include <type_traits>
+#include <utility>
+#include <__fcxx/addressof.h>
+#include <__fcxx/comparison_constraints.h>
+#include <__fcxx/construct_at.h>
+#include <__fcxx/converts_from_any_cvref.h>
+#include <__fcxx/exception.h>
+#include <__fcxx/special_members.h>
+
+/* The members of the exception classes are constexpr from C++26 on. */
+
+/* The equality operators are constrained from C++26 on. */
+
+namespace std {
+
+/* [expected.unexpected], class template unexpected */
+
+template <class _Ep>
+class unexpected;
+
+template <class _Tp>
+struct __fcxx_is_unexpected : false_type {};
+
+template <class _Ep>
+struct __fcxx_is_unexpected<unexpected<_Ep> > : true_type {};
+
+/* A valid template argument for unexpected: an object type other than an
+ * array or unexpected, without cv-qualifiers. */
+template <class _Ep>
+struct __fcxx_unexpected_valid
+    : __fcxx_bool_constant<is_object<_Ep>::value && !is_array<_Ep>::value && !__fcxx_is_unexpected<_Ep>::value
+                           && !is_const<_Ep>::value && !is_volatile<_Ep>::value> {};
+
+template <class _Ep>
+class unexpected {
+    static_assert(__fcxx_unexpected_valid<_Ep>::value,
+                  "std::unexpected of a type other than an object type without cv-qualifiers that is no array or "
+                  "std::unexpected");
+
+public:
+    /* [expected.un.cons], constructors */
+
+    unexpected(const unexpected&) = default;
+    unexpected(unexpected&&) = default;
+
+    template <class _Err = _Ep>
+        requires (!is_same<__fcxx_remove_cvref_t<_Err>, unexpected>::value
+                  && !is_same<__fcxx_remove_cvref_t<_Err>, in_place_t>::value && is_constructible<_Ep, _Err>::value)
+    constexpr explicit unexpected(_Err&& __e) : __unex(std::forward<_Err>(__e)) {}
+
+    template <class... _Args>
+        requires is_constructible<_Ep, _Args...>::value
+    constexpr explicit unexpected(in_place_t, _Args&&... __args) : __unex(std::forward<_Args>(__args)...) {}
+
+    template <class _Up, class... _Args>
+        requires is_constructible<_Ep, initializer_list<_Up>&, _Args...>::value
+    constexpr explicit unexpected(in_place_t, initializer_list<_Up> __il, _Args&&... __args)
+        : __unex(__il, std::forward<_Args>(__args)...) {}
+
+    unexpected& operator=(const unexpected&) = default;
+    unexpected& operator=(unexpected&&) = default;
+
+    /* [expected.un.obs], observers */
+
+    constexpr const _Ep& error() const& noexcept {
+        return __unex;
+    }
+
+    constexpr _Ep& error() & noexcept {
+        return __unex;
+    }
+
+    constexpr const _Ep&& error() const&& noexcept {
+        return std::move(__unex);
+    }
+
+    constexpr _Ep&& error() && noexcept {
+        return std::move(__unex);
+    }
+
+    /* [expected.un.swap], swap */
+
+    constexpr void swap(unexpected& __other) noexcept(__fcxx_is_nothrow_swappable<_Ep>::value) {
+        static_assert(__fcxx_is_swappable<_Ep>::value, "std::unexpected::swap of an error that cannot be swapped");
+        using std::swap;
+        swap(__unex, __other.__unex);
+    }
+
+    friend constexpr void swap(unexpected& __x, unexpected& __y) noexcept(noexcept(__x.swap(__y)))
+        requires __fcxx_is_swappable<_Ep>::value
+    {
+        __x.swap(__y);
+    }
+
+    /* [expected.un.eq], equality operator */
+
+    template <class _E2>
+    friend constexpr bool operator==(const unexpected& __x, const unexpected<_E2>& __y) {
+        return __x.error() == __y.error();
+    }
+
+private:
+    _Ep __unex;
+};
+
+template <class _Ep>
+unexpected(_Ep) -> unexpected<_Ep>;
+
+/* [expected.bad], class template bad_expected_access, whose members are all
+ * defined here, as no C++ runtime defines them */
+
+template <class _Ep>
+class bad_expected_access;
+
+template <>
+class bad_expected_access<void> : public exception {
+protected:
+    constexpr bad_expected_access() noexcept {}
+    constexpr bad_expected_access(const bad_expected_access&) noexcept = default;
+    constexpr bad_expected_access(bad_expected_access&&) noexcept = default;
+    constexpr bad_expected_access& operator=(const bad_expected_access&) noexcept = default;
+    constexpr bad_expected_access& operator=(bad_expected_access&&) noexcept = default;
+    constexpr ~bad_expected_access() = default;
+
+public:
+    constexpr const char* what() const noexcept override {
+        return "std::bad_expected_access";
+    }
+};
+
+template <class _Ep>
+class bad_expected_access : public bad_expected_access<void> {
+public:
+    constexpr explicit bad_expected_access(_Ep __e) : __unex(std::move(__e)) {}
+
+    constexpr const char* what() const noexcept override {
+        return "std::bad_expected_access";
+    }
+
+    constexpr _Ep& error() & noexcept {
+        return __unex;
+    }
+
+    constexpr const _Ep& error() const& noexcept {
+        return __unex;
+    }
+
+    constexpr _Ep&& error() && noexcept {
+        return std::move(__unex);
+    }
+
+    constexpr const _Ep&& error() const&& noexcept {
+        return std::move(__unex);
+    }
+
+private:
+    _Ep __unex;
+};
+
+/* in-place construction of unexpected values */
+
+struct unexpect_t {
+    explicit unexpect_t() = default;
+};
+
+inline constexpr unexpect_t unexpect{};
+
+/* [expected.expected], class template expected */
+
+template <class _Tp, class _Ep>
+class expected;
+
+template <class _Tp>
+struct __fcxx_is_expected : false_type {};
+
+template <class _Tp, class _Ep>
+struct __fcxx_is_expected<expected<_Tp, _Ep> > : true_type {};
+
+/* A valid value type for expected: void, or an object type other than an
+ * array, in_place_t, unexpect_t or unexpected, with any cv-qualifiers. */
+template <class _Tp>
+struct __fcxx_expected_valid
+    : __fcxx_bool_constant<is_void<_Tp>::value
+                           || (is_object<_Tp>::value && !is_array<_Tp>::value
+                               && !is_same<__fcxx_remove_cv_t<_Tp>, in_place_t>::value
+                               && !is_same<__fcxx_remove_cv_t<_Tp>, unexpect_t>::value
+                               && !__fcxx_is_unexpected<__fcxx_remove_cv_t<_Tp> >::value)> {};
+
+/* The tags of the constructors that hold the result of calling a function,
+ * as the value or the error, for transform and transform_error. */
+struct __fcxx_expected_value_tag {
+    explicit __fcxx_expected_value_tag() = default;
+};
+
+struct __fcxx_expected_error_tag {
+    explicit __fcxx_expected_error_tag() = default;
+};
+
+/* The tag of the constructors from another expected. */
+struct __fcxx_expected_convert_tag {
+    explicit __fcxx_expected_convert_tag() = default;
+};
+
+/* The value and the error, whose destructor is trivial where theirs are.
+ * The value of expected<void, E> is an empty object. */
+template <class _Vp, class _Ep, bool = is_trivially_destructible<_Vp>::value && is_trivially_destructible<_Ep>::value>
+union __fcxx_expected_union {
+    __fcxx_union_empty __empty;
+    _Vp __val;
+    _Ep __unex;
+
+    constexpr __fcxx_expected_union() noexcept : __empty() {}
+
+    template <class... _Args>
+    constexpr explicit __fcxx_expected_union(in_place_t, _Args&&... __args) : __val(std::forward<_Args>(__args)...) {}
+
+    template <class... _Args>
+    constexpr explicit __fcxx_expected_union(unexpect_t, _Args&&... __args) : __unex(std::forward<_Args>(__args)...) {}
+
+    template <class _Fp, class... _Args>
+    constexpr __fcxx_expected_union(__fcxx_expected_value_tag, _Fp&& __f, _Args&&... __args)
+        : __val(std::__fcxx_invoke(std::forward<_Fp>(__f), std::forward<_Args>(__args)...)) {}
+
+    template <class _Fp, class... _Args>
+    constexpr __fcxx_expected_union(__fcxx_expected_error_tag, _Fp&& __f, _Args&&... __args)
+        : __unex(std::__fcxx_invoke(std::forward<_Fp>(__f), std::forward<_Args>(__args)...)) {}
+};
+
+template <class _Vp, class _Ep>
+union __fcxx_expected_union<_Vp, _Ep, false> {
+    __fcxx_union_empty __empty;
+    _Vp __val;
+    _Ep __unex;
+
+    constexpr __fcxx_expected_union() noexcept : __empty() {}
+
+    template <class... _Args>
+    constexpr explicit __fcxx_expected_union(in_place_t, _Args&&... __args) : __val(std::forward<_Args>(__args)...) {}
+
+    template <class... _Args>
+    constexpr explicit __fcxx_expected_union(unexpect_t, _Args&&... __args) : __unex(std::forward<_Args>(__args)...) {}
+
+    template <class _Fp, class... _Args>
+    constexpr __fcxx_expected_union(__fcxx_expected_value_tag, _Fp&& __f, _Args&&... __args)
+        : __val(std::__fcxx_invoke(std::forward<_Fp>(__f), std::forward<_Args>(__args)...)) {}
+
+    template <class _Fp, class... _Args>
+    constexpr __fcxx_expected_union(__fcxx_expected_error_tag, _Fp&& __f, _Args&&... __args)
+        : __unex(std::__fcxx_invoke(std::forward<_Fp>(__f), std::forward<_Args>(__args)...)) {}
+
+    __fcxx_expected_union(const __fcxx_expected_union&) = default;
+    __fcxx_expected_union(__fcxx_expected_union&&) = default;
+    __fcxx_expected_union& operator=(const __fcxx_expected_union&) = default;
+    __fcxx_expected_union& operator=(__fcxx_expected_union&&) = default;
+
+    constexpr ~__fcxx_expected_union() {}
+};
+
+/* reinit-expected, which replaces the value by the error or the reverse,
+ * keeping the old one where constructing the new one may throw and moving it
+ * may not. The empty value of expected<void, E> is replaced by an error
+ * constructed in its place, as the standard has it, rather than through a
+ * temporary, and restored if that throws. */
+template <class _Tp, class _Up, class... _Args>
+constexpr void __fcxx_reinit_expected(_Tp& __newval, _Up& __oldval, _Args&&... __args) {
+    if constexpr (is_nothrow_constructible<_Tp, _Args...>::value) {
+        std::destroy_at(std::addressof(__oldval));
+        std::construct_at(std::addressof(__newval), std::forward<_Args>(__args)...);
+    } else if constexpr (is_nothrow_move_constructible<_Tp>::value && !is_same<_Up, __fcxx_union_empty>::value) {
+        _Tp __tmp(std::forward<_Args>(__args)...);
+        std::destroy_at(std::addressof(__oldval));
+        std::construct_at(std::addressof(__newval), std::move(__tmp));
+    } else {
+#if _FCXX_HAS_EXCEPTIONS
+        _Up __tmp(std::move(__oldval));
+        std::destroy_at(std::addressof(__oldval));
+        try {
+            std::construct_at(std::addressof(__newval), std::forward<_Args>(__args)...);
+        } catch (...) {
+            std::construct_at(std::addressof(__oldval), std::move(__tmp));
+            throw;
+        }
+#else
+        std::destroy_at(std::addressof(__oldval));
+        std::construct_at(std::addressof(__newval), std::forward<_Args>(__args)...);
+#endif
+    }
+}
+
+/* What expected holds, and what it does with it. */
+template <class _Vp, class _Ep>
+struct __fcxx_expected_payload {
+    __fcxx_expected_union<_Vp, _Ep> __u;
+    bool __has_val;
+
+    template <class... _Args>
+    constexpr explicit __fcxx_expected_payload(in_place_t __tag, _Args&&... __args)
+        : __u(__tag, std::forward<_Args>(__args)...), __has_val(true) {}
+
+    template <class... _Args>
+    constexpr explicit __fcxx_expected_payload(unexpect_t __tag, _Args&&... __args)
+        : __u(__tag, std::forward<_Args>(__args)...), __has_val(false) {}
+
+    template <class _Fp, class... _Args>
+    constexpr __fcxx_expected_payload(__fcxx_expected_value_tag __tag, _Fp&& __f, _Args&&... __args)
+        : __u(__tag, std::forward<_Fp>(__f), std::forward<_Args>(__args)...), __has_val(true) {}
+
+    template <class _Fp, class... _Args>
+    constexpr __fcxx_expected_payload(__fcxx_expected_error_tag __tag, _Fp&& __f, _Args&&... __args)
+        : __u(__tag, std::forward<_Fp>(__f), std::forward<_Args>(__args)...), __has_val(false) {}
+
+    /* From another expected, of which the value is only taken where this
+     * one has a value other than void. */
+    template <class _Other>
+    constexpr __fcxx_expected_payload(__fcxx_expected_convert_tag, _Other&& __rhs)
+        : __u(), __has_val(__rhs.has_value()) {
+        if (__has_val) {
+            if constexpr (is_same<_Vp, __fcxx_union_empty>::value) {
+                std::construct_at(std::addressof(__u.__val));
+            } else {
+                std::construct_at(std::addressof(__u.__val), *std::forward<_Other>(__rhs));
+            }
+        } else {
+            std::construct_at(std::addressof(__u.__unex), std::forward<_Other>(__rhs).error());
+        }
+    }
+
+    constexpr void __destroy() noexcept {
+        if (__has_val) {
+            std::destroy_at(std::addressof(__u.__val));
+        } else {
+            std::destroy_at(std::addressof(__u.__unex));
+        }
+    }
+
+    /* The copy and move constructors and assignment operators. */
+    constexpr __fcxx_expected_payload(__fcxx_smf_construct_tag, const __fcxx_expected_payload& __rhs)
+        : __u(), __has_val(__rhs.__has_val) {
+        if (__has_val) {
+            std::construct_at(std::addressof(__u.__val), __rhs.__u.__val);
+        } else {
+            std::construct_at(std::addressof(__u.__unex), __rhs.__u.__unex);
+        }
+    }
+
+    constexpr __fcxx_expected_payload(__fcxx_smf_construct_tag, __fcxx_expected_payload&& __rhs)
+        noexcept(is_nothrow_move_constructible<_Vp>::value && is_nothrow_move_constructible<_Ep>::value)
+        : __u(), __has_val(__rhs.__has_val) {
+        if (__has_val) {
+            std::construct_at(std::addressof(__u.__val), std::move(__rhs.__u.__val));
+        } else {
+            std::construct_at(std::addressof(__u.__unex), std::move(__rhs.__u.__unex));
+        }
+    }
+
+    constexpr void __fcxx_assign_from(const __fcxx_expected_payload& __rhs) {
+        if (__has_val && __rhs.__has_val) {
+            __u.__val = __rhs.__u.__val;
+        } else if (__has_val) {
+            std::__fcxx_reinit_expected(__u.__unex, __u.__val, __rhs.__u.__unex);
+        } else if (__rhs.__has_val) {
+            std::__fcxx_reinit_expected(__u.__val, __u.__unex, __rhs.__u.__val);
+        } else {
+            __u.__unex = __rhs.__u.__unex;
+        }
+        __has_val = __rhs.__has_val;
+    }
+
+    constexpr void __fcxx_assign_from(__fcxx_expected_payload&& __rhs)
+        noexcept(is_nothrow_move_assignable<_Vp>::value && is_nothrow_move_constructible<_Vp>::value
+                 && is_nothrow_move_assignable<_Ep>::value && is_nothrow_move_constructible<_Ep>::value) {
+        if (__has_val && __rhs.__has_val) {
+            __u.__val = std::move(__rhs.__u.__val);
+        } else if (__has_val) {
+            std::__fcxx_reinit_expected(__u.__unex, __u.__val, std::move(__rhs.__u.__unex));
+        } else if (__rhs.__has_val) {
+            std::__fcxx_reinit_expected(__u.__val, __u.__unex, std::move(__rhs.__u.__val));
+        } else {
+            __u.__unex = std::move(__rhs.__u.__unex);
+        }
+        __has_val = __rhs.__has_val;
+    }
+};
+
+template <class _Vp, class _Ep, bool = is_trivially_destructible<_Vp>::value && is_trivially_destructible<_Ep>::value>
+struct __fcxx_expected_storage : __fcxx_expected_payload<_Vp, _Ep> {
+    using __fcxx_expected_payload<_Vp, _Ep>::__fcxx_expected_payload;
+};
+
+template <class _Vp, class _Ep>
+struct __fcxx_expected_storage<_Vp, _Ep, false> : __fcxx_expected_payload<_Vp, _Ep> {
+    using __fcxx_expected_payload<_Vp, _Ep>::__fcxx_expected_payload;
+
+    __fcxx_expected_storage(const __fcxx_expected_storage&) = default;
+    __fcxx_expected_storage(__fcxx_expected_storage&&) = default;
+    __fcxx_expected_storage& operator=(const __fcxx_expected_storage&) = default;
+    __fcxx_expected_storage& operator=(__fcxx_expected_storage&&) = default;
+
+    constexpr ~__fcxx_expected_storage() {
+        this->__destroy();
+    }
+};
+
+/* The base class of expected, with its copy and move constructors and
+ * assignment operators, from the traits of the value type, or of an empty
+ * type for void, and of the error type. */
+template <class _Tp, class _Ep>
+struct __fcxx_expected_smf {
+    typedef __fcxx_smf<
+        __fcxx_expected_storage<__fcxx_remove_cv_t<_Tp>, _Ep>,
+        __fcxx_smf_select<is_copy_constructible<_Tp>::value && is_copy_constructible<_Ep>::value,
+                          is_trivially_copy_constructible<_Tp>::value && is_trivially_copy_constructible<_Ep>::value,
+                          __fcxx_smf_deleted>::value,
+        __fcxx_smf_select<is_move_constructible<_Tp>::value && is_move_constructible<_Ep>::value,
+                          is_trivially_move_constructible<_Tp>::value && is_trivially_move_constructible<_Ep>::value,
+                          __fcxx_smf_absent>::value,
+        __fcxx_smf_select<is_copy_assignable<_Tp>::value && is_copy_constructible<_Tp>::value
+                              && is_copy_assignable<_Ep>::value && is_copy_constructible<_Ep>::value
+                              && (is_nothrow_move_constructible<_Tp>::value
+                                  || is_nothrow_move_constructible<_Ep>::value),
+                          is_trivially_copy_constructible<_Tp>::value && is_trivially_copy_assignable<_Tp>::value
+                              && is_trivially_destructible<_Tp>::value
+                              && is_trivially_copy_constructible<_Ep>::value
+                              && is_trivially_copy_assignable<_Ep>::value && is_trivially_destructible<_Ep>::value,
+                          __fcxx_smf_deleted>::value,
+        __fcxx_smf_select<is_move_constructible<_Tp>::value && is_move_assignable<_Tp>::value
+                              && is_move_constructible<_Ep>::value && is_move_assignable<_Ep>::value
+                              && (is_nothrow_move_constructible<_Tp>::value
+                                  || is_nothrow_move_constructible<_Ep>::value),
+                          is_trivially_move_constructible<_Tp>::value && is_trivially_move_assignable<_Tp>::value
+                              && is_trivially_destructible<_Tp>::value
+                              && is_trivially_move_constructible<_Ep>::value
+                              && is_trivially_move_assignable<_Ep>::value && is_trivially_destructible<_Ep>::value,
+                          __fcxx_smf_absent>::value>
+        type;
+};
+
+struct __fcxx_expected_invalid {};
+
+template <class _Tp, class _Ep>
+using __fcxx_expected_base_t
+    = typename __fcxx_conditional_t<__fcxx_expected_valid<_Tp>::value && __fcxx_unexpected_valid<_Ep>::value,
+                                    __fcxx_expected_smf<
+                                        __fcxx_conditional_t<is_void<_Tp>::value, __fcxx_union_empty, _Tp>, _Ep>,
+                                    __fcxx_type_identity<__fcxx_expected_invalid> >::type;
+
+/* The constraints of the constructors from another expected, of which the
+ * value is only looked at for a value type other than void. */
+template <class _Tp, class _Ep, class _Up, class _Gp, class _Uf, class _Gf>
+concept __fcxx_expected_from_other
+    = (is_void<_Tp>::value ? is_void<_Up>::value : is_constructible<_Tp, _Uf>::value)
+      && is_constructible<_Ep, _Gf>::value
+      && (is_void<_Tp>::value || is_same<__fcxx_remove_cv_t<_Tp>, bool>::value
+          || !__fcxx_converts_from_any_cvref<_Tp, expected<_Up, _Gp> >::value)
+      && !is_constructible<unexpected<_Ep>, expected<_Up, _Gp>&>::value
+      && !is_constructible<unexpected<_Ep>, expected<_Up, _Gp> >::value
+      && !is_constructible<unexpected<_Ep>, const expected<_Up, _Gp>&>::value
+      && !is_constructible<unexpected<_Ep>, const expected<_Up, _Gp> >::value;
+
+template <class _Tp, class _Ep, class _Up>
+concept __fcxx_expected_from_value
+    = !is_same<__fcxx_remove_cvref_t<_Up>, in_place_t>::value
+      && !is_same<__fcxx_remove_cvref_t<_Up>, expected<_Tp, _Ep> >::value
+      && !is_same<__fcxx_remove_cvref_t<_Up>, unexpect_t>::value
+      && !__fcxx_is_unexpected<__fcxx_remove_cvref_t<_Up> >::value && is_constructible<_Tp, _Up>::value
+      && (!is_same<__fcxx_remove_cv_t<_Tp>, bool>::value || !__fcxx_is_expected<__fcxx_remove_cvref_t<_Up> >::value);
+
+template <class _Tp, class _Ep>
+class expected : private __fcxx_expected_base_t<_Tp, _Ep> {
+    typedef __fcxx_expected_base_t<_Tp, _Ep> _Base;
+
+    static_assert(__fcxx_expected_valid<_Tp>::value, "std::expected of a value type it cannot hold");
+    static_assert(__fcxx_unexpected_valid<_Ep>::value, "std::expected of an error type std::unexpected cannot hold");
+
+    template <class, class>
+    friend class expected;
+
+    /* The default template argument of the converting constructor and
+     * assignment operator, and of value_or, and the type of the value as
+     * the monadic operations use it, which is that without cv-qualifiers
+     * from C++26 on. */
+    typedef __fcxx_remove_cv_t<_Tp> _Dp;
+    typedef __fcxx_remove_cv_t<_Tp> _Access;
+
+    static constexpr bool __swappable = __fcxx_is_swappable<_Tp>::value && __fcxx_is_swappable<_Ep>::value
+                                        && is_move_constructible<_Tp>::value && is_move_constructible<_Ep>::value
+                                        && (is_nothrow_move_constructible<_Tp>::value
+                                            || is_nothrow_move_constructible<_Ep>::value);
+
+public:
+    using value_type = _Tp;
+    using error_type = _Ep;
+    using unexpected_type = unexpected<_Ep>;
+
+    template <class _Up>
+    using rebind = expected<_Up, error_type>;
+
+    /* [expected.object.cons], constructors */
+
+    constexpr expected()
+        requires is_default_constructible<_Tp>::value
+        : _Base(in_place_t()) {}
+
+    expected(const expected&) = default;
+    expected(expected&&) = default;
+
+    template <class _Up, class _Gp>
+        requires __fcxx_expected_from_other<_Tp, _Ep, _Up, _Gp, typename add_lvalue_reference<const _Up>::type,
+                                            const _Gp&>
+    constexpr explicit(!is_convertible<const _Up&, _Tp>::value || !is_convertible<const _Gp&, _Ep>::value)
+        expected(const expected<_Up, _Gp>& __rhs)
+        : _Base(__fcxx_expected_convert_tag(), __rhs) {}
+
+    template <class _Up, class _Gp>
+        requires __fcxx_expected_from_other<_Tp, _Ep, _Up, _Gp, _Up, _Gp>
+    constexpr explicit(!is_convertible<_Up, _Tp>::value || !is_convertible<_Gp, _Ep>::value)
+        expected(expected<_Up, _Gp>&& __rhs)
+        : _Base(__fcxx_expected_convert_tag(), std::move(__rhs)) {}
+
+    template <class _Up = _Dp>
+        requires __fcxx_expected_from_value<_Tp, _Ep, _Up>
+    constexpr explicit(!is_convertible<_Up, _Tp>::value) expected(_Up&& __v)
+        : _Base(in_place_t(), std::forward<_Up>(__v)) {}
+
+    template <class _Gp>
+        requires is_constructible<_Ep, const _Gp&>::value
+    constexpr explicit(!is_convertible<const _Gp&, _Ep>::value) expected(const unexpected<_Gp>& __e)
+        : _Base(unexpect_t(), __e.error()) {}
+
+    template <class _Gp>
+        requires is_constructible<_Ep, _Gp>::value
+    constexpr explicit(!is_convertible<_Gp, _Ep>::value) expected(unexpected<_Gp>&& __e)
+        : _Base(unexpect_t(), std::move(__e).error()) {}
+
+    template <class... _Args>
+        requires is_constructible<_Tp, _Args...>::value
+    constexpr explicit expected(in_place_t __tag, _Args&&... __args) : _Base(__tag, std::forward<_Args>(__args)...) {}
+
+    template <class _Up, class... _Args>
+        requires is_constructible<_Tp, initializer_list<_Up>&, _Args...>::value
+    constexpr explicit expected(in_place_t __tag, initializer_list<_Up> __il, _Args&&... __args)
+        : _Base(__tag, __il, std::forward<_Args>(__args)...) {}
+
+    template <class... _Args>
+        requires is_constructible<_Ep, _Args...>::value
+    constexpr explicit expected(unexpect_t __tag, _Args&&... __args) : _Base(__tag, std::forward<_Args>(__args)...) {}
+
+    template <class _Up, class... _Args>
+        requires is_constructible<_Ep, initializer_list<_Up>&, _Args...>::value
+    constexpr explicit expected(unexpect_t __tag, initializer_list<_Up> __il, _Args&&... __args)
+        : _Base(__tag, __il, std::forward<_Args>(__args)...) {}
+
+    /* [expected.object.assign], assignment */
+
+    expected& operator=(const expected&) = default;
+    expected& operator=(expected&&) = default;
+
+    template <class _Up = _Dp>
+        requires (!is_same<expected, __fcxx_remove_cvref_t<_Up> >::value
+                  && !__fcxx_is_unexpected<__fcxx_remove_cvref_t<_Up> >::value && is_constructible<_Tp, _Up>::value
+                  && is_assignable<_Tp&, _Up>::value
+                  && (is_nothrow_constructible<_Tp, _Up>::value || is_nothrow_move_constructible<_Tp>::value
+                      || is_nothrow_move_constructible<_Ep>::value))
+    constexpr expected& operator=(_Up&& __v) {
+        if (this->__has_val) {
+            this->__u.__val = std::forward<_Up>(__v);
+        } else {
+            std::__fcxx_reinit_expected(this->__u.__val, this->__u.__unex, std::forward<_Up>(__v));
+            this->__has_val = true;
+        }
+        return *this;
+    }
+
+    template <class _Gp>
+        requires (is_constructible<_Ep, const _Gp&>::value && is_assignable<_Ep&, const _Gp&>::value
+                  && (is_nothrow_constructible<_Ep, const _Gp&>::value || is_nothrow_move_constructible<_Tp>::value
+                      || is_nothrow_move_constructible<_Ep>::value))
+    constexpr expected& operator=(const unexpected<_Gp>& __e) {
+        if (this->__has_val) {
+            std::__fcxx_reinit_expected(this->__u.__unex, this->__u.__val, __e.error());
+            this->__has_val = false;
+        } else {
+            this->__u.__unex = __e.error();
+        }
+        return *this;
+    }
+
+    template <class _Gp>
+        requires (is_constructible<_Ep, _Gp>::value && is_assignable<_Ep&, _Gp>::value
+                  && (is_nothrow_constructible<_Ep, _Gp>::value || is_nothrow_move_constructible<_Tp>::value
+                      || is_nothrow_move_constructible<_Ep>::value))
+    constexpr expected& operator=(unexpected<_Gp>&& __e) {
+        if (this->__has_val) {
+            std::__fcxx_reinit_expected(this->__u.__unex, this->__u.__val, std::move(__e).error());
+            this->__has_val = false;
+        } else {
+            this->__u.__unex = std::move(__e).error();
+        }
+        return *this;
+    }
+
+    template <class... _Args>
+        requires is_nothrow_constructible<_Tp, _Args...>::value
+    constexpr _Tp& emplace(_Args&&... __args) noexcept {
+        this->__destroy();
+        this->__has_val = true;
+        return *std::construct_at(std::addressof(this->__u.__val), std::forward<_Args>(__args)...);
+    }
+
+    template <class _Up, class... _Args>
+        requires is_nothrow_constructible<_Tp, initializer_list<_Up>&, _Args...>::value
+    constexpr _Tp& emplace(initializer_list<_Up> __il, _Args&&... __args) noexcept {
+        this->__destroy();
+        this->__has_val = true;
+        return *std::construct_at(std::addressof(this->__u.__val), __il, std::forward<_Args>(__args)...);
+    }
+
+    /* [expected.object.swap], swap */
+
+    constexpr void swap(expected& __rhs)
+        noexcept(is_nothrow_move_constructible<_Tp>::value && __fcxx_is_nothrow_swappable<_Tp>::value
+                 && is_nothrow_move_constructible<_Ep>::value && __fcxx_is_nothrow_swappable<_Ep>::value)
+        requires __swappable
+    {
+        if (this->__has_val && __rhs.__has_val) {
+            using std::swap;
+            swap(this->__u.__val, __rhs.__u.__val);
+        } else if (!this->__has_val && !__rhs.__has_val) {
+            using std::swap;
+            swap(this->__u.__unex, __rhs.__u.__unex);
+        } else if (!this->__has_val) {
+            __rhs.swap(*this);
+        } else {
+            __swap_value_error(__rhs);
+        }
+    }
+
+    /* Constrained as the member is, lest the exception specification be
+     * ill-formed. */
+    friend constexpr void swap(expected& __x, expected& __y) noexcept(noexcept(__x.swap(__y)))
+        requires __swappable
+    {
+        __x.swap(__y);
+    }
+
+    /* [expected.object.obs], observers */
+
+    constexpr const _Tp* operator->() const noexcept {
+        return std::addressof(this->__u.__val);
+    }
+
+    constexpr _Tp* operator->() noexcept {
+        return std::addressof(this->__u.__val);
+    }
+
+    constexpr const _Tp& operator*() const& noexcept {
+        return this->__u.__val;
+    }
+
+    constexpr _Tp& operator*() & noexcept {
+        return this->__u.__val;
+    }
+
+    constexpr const _Tp&& operator*() const&& noexcept {
+        return std::move(this->__u.__val);
+    }
+
+    constexpr _Tp&& operator*() && noexcept {
+        return std::move(this->__u.__val);
+    }
+
+    constexpr explicit operator bool() const noexcept {
+        return this->__has_val;
+    }
+
+    constexpr bool has_value() const noexcept {
+        return this->__has_val;
+    }
+
+    /* freestanding-deleted */
+    constexpr const _Tp& value() const& = delete;
+    constexpr _Tp& value() & = delete;
+    constexpr const _Tp&& value() const&& = delete;
+    constexpr _Tp&& value() && = delete;
+
+    constexpr const _Ep& error() const& noexcept {
+        return this->__u.__unex;
+    }
+
+    constexpr _Ep& error() & noexcept {
+        return this->__u.__unex;
+    }
+
+    constexpr const _Ep&& error() const&& noexcept {
+        return std::move(this->__u.__unex);
+    }
+
+    constexpr _Ep&& error() && noexcept {
+        return std::move(this->__u.__unex);
+    }
+
+    template <class _Up = _Dp>
+    constexpr _Tp value_or(_Up&& __v) const& {
+        static_assert(is_copy_constructible<_Tp>::value && is_convertible<_Up, _Tp>::value,
+                      "std::expected::value_or of a value that cannot be copied or converted to");
+        if (this->__has_val) {
+            return this->__u.__val;
+        }
+        return static_cast<_Tp>(std::forward<_Up>(__v));
+    }
+
+    template <class _Up = _Dp>
+    constexpr _Tp value_or(_Up&& __v) && {
+        static_assert(is_move_constructible<_Tp>::value && is_convertible<_Up, _Tp>::value,
+                      "std::expected::value_or of a value that cannot be moved or converted to");
+        if (this->__has_val) {
+            return std::move(static_cast<_Access&>(this->__u.__val));
+        }
+        return static_cast<_Tp>(std::forward<_Up>(__v));
+    }
+
+    template <class _Gp = _Ep>
+    constexpr _Ep error_or(_Gp&& __e) const& {
+        static_assert(is_copy_constructible<_Ep>::value && is_convertible<_Gp, _Ep>::value,
+                      "std::expected::error_or of an error that cannot be copied or converted to");
+        if (this->__has_val) {
+            return std::forward<_Gp>(__e);
+        }
+        return this->__u.__unex;
+    }
+
+    template <class _Gp = _Ep>
+    constexpr _Ep error_or(_Gp&& __e) && {
+        static_assert(is_move_constructible<_Ep>::value && is_convertible<_Gp, _Ep>::value,
+                      "std::expected::error_or of an error that cannot be moved or converted to");
+        if (this->__has_val) {
+            return std::forward<_Gp>(__e);
+        }
+        return std::move(this->__u.__unex);
+    }
+
+    /* [expected.object.monadic], monadic operations */
+
+    template <class _Fp>
+        requires is_constructible<_Ep, _Ep&>::value
+    constexpr auto and_then(_Fp&& __f) & {
+        return expected::__and_then(*this, std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Ep, _Ep&&>::value
+    constexpr auto and_then(_Fp&& __f) && {
+        return expected::__and_then(std::move(*this), std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Ep, const _Ep&>::value
+    constexpr auto and_then(_Fp&& __f) const& {
+        return expected::__and_then(*this, std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Ep, const _Ep&&>::value
+    constexpr auto and_then(_Fp&& __f) const&& {
+        return expected::__and_then(std::move(*this), std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Tp, _Access&>::value
+    constexpr auto or_else(_Fp&& __f) & {
+        return expected::__or_else(*this, std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Tp, _Access&&>::value
+    constexpr auto or_else(_Fp&& __f) && {
+        return expected::__or_else(std::move(*this), std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Tp, const _Access&>::value
+    constexpr auto or_else(_Fp&& __f) const& {
+        return expected::__or_else(*this, std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Tp, const _Access&&>::value
+    constexpr auto or_else(_Fp&& __f) const&& {
+        return expected::__or_else(std::move(*this), std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Ep, _Ep&>::value
+    constexpr auto transform(_Fp&& __f) & {
+        return expected::__transform(*this, std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Ep, _Ep&&>::value
+    constexpr auto transform(_Fp&& __f) && {
+        return expected::__transform(std::move(*this), std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Ep, const _Ep&>::value
+    constexpr auto transform(_Fp&& __f) const& {
+        return expected::__transform(*this, std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Ep, const _Ep&&>::value
+    constexpr auto transform(_Fp&& __f) const&& {
+        return expected::__transform(std::move(*this), std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Tp, _Access&>::value
+    constexpr auto transform_error(_Fp&& __f) & {
+        return expected::__transform_error(*this, std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Tp, _Access&&>::value
+    constexpr auto transform_error(_Fp&& __f) && {
+        return expected::__transform_error(std::move(*this), std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Tp, const _Access&>::value
+    constexpr auto transform_error(_Fp&& __f) const& {
+        return expected::__transform_error(*this, std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Tp, const _Access&&>::value
+    constexpr auto transform_error(_Fp&& __f) const&& {
+        return expected::__transform_error(std::move(*this), std::forward<_Fp>(__f));
+    }
+
+    /* [expected.object.eq], equality operators, constrained from C++26 on */
+
+    template <class _T2, class _E2>
+        requires (!is_void<_T2>::value && __fcxx_eq_comparable<_Tp, _T2> && __fcxx_eq_comparable<_Ep, _E2>)
+    friend constexpr bool operator==(const expected& __x, const expected<_T2, _E2>& __y) {
+        if (__x.has_value() != __y.has_value()) {
+            return false;
+        }
+        if (__x.has_value()) {
+            return *__x == *__y;
+        }
+        return __x.error() == __y.error();
+    }
+
+    template <class _T2>
+        requires (!__fcxx_is_expected<_T2>::value && __fcxx_eq_comparable<_Tp, _T2>)
+    friend constexpr bool operator==(const expected& __x, const _T2& __v) {
+        if (__x.has_value()) {
+            return *__x == __v;
+        }
+        return false;
+    }
+
+    template <class _E2>
+        requires (__fcxx_eq_comparable<_Ep, _E2>)
+    friend constexpr bool operator==(const expected& __x, const unexpected<_E2>& __e) {
+        if (!__x.has_value()) {
+            return __x.error() == __e.error();
+        }
+        return false;
+    }
+
+private:
+    template <class _Fp, class... _Args>
+    constexpr expected(__fcxx_expected_value_tag __tag, _Fp&& __f, _Args&&... __args)
+        : _Base(__tag, std::forward<_Fp>(__f), std::forward<_Args>(__args)...) {}
+
+    template <class _Fp, class... _Args>
+    constexpr expected(__fcxx_expected_error_tag __tag, _Fp&& __f, _Args&&... __args)
+        : _Base(__tag, std::forward<_Fp>(__f), std::forward<_Args>(__args)...) {}
+
+    /* The case of swap where this holds a value and the other an error. */
+    constexpr void __swap_value_error(expected& __rhs) {
+        if constexpr (is_nothrow_move_constructible<_Ep>::value) {
+            _Ep __tmp(std::move(__rhs.__u.__unex));
+            std::destroy_at(std::addressof(__rhs.__u.__unex));
+#if _FCXX_HAS_EXCEPTIONS
+            try {
+                std::construct_at(std::addressof(__rhs.__u.__val), std::move(this->__u.__val));
+                std::destroy_at(std::addressof(this->__u.__val));
+                std::construct_at(std::addressof(this->__u.__unex), std::move(__tmp));
+            } catch (...) {
+                std::construct_at(std::addressof(__rhs.__u.__unex), std::move(__tmp));
+                throw;
+            }
+#else
+            std::construct_at(std::addressof(__rhs.__u.__val), std::move(this->__u.__val));
+            std::destroy_at(std::addressof(this->__u.__val));
+            std::construct_at(std::addressof(this->__u.__unex), std::move(__tmp));
+#endif
+        } else {
+            __fcxx_remove_cv_t<_Tp> __tmp(std::move(this->__u.__val));
+            std::destroy_at(std::addressof(this->__u.__val));
+#if _FCXX_HAS_EXCEPTIONS
+            try {
+                std::construct_at(std::addressof(this->__u.__unex), std::move(__rhs.__u.__unex));
+                std::destroy_at(std::addressof(__rhs.__u.__unex));
+                std::construct_at(std::addressof(__rhs.__u.__val), std::move(__tmp));
+            } catch (...) {
+                std::construct_at(std::addressof(this->__u.__val), std::move(__tmp));
+                throw;
+            }
+#else
+            std::construct_at(std::addressof(this->__u.__unex), std::move(__rhs.__u.__unex));
+            std::destroy_at(std::addressof(__rhs.__u.__unex));
+            std::construct_at(std::addressof(__rhs.__u.__val), std::move(__tmp));
+#endif
+        }
+        this->__has_val = false;
+        __rhs.__has_val = true;
+    }
+
+    /* The value of an expected of any value category, as the monadic
+     * operations take it. */
+    template <class _Self>
+    static constexpr decltype(auto) __value_of(_Self&& __self) noexcept {
+        typedef __fcxx_conditional_t<is_const<__fcxx_remove_ref_t<_Self> >::value, const _Access, _Access> _Cv;
+        if constexpr (is_lvalue_reference<_Self>::value) {
+            return static_cast<_Cv&>(__self.__u.__val);
+        } else {
+            return static_cast<_Cv&&>(__self.__u.__val);
+        }
+    }
+
+    template <class _Self, class _Fp>
+    static constexpr auto __and_then(_Self&& __self, _Fp&& __f) {
+        typedef decltype(expected::__value_of(std::forward<_Self>(__self))) _Vref;
+        typedef __fcxx_remove_cvref_t<invoke_result_t<_Fp, _Vref> > _Up;
+        static_assert(__fcxx_is_expected<_Up>::value,
+                      "std::expected::and_then of a function not returning a std::expected");
+        static_assert(is_same<typename _Up::error_type, _Ep>::value,
+                      "std::expected::and_then of a function returning a std::expected of another error type");
+        if (__self.__has_val) {
+            return std::__fcxx_invoke(std::forward<_Fp>(__f), expected::__value_of(std::forward<_Self>(__self)));
+        }
+        return _Up(unexpect, std::forward<_Self>(__self).error());
+    }
+
+    template <class _Self, class _Fp>
+    static constexpr auto __or_else(_Self&& __self, _Fp&& __f) {
+        typedef __fcxx_remove_cvref_t<invoke_result_t<_Fp, decltype(std::forward<_Self>(__self).error())> > _Gp;
+        static_assert(__fcxx_is_expected<_Gp>::value,
+                      "std::expected::or_else of a function not returning a std::expected");
+        static_assert(is_same<typename _Gp::value_type, _Tp>::value,
+                      "std::expected::or_else of a function returning a std::expected of another value type");
+        if (__self.__has_val) {
+            return _Gp(in_place, expected::__value_of(std::forward<_Self>(__self)));
+        }
+        return std::__fcxx_invoke(std::forward<_Fp>(__f), std::forward<_Self>(__self).error());
+    }
+
+    template <class _Self, class _Fp>
+    static constexpr auto __transform(_Self&& __self, _Fp&& __f) {
+        typedef __fcxx_remove_cv_t<invoke_result_t<_Fp, decltype(expected::__value_of(std::forward<_Self>(__self)))> >
+            _Up;
+        static_assert(__fcxx_expected_valid<_Up>::value,
+                      "std::expected::transform of a function returning what std::expected cannot hold");
+        if (!__self.__has_val) {
+            return expected<_Up, _Ep>(unexpect, std::forward<_Self>(__self).error());
+        }
+        if constexpr (is_void<_Up>::value) {
+            std::__fcxx_invoke(std::forward<_Fp>(__f), expected::__value_of(std::forward<_Self>(__self)));
+            return expected<_Up, _Ep>();
+        } else {
+            return expected<_Up, _Ep>(__fcxx_expected_value_tag(), std::forward<_Fp>(__f),
+                                      expected::__value_of(std::forward<_Self>(__self)));
+        }
+    }
+
+    template <class _Self, class _Fp>
+    static constexpr auto __transform_error(_Self&& __self, _Fp&& __f) {
+        typedef __fcxx_remove_cv_t<invoke_result_t<_Fp, decltype(std::forward<_Self>(__self).error())> > _Gp;
+        static_assert(__fcxx_unexpected_valid<_Gp>::value,
+                      "std::expected::transform_error of a function returning what std::unexpected cannot hold");
+        if (__self.__has_val) {
+            return expected<_Tp, _Gp>(in_place, expected::__value_of(std::forward<_Self>(__self)));
+        }
+        return expected<_Tp, _Gp>(__fcxx_expected_error_tag(), std::forward<_Fp>(__f),
+                                  std::forward<_Self>(__self).error());
+    }
+};
+
+/* [expected.void], partial specialization of expected for void types */
+
+template <class _Tp, class _Ep>
+    requires is_void<_Tp>::value
+class expected<_Tp, _Ep> : private __fcxx_expected_base_t<_Tp, _Ep> {
+    typedef __fcxx_expected_base_t<_Tp, _Ep> _Base;
+
+    static_assert(__fcxx_unexpected_valid<_Ep>::value, "std::expected of an error type std::unexpected cannot hold");
+
+    template <class, class>
+    friend class expected;
+
+    static constexpr bool __swappable = __fcxx_is_swappable<_Ep>::value && is_move_constructible<_Ep>::value;
+
+public:
+    using value_type = _Tp;
+    using error_type = _Ep;
+    using unexpected_type = unexpected<_Ep>;
+
+    template <class _Up>
+    using rebind = expected<_Up, error_type>;
+
+    /* [expected.void.cons], constructors */
+
+    constexpr expected() noexcept : _Base(in_place_t()) {}
+
+    expected(const expected&) = default;
+    expected(expected&&) = default;
+
+    template <class _Up, class _Gp>
+        requires __fcxx_expected_from_other<_Tp, _Ep, _Up, _Gp, typename add_lvalue_reference<const _Up>::type,
+                                            const _Gp&>
+    constexpr explicit(!is_convertible<const _Gp&, _Ep>::value) expected(const expected<_Up, _Gp>& __rhs)
+        : _Base(__fcxx_expected_convert_tag(), __rhs) {}
+
+    template <class _Up, class _Gp>
+        requires __fcxx_expected_from_other<_Tp, _Ep, _Up, _Gp, _Up, _Gp>
+    constexpr explicit(!is_convertible<_Gp, _Ep>::value) expected(expected<_Up, _Gp>&& __rhs)
+        : _Base(__fcxx_expected_convert_tag(), std::move(__rhs)) {}
+
+    template <class _Gp>
+        requires is_constructible<_Ep, const _Gp&>::value
+    constexpr explicit(!is_convertible<const _Gp&, _Ep>::value) expected(const unexpected<_Gp>& __e)
+        : _Base(unexpect_t(), __e.error()) {}
+
+    template <class _Gp>
+        requires is_constructible<_Ep, _Gp>::value
+    constexpr explicit(!is_convertible<_Gp, _Ep>::value) expected(unexpected<_Gp>&& __e)
+        : _Base(unexpect_t(), std::move(__e).error()) {}
+
+    constexpr explicit expected(in_place_t __tag) noexcept : _Base(__tag) {}
+
+    template <class... _Args>
+        requires is_constructible<_Ep, _Args...>::value
+    constexpr explicit expected(unexpect_t __tag, _Args&&... __args) : _Base(__tag, std::forward<_Args>(__args)...) {}
+
+    template <class _Up, class... _Args>
+        requires is_constructible<_Ep, initializer_list<_Up>&, _Args...>::value
+    constexpr explicit expected(unexpect_t __tag, initializer_list<_Up> __il, _Args&&... __args)
+        : _Base(__tag, __il, std::forward<_Args>(__args)...) {}
+
+    /* [expected.void.assign], assignment, where C++23 deletes the move
+     * assignment operator that C++26 constrains, as a defect report */
+
+    expected& operator=(const expected&) = default;
+    expected& operator=(expected&&) = default;
+
+    template <class _Gp>
+        requires (is_constructible<_Ep, const _Gp&>::value && is_assignable<_Ep&, const _Gp&>::value)
+    constexpr expected& operator=(const unexpected<_Gp>& __e) {
+        if (this->__has_val) {
+            std::construct_at(std::addressof(this->__u.__unex), __e.error());
+            this->__has_val = false;
+        } else {
+            this->__u.__unex = __e.error();
+        }
+        return *this;
+    }
+
+    template <class _Gp>
+        requires (is_constructible<_Ep, _Gp>::value && is_assignable<_Ep&, _Gp>::value)
+    constexpr expected& operator=(unexpected<_Gp>&& __e) {
+        if (this->__has_val) {
+            std::construct_at(std::addressof(this->__u.__unex), std::move(__e).error());
+            this->__has_val = false;
+        } else {
+            this->__u.__unex = std::move(__e).error();
+        }
+        return *this;
+    }
+
+    constexpr void emplace() noexcept {
+        if (!this->__has_val) {
+            std::destroy_at(std::addressof(this->__u.__unex));
+            std::construct_at(std::addressof(this->__u.__val));
+            this->__has_val = true;
+        }
+    }
+
+    /* [expected.void.swap], swap */
+
+    constexpr void swap(expected& __rhs)
+        noexcept(is_nothrow_move_constructible<_Ep>::value && __fcxx_is_nothrow_swappable<_Ep>::value)
+        requires __swappable
+    {
+        if (this->__has_val && __rhs.__has_val) {
+            return;
+        }
+        if (!this->__has_val && !__rhs.__has_val) {
+            using std::swap;
+            swap(this->__u.__unex, __rhs.__u.__unex);
+        } else if (!this->__has_val) {
+            __rhs.swap(*this);
+        } else {
+            std::construct_at(std::addressof(this->__u.__unex), std::move(__rhs.__u.__unex));
+            std::destroy_at(std::addressof(__rhs.__u.__unex));
+            std::construct_at(std::addressof(__rhs.__u.__val));
+            this->__has_val = false;
+            __rhs.__has_val = true;
+        }
+    }
+
+    /* Constrained as the member is, lest the exception specification be
+     * ill-formed. */
+    friend constexpr void swap(expected& __x, expected& __y) noexcept(noexcept(__x.swap(__y)))
+        requires __swappable
+    {
+        __x.swap(__y);
+    }
+
+    /* [expected.void.obs], observers */
+
+    constexpr explicit operator bool() const noexcept {
+        return this->__has_val;
+    }
+
+    constexpr bool has_value() const noexcept {
+        return this->__has_val;
+    }
+
+    constexpr void operator*() const noexcept {}
+
+    /* freestanding-deleted */
+    constexpr void value() const& = delete;
+    constexpr void value() && = delete;
+
+    constexpr const _Ep& error() const& noexcept {
+        return this->__u.__unex;
+    }
+
+    constexpr _Ep& error() & noexcept {
+        return this->__u.__unex;
+    }
+
+    constexpr const _Ep&& error() const&& noexcept {
+        return std::move(this->__u.__unex);
+    }
+
+    constexpr _Ep&& error() && noexcept {
+        return std::move(this->__u.__unex);
+    }
+
+    template <class _Gp = _Ep>
+    constexpr _Ep error_or(_Gp&& __e) const& {
+        static_assert(is_copy_constructible<_Ep>::value && is_convertible<_Gp, _Ep>::value,
+                      "std::expected::error_or of an error that cannot be copied or converted to");
+        if (this->__has_val) {
+            return std::forward<_Gp>(__e);
+        }
+        return this->__u.__unex;
+    }
+
+    template <class _Gp = _Ep>
+    constexpr _Ep error_or(_Gp&& __e) && {
+        static_assert(is_move_constructible<_Ep>::value && is_convertible<_Gp, _Ep>::value,
+                      "std::expected::error_or of an error that cannot be moved or converted to");
+        if (this->__has_val) {
+            return std::forward<_Gp>(__e);
+        }
+        return std::move(this->__u.__unex);
+    }
+
+    /* [expected.void.monadic], monadic operations */
+
+    template <class _Fp>
+        requires is_constructible<_Ep, _Ep&>::value
+    constexpr auto and_then(_Fp&& __f) & {
+        return expected::__and_then(*this, std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Ep, _Ep&&>::value
+    constexpr auto and_then(_Fp&& __f) && {
+        return expected::__and_then(std::move(*this), std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Ep, const _Ep&>::value
+    constexpr auto and_then(_Fp&& __f) const& {
+        return expected::__and_then(*this, std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Ep, const _Ep&&>::value
+    constexpr auto and_then(_Fp&& __f) const&& {
+        return expected::__and_then(std::move(*this), std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+    constexpr auto or_else(_Fp&& __f) & {
+        return expected::__or_else(*this, std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+    constexpr auto or_else(_Fp&& __f) && {
+        return expected::__or_else(std::move(*this), std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+    constexpr auto or_else(_Fp&& __f) const& {
+        return expected::__or_else(*this, std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+    constexpr auto or_else(_Fp&& __f) const&& {
+        return expected::__or_else(std::move(*this), std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Ep, _Ep&>::value
+    constexpr auto transform(_Fp&& __f) & {
+        return expected::__transform(*this, std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Ep, _Ep&&>::value
+    constexpr auto transform(_Fp&& __f) && {
+        return expected::__transform(std::move(*this), std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Ep, const _Ep&>::value
+    constexpr auto transform(_Fp&& __f) const& {
+        return expected::__transform(*this, std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+        requires is_constructible<_Ep, const _Ep&&>::value
+    constexpr auto transform(_Fp&& __f) const&& {
+        return expected::__transform(std::move(*this), std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+    constexpr auto transform_error(_Fp&& __f) & {
+        return expected::__transform_error(*this, std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+    constexpr auto transform_error(_Fp&& __f) && {
+        return expected::__transform_error(std::move(*this), std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+    constexpr auto transform_error(_Fp&& __f) const& {
+        return expected::__transform_error(*this, std::forward<_Fp>(__f));
+    }
+
+    template <class _Fp>
+    constexpr auto transform_error(_Fp&& __f) const&& {
+        return expected::__transform_error(std::move(*this), std::forward<_Fp>(__f));
+    }
+
+    /* [expected.void.eq], equality operators, constrained from C++26 on */
+
+    template <class _T2, class _E2>
+        requires (is_void<_T2>::value && __fcxx_eq_comparable<_Ep, _E2>)
+    friend constexpr bool operator==(const expected& __x, const expected<_T2, _E2>& __y) {
+        if (__x.has_value() != __y.has_value()) {
+            return false;
+        }
+        if (__x.has_value()) {
+            return true;
+        }
+        return __x.error() == __y.error();
+    }
+
+    template <class _E2>
+        requires (__fcxx_eq_comparable<_Ep, _E2>)
+    friend constexpr bool operator==(const expected& __x, const unexpected<_E2>& __e) {
+        if (!__x.has_value()) {
+            return __x.error() == __e.error();
+        }
+        return false;
+    }
+
+private:
+    template <class _Fp, class... _Args>
+    constexpr expected(__fcxx_expected_error_tag __tag, _Fp&& __f, _Args&&... __args)
+        : _Base(__tag, std::forward<_Fp>(__f), std::forward<_Args>(__args)...) {}
+
+    template <class _Self, class _Fp>
+    static constexpr auto __and_then(_Self&& __self, _Fp&& __f) {
+        typedef __fcxx_remove_cvref_t<invoke_result_t<_Fp> > _Up;
+        static_assert(__fcxx_is_expected<_Up>::value,
+                      "std::expected::and_then of a function not returning a std::expected");
+        static_assert(is_same<typename _Up::error_type, _Ep>::value,
+                      "std::expected::and_then of a function returning a std::expected of another error type");
+        if (__self.__has_val) {
+            return std::__fcxx_invoke(std::forward<_Fp>(__f));
+        }
+        return _Up(unexpect, std::forward<_Self>(__self).error());
+    }
+
+    template <class _Self, class _Fp>
+    static constexpr auto __or_else(_Self&& __self, _Fp&& __f) {
+        typedef __fcxx_remove_cvref_t<invoke_result_t<_Fp, decltype(std::forward<_Self>(__self).error())> > _Gp;
+        static_assert(__fcxx_is_expected<_Gp>::value,
+                      "std::expected::or_else of a function not returning a std::expected");
+        static_assert(is_same<typename _Gp::value_type, _Tp>::value,
+                      "std::expected::or_else of a function returning a std::expected of another value type");
+        if (__self.__has_val) {
+            return _Gp();
+        }
+        return std::__fcxx_invoke(std::forward<_Fp>(__f), std::forward<_Self>(__self).error());
+    }
+
+    template <class _Self, class _Fp>
+    static constexpr auto __transform(_Self&& __self, _Fp&& __f) {
+        typedef __fcxx_remove_cv_t<invoke_result_t<_Fp> > _Up;
+        static_assert(__fcxx_expected_valid<_Up>::value,
+                      "std::expected::transform of a function returning what std::expected cannot hold");
+        if (!__self.__has_val) {
+            return expected<_Up, _Ep>(unexpect, std::forward<_Self>(__self).error());
+        }
+        if constexpr (is_void<_Up>::value) {
+            std::__fcxx_invoke(std::forward<_Fp>(__f));
+            return expected<_Up, _Ep>();
+        } else {
+            return expected<_Up, _Ep>(__fcxx_expected_value_tag(), std::forward<_Fp>(__f));
+        }
+    }
+
+    template <class _Self, class _Fp>
+    static constexpr auto __transform_error(_Self&& __self, _Fp&& __f) {
+        typedef __fcxx_remove_cv_t<invoke_result_t<_Fp, decltype(std::forward<_Self>(__self).error())> > _Gp;
+        static_assert(__fcxx_unexpected_valid<_Gp>::value,
+                      "std::expected::transform_error of a function returning what std::unexpected cannot hold");
+        if (__self.__has_val) {
+            return expected<_Tp, _Gp>();
+        }
+        return expected<_Tp, _Gp>(__fcxx_expected_error_tag(), std::forward<_Fp>(__f),
+                                  std::forward<_Self>(__self).error());
+    }
+};
+
+} /* namespace std */
+
+#endif
+
+#endif

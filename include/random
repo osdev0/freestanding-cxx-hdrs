@@ -1,0 +1,1100 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_RANDOM
+#define __FREESTANDING_CXX_HDRS_RANDOM 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2026
+#  error "<random> is not a freestanding header before C++26"
+#endif
+
+#define _FCXX_VERSION_RANDOM
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_RANDOM
+
+#if _FCXX_STD >= 2026
+
+/* Of the header, the engines, the engine adaptors but shuffle_order_engine,
+ * the predefined engines but knuth_b and default_random_engine, the concept
+ * of the generators and uniform_int_distribution are freestanding, without
+ * their stream operators. */
+
+#include <initializer_list>
+#include <cstdint>
+#include <type_traits>
+#include <__fcxx/integer_sequence.h>
+#include <__fcxx/uniform_random_bit_generator.h>
+#include <concepts>
+/* philox_engine has members of type std::array, and is there when <array>
+ * is. */
+#if defined(__has_include)
+#  if __has_include(<array>)
+#    include <array>
+#    define _FCXX_RANDOM_HAS_PHILOX 1
+#  endif
+#endif
+#ifndef _FCXX_RANDOM_HAS_PHILOX
+#  define _FCXX_RANDOM_HAS_PHILOX 0
+#endif
+
+namespace std {
+
+/* [rand.req.genl], the types that the templates take as UIntType and as
+ * IntType. The implementation-defined subsets of the standard are those of
+ * unsigned char, for the engines, and of the extended integer types
+ * __int128 and unsigned __int128. */
+
+template <class _Tp> struct __fcxx_rand_is_uint : false_type {};
+template <> struct __fcxx_rand_is_uint<unsigned char> : true_type {};
+template <> struct __fcxx_rand_is_uint<unsigned short> : true_type {};
+template <> struct __fcxx_rand_is_uint<unsigned int> : true_type {};
+template <> struct __fcxx_rand_is_uint<unsigned long> : true_type {};
+template <> struct __fcxx_rand_is_uint<unsigned long long> : true_type {};
+#ifdef __SIZEOF_INT128__
+template <> struct __fcxx_rand_is_uint<__fcxx_uint128> : true_type {};
+#endif
+
+template <class _Tp> struct __fcxx_rand_is_int : __fcxx_rand_is_uint<_Tp> {};
+template <> struct __fcxx_rand_is_int<signed char> : true_type {};
+template <> struct __fcxx_rand_is_int<short> : true_type {};
+template <> struct __fcxx_rand_is_int<int> : true_type {};
+template <> struct __fcxx_rand_is_int<long> : true_type {};
+template <> struct __fcxx_rand_is_int<long long> : true_type {};
+#ifdef __SIZEOF_INT128__
+template <> struct __fcxx_rand_is_int<__fcxx_int128> : true_type {};
+#endif
+
+/* The type the arithmetic of an unsigned type is done in, which is at least
+ * unsigned int, so that nothing is promoted to int. */
+template <class _Tp>
+struct __fcxx_rand_wide {
+    typedef __fcxx_conditional_t<(sizeof(_Tp) < sizeof(unsigned int)), unsigned int, _Tp> type;
+};
+
+/* The number of bits and the maximum of an integer type, as numeric_limits
+ * has them, without needing all of <limits>. */
+template <class _Tp>
+constexpr size_t __fcxx_rand_digits() {
+    return sizeof(_Tp) * __CHAR_BIT__ - (_Tp(-1) < _Tp(0) ? 1 : 0);
+}
+
+template <class _Tp>
+constexpr _Tp __fcxx_rand_max() {
+    return static_cast<_Tp>(static_cast<typename make_unsigned<_Tp>::type>(~typename make_unsigned<_Tp>::type(0))
+                            >> (_Tp(-1) < _Tp(0) ? 1 : 0));
+}
+
+/* 2^w - 1, and the shifts, for any number of bits up to the width of the
+ * type, where the operators would be undefined. */
+template <class _Tp>
+constexpr _Tp __fcxx_rand_mask(size_t __w) {
+    return __w >= std::__fcxx_rand_digits<_Tp>() ? std::__fcxx_rand_max<_Tp>()
+         : __w == 0 ? _Tp(0)
+         : static_cast<_Tp>(std::__fcxx_rand_max<_Tp>() >> (std::__fcxx_rand_digits<_Tp>() - __w));
+}
+
+template <class _Tp>
+constexpr _Tp __fcxx_rand_shl(_Tp __x, size_t __s) {
+    return __s >= std::__fcxx_rand_digits<_Tp>() ? _Tp(0) : static_cast<_Tp>(__x << __s);
+}
+
+template <class _Tp>
+constexpr _Tp __fcxx_rand_shr(_Tp __x, size_t __s) {
+    return __s >= std::__fcxx_rand_digits<_Tp>() ? _Tp(0) : static_cast<_Tp>(__x >> __s);
+}
+
+/* The number of bits needed for a value, which is one more than the floor
+ * of its base 2 logarithm. */
+template <class _Tp>
+constexpr size_t __fcxx_rand_bit_width(_Tp __x) {
+    return __x == 0 ? 0 : 1 + std::__fcxx_rand_bit_width(static_cast<_Tp>(__x >> 1));
+}
+
+/* [rand.eng.general], a type qualifies as a seed sequence for an engine if
+ * it can generate into an array of 32-bit values, which the engines seed
+ * from, and cannot be converted to the result type of the engine. */
+template <class _Sseq, class _Result, class = void>
+struct __fcxx_is_seed_sequence : false_type {};
+
+template <class _Sseq, class _Result>
+struct __fcxx_is_seed_sequence<
+    _Sseq, _Result,
+    __fcxx_void_t<decltype(declval<_Sseq&>().generate(declval<uint_least32_t*>(), declval<uint_least32_t*>()))> >
+    : __fcxx_bool_constant<!is_convertible<_Sseq, _Result>::value> {};
+
+/* The value of a number of 32-bit values of a seed sequence, the first one
+ * the least significant. */
+template <class _Tp>
+_Tp __fcxx_rand_from_words(const uint_least32_t* __a, size_t __k) {
+    _Tp __value = 0;
+    for (size_t __j = 0; __j < __k; ++__j) {
+        __value = static_cast<_Tp>(
+            __value | std::__fcxx_rand_shl(static_cast<_Tp>(__a[__j] & 0xffffffffu), 32 * __j));
+    }
+    return __value;
+}
+
+/* [rand.req.urng], uniform random bit generator requirements */
+
+template <class _Gp>
+concept uniform_random_bit_generator = __fcxx_uniform_random_bit_generator<_Gp>;
+
+/* [rand.eng.lcong], class template linear_congruential_engine */
+
+/* The arithmetic modulo m, which is that of the type for a modulus of 2^w,
+ * and is otherwise done in a type wide enough for the products, or by
+ * doubling and adding without one. */
+#ifdef __SIZEOF_INT128__
+#  define _FCXX_LCG_HAS_INT128 1
+#else
+#  define _FCXX_LCG_HAS_INT128 0
+#endif
+
+template <class _Tp, _Tp _Mp,
+          int _Kind = _Mp == 0 ? 0
+                    : _Mp - 1u <= 0xffffffffu ? 1
+                    : _FCXX_LCG_HAS_INT128 && sizeof(_Tp) <= sizeof(unsigned long long) ? 2
+                    : 3>
+struct __fcxx_lcg_arith;
+
+template <class _Tp, _Tp _Mp>
+struct __fcxx_lcg_arith<_Tp, _Mp, 0> {
+    typedef typename __fcxx_rand_wide<_Tp>::type _Wide;
+    static _Tp __mul(_Tp __x, _Tp __y) { return static_cast<_Tp>(static_cast<_Wide>(__x) * static_cast<_Wide>(__y)); }
+    static _Tp __add(_Tp __x, _Tp __y) { return static_cast<_Tp>(static_cast<_Wide>(__x) + static_cast<_Wide>(__y)); }
+    template <class _Up> static _Tp __reduce(_Up __x) { return static_cast<_Tp>(__x); }
+};
+
+template <class _Tp, _Tp _Mp>
+struct __fcxx_lcg_arith<_Tp, _Mp, 1> {
+    static _Tp __mul(_Tp __x, _Tp __y) { return static_cast<_Tp>(static_cast<unsigned long long>(__x) * __y % _Mp); }
+    static _Tp __add(_Tp __x, _Tp __y) { return static_cast<_Tp>((static_cast<unsigned long long>(__x) + __y) % _Mp); }
+    template <class _Up> static _Tp __reduce(_Up __x) { return static_cast<_Tp>(__x % _Mp); }
+};
+
+#if _FCXX_LCG_HAS_INT128
+template <class _Tp, _Tp _Mp>
+struct __fcxx_lcg_arith<_Tp, _Mp, 2> {
+    static _Tp __mul(_Tp __x, _Tp __y) { return static_cast<_Tp>(static_cast<__fcxx_uint128>(__x) * __y % _Mp); }
+    static _Tp __add(_Tp __x, _Tp __y) { return static_cast<_Tp>((static_cast<__fcxx_uint128>(__x) + __y) % _Mp); }
+    template <class _Up> static _Tp __reduce(_Up __x) { return static_cast<_Tp>(__x % _Mp); }
+};
+#endif
+
+template <class _Tp, _Tp _Mp>
+struct __fcxx_lcg_arith<_Tp, _Mp, 3> {
+    static _Tp __add(_Tp __x, _Tp __y) { return __x >= _Mp - __y ? __x - (_Mp - __y) : __x + __y; }
+    static _Tp __mul(_Tp __x, _Tp __y) {
+        _Tp __r = 0;
+        for (; __y != 0; __y >>= 1) {
+            if ((__y & 1) != 0) {
+                __r = __add(__r, __x);
+            }
+            __x = __add(__x, __x);
+        }
+        return __r;
+    }
+    template <class _Up> static _Tp __reduce(_Up __x) { return static_cast<_Tp>(__x % _Mp); }
+};
+
+#undef _FCXX_LCG_HAS_INT128
+
+template <class _UIntType, _UIntType _Ap, _UIntType _Cp, _UIntType _Mp>
+class linear_congruential_engine {
+    static_assert(__fcxx_rand_is_uint<_UIntType>::value,
+                  "std::linear_congruential_engine needs an unsigned integer type");
+    static_assert(_Mp == 0 || (_Ap < _Mp && _Cp < _Mp), "std::linear_congruential_engine needs a < m and c < m");
+
+    typedef __fcxx_lcg_arith<_UIntType, _Mp> __arith;
+    typedef __fcxx_conditional_t<(sizeof(_UIntType) > sizeof(unsigned long long)), _UIntType, unsigned long long>
+        __seed_type;
+
+    /* The number of 32-bit values of a seed sequence the state is made of,
+     * which is the ceiling of log2(m) / 32. */
+    static constexpr size_t __seed_words =
+        ((_Mp == 0 ? std::__fcxx_rand_digits<_UIntType>()
+                   : std::__fcxx_rand_bit_width(_Mp) - ((_Mp & (_Mp - 1u)) == 0 ? 1 : 0))
+         + 31) / 32;
+
+public:
+    typedef _UIntType result_type;
+
+    static constexpr result_type multiplier = _Ap;
+    static constexpr result_type increment = _Cp;
+    static constexpr result_type modulus = _Mp;
+    static constexpr result_type min() { return _Cp == 0u ? 1u : 0u; }
+    static constexpr result_type max() { return static_cast<result_type>(_Mp - 1u); }
+    static constexpr result_type default_seed = 1u;
+
+    linear_congruential_engine() : linear_congruential_engine(default_seed) {}
+    explicit linear_congruential_engine(result_type __s) { seed(__s); }
+
+    template <class _Sseq, class = __fcxx_enable_if_t<__fcxx_is_seed_sequence<_Sseq, result_type>::value> >
+    explicit linear_congruential_engine(_Sseq& __q) {
+        seed(__q);
+    }
+
+    void seed(result_type __s = default_seed) {
+        __state = __arith::__reduce(__s);
+        if (_Cp == 0 && __state == 0) {
+            __state = 1;
+        }
+    }
+
+    template <class _Sseq>
+    __fcxx_enable_if_t<__fcxx_is_seed_sequence<_Sseq, result_type>::value> seed(_Sseq& __q) {
+        uint_least32_t __a[__seed_words + 3];
+        __q.generate(__a + 0, __a + (__seed_words + 3));
+        __state = __arith::__reduce(std::__fcxx_rand_from_words<__seed_type>(__a + 3, __seed_words));
+        if (_Cp == 0 && __state == 0) {
+            __state = 1;
+        }
+    }
+
+    /* Only the next state tells what the engine produces, as the multiplier
+     * need not be invertible. */
+    friend bool operator==(const linear_congruential_engine& __x, const linear_congruential_engine& __y) {
+        return __x.__next(__x.__state) == __y.__next(__y.__state);
+    }
+
+    result_type operator()() {
+        __state = __next(__state);
+        return __state;
+    }
+
+    /* The transition is x -> ax + c, of which z steps are raised to their
+     * power by squaring. */
+    void discard(unsigned long long __z) {
+        result_type __amul = __arith::__reduce(1u);
+        result_type __aadd = 0;
+        result_type __bmul = _Ap;
+        result_type __badd = _Cp;
+        for (; __z != 0; __z >>= 1) {
+            if ((__z & 1) != 0) {
+                __aadd = __arith::__add(__arith::__mul(__bmul, __aadd), __badd);
+                __amul = __arith::__mul(__bmul, __amul);
+            }
+            __badd = __arith::__add(__arith::__mul(__bmul, __badd), __badd);
+            __bmul = __arith::__mul(__bmul, __bmul);
+        }
+        __state = __arith::__add(__arith::__mul(__amul, __state), __aadd);
+    }
+
+private:
+    static result_type __next(result_type __x) { return __arith::__add(__arith::__mul(_Ap, __x), _Cp); }
+
+    result_type __state;
+};
+
+/* [rand.eng.mers], class template mersenne_twister_engine
+ *
+ * The state is kept in a circular buffer, of which __pos is the index of
+ * X(i-n), the oldest value, which the next value replaces. */
+
+template <class _UIntType, size_t _Wp, size_t _Np, size_t _Mp, size_t _Rp, _UIntType _Ap, size_t _Up, _UIntType _Dp,
+          size_t _Sp, _UIntType _Bp, size_t _Tp, _UIntType _Cp, size_t _Lp, _UIntType _Fp>
+class mersenne_twister_engine {
+    static_assert(__fcxx_rand_is_uint<_UIntType>::value, "std::mersenne_twister_engine needs an unsigned integer type");
+    static_assert(0 < _Mp && _Mp <= _Np, "std::mersenne_twister_engine needs 0 < m <= n");
+    static_assert(2u < _Wp && _Wp <= std::__fcxx_rand_digits<_UIntType>(),
+                  "std::mersenne_twister_engine needs 2 < w <= numeric_limits<UIntType>::digits");
+    static_assert(_Rp <= _Wp && _Up <= _Wp && _Sp <= _Wp && _Tp <= _Wp && _Lp <= _Wp,
+                  "std::mersenne_twister_engine needs r, u, s, t and l to be at most w");
+    static_assert(_Ap <= std::__fcxx_rand_mask<_UIntType>(_Wp) && _Bp <= std::__fcxx_rand_mask<_UIntType>(_Wp)
+                      && _Cp <= std::__fcxx_rand_mask<_UIntType>(_Wp) && _Dp <= std::__fcxx_rand_mask<_UIntType>(_Wp)
+                      && _Fp <= std::__fcxx_rand_mask<_UIntType>(_Wp),
+                  "std::mersenne_twister_engine needs a, b, c, d and f to be less than 2^w");
+
+    typedef typename __fcxx_rand_wide<_UIntType>::type _Wide;
+
+    static constexpr _Wide __mask = std::__fcxx_rand_mask<_Wide>(_Wp);
+    static constexpr _Wide __lower_mask = std::__fcxx_rand_mask<_Wide>(_Rp);
+    static constexpr _Wide __upper_mask = __mask & ~__lower_mask;
+
+public:
+    typedef _UIntType result_type;
+
+    static constexpr size_t word_size = _Wp;
+    static constexpr size_t state_size = _Np;
+    static constexpr size_t shift_size = _Mp;
+    static constexpr size_t mask_bits = _Rp;
+    static constexpr _UIntType xor_mask = _Ap;
+    static constexpr size_t tempering_u = _Up;
+    static constexpr _UIntType tempering_d = _Dp;
+    static constexpr size_t tempering_s = _Sp;
+    static constexpr _UIntType tempering_b = _Bp;
+    static constexpr size_t tempering_t = _Tp;
+    static constexpr _UIntType tempering_c = _Cp;
+    static constexpr size_t tempering_l = _Lp;
+    static constexpr _UIntType initialization_multiplier = _Fp;
+    static constexpr result_type min() { return 0; }
+    static constexpr result_type max() { return std::__fcxx_rand_mask<result_type>(_Wp); }
+    /* Converted explicitly, as unsigned char, which the engines take besides
+     * the types of the standard, cannot represent it; the seed is taken
+     * modulo 2^w anyway. */
+    static constexpr result_type default_seed = static_cast<result_type>(5489u);
+
+    mersenne_twister_engine() : mersenne_twister_engine(default_seed) {}
+    explicit mersenne_twister_engine(result_type __value) { seed(__value); }
+
+    template <class _Sseq, class = __fcxx_enable_if_t<__fcxx_is_seed_sequence<_Sseq, result_type>::value> >
+    explicit mersenne_twister_engine(_Sseq& __q) {
+        seed(__q);
+    }
+
+    void seed(result_type __value = default_seed) {
+        _Wide __x = static_cast<_Wide>(__value) & __mask;
+        __state[0] = static_cast<_UIntType>(__x);
+        for (size_t __i = 1; __i < _Np; ++__i) {
+            __x = (static_cast<_Wide>(_Fp) * (__x ^ (__x >> (_Wp - 2))) + static_cast<_Wide>(__i)) & __mask;
+            __state[__i] = static_cast<_UIntType>(__x);
+        }
+        __pos = 0;
+    }
+
+    template <class _Sseq>
+    __fcxx_enable_if_t<__fcxx_is_seed_sequence<_Sseq, result_type>::value> seed(_Sseq& __q) {
+        const size_t __k = (_Wp + 31) / 32;
+        uint_least32_t __a[_Np * __k];
+        __q.generate(__a + 0, __a + _Np * __k);
+        bool __zero = (std::__fcxx_rand_shr<_Wide>(std::__fcxx_rand_from_words<_Wide>(__a, __k) & __mask, _Rp)) == 0;
+        for (size_t __i = 0; __i < _Np; ++__i) {
+            const _Wide __x = std::__fcxx_rand_from_words<_Wide>(__a + __k * __i, __k) & __mask;
+            __state[__i] = static_cast<_UIntType>(__x);
+            if (__i != 0 && __x != 0) {
+                __zero = false;
+            }
+        }
+        /* A state of all zeros but for the bits that do not matter would
+         * never leave zero. */
+        if (__zero) {
+            __state[0] = static_cast<_UIntType>(_Wide(1) << (_Wp - 1));
+        }
+        __pos = 0;
+    }
+
+    /* Of X(i-n), only the upper w-r bits affect what the engine produces. */
+    friend bool operator==(const mersenne_twister_engine& __x, const mersenne_twister_engine& __y) {
+        if ((static_cast<_Wide>(__x.__state[__x.__pos]) & __upper_mask)
+            != (static_cast<_Wide>(__y.__state[__y.__pos]) & __upper_mask)) {
+            return false;
+        }
+        for (size_t __j = 1; __j < _Np; ++__j) {
+            if (__x.__at(__j) != __y.__at(__j)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    result_type operator()() {
+        _Wide __z = __next();
+        __z ^= std::__fcxx_rand_shr<_Wide>(__z, _Up) & _Dp;
+        __z ^= std::__fcxx_rand_shl<_Wide>(__z, _Sp) & _Bp;
+        __z ^= std::__fcxx_rand_shl<_Wide>(__z, _Tp) & _Cp;
+        __z ^= std::__fcxx_rand_shr<_Wide>(__z, _Lp);
+        return static_cast<result_type>(__z);
+    }
+
+    void discard(unsigned long long __z) {
+        for (; __z != 0; --__z) {
+            __next();
+        }
+    }
+
+private:
+    /* X(i-n+j), for j from 0 to n-1. */
+    _UIntType __at(size_t __j) const { return __state[__pos + __j < _Np ? __pos + __j : __pos + __j - _Np]; }
+
+    /* The transition, which returns the new X(i) untempered. */
+    _Wide __next() {
+        const size_t __i = __pos;
+        const size_t __i1 = __i + 1 == _Np ? 0 : __i + 1;
+        const size_t __im = __i + _Mp >= _Np ? __i + _Mp - _Np : __i + _Mp;
+        const _Wide __y = (static_cast<_Wide>(__state[__i]) & __upper_mask)
+                        | (static_cast<_Wide>(__state[__i1]) & __lower_mask);
+        _Wide __x = static_cast<_Wide>(__state[__im]) ^ (__y >> 1);
+        if ((__y & 1) != 0) {
+            __x ^= _Ap;
+        }
+        __state[__i] = static_cast<_UIntType>(__x);
+        __pos = __i1;
+        return __x;
+    }
+
+    _UIntType __state[_Np];
+    size_t __pos;
+};
+
+/* [rand.eng.sub], class template subtract_with_carry_engine
+ *
+ * The state is kept in a circular buffer, of which __pos is the index of
+ * X(i-r), the oldest value, which the next value replaces. */
+
+template <class _UIntType, size_t _Wp, size_t _Sp, size_t _Rp>
+class subtract_with_carry_engine {
+    static_assert(__fcxx_rand_is_uint<_UIntType>::value,
+                  "std::subtract_with_carry_engine needs an unsigned integer type");
+    static_assert(0u < _Sp && _Sp < _Rp, "std::subtract_with_carry_engine needs 0 < s < r");
+    static_assert(0 < _Wp && _Wp <= std::__fcxx_rand_digits<_UIntType>(),
+                  "std::subtract_with_carry_engine needs 0 < w <= numeric_limits<UIntType>::digits");
+
+    typedef typename __fcxx_rand_wide<_UIntType>::type _Wide;
+    typedef __fcxx_conditional_t<(sizeof(_Wide) > sizeof(unsigned long long)), _Wide, unsigned long long> __seed_type;
+
+    static constexpr _Wide __mask = std::__fcxx_rand_mask<_Wide>(_Wp);
+
+public:
+    typedef _UIntType result_type;
+
+    static constexpr size_t word_size = _Wp;
+    static constexpr size_t short_lag = _Sp;
+    static constexpr size_t long_lag = _Rp;
+    static constexpr result_type min() { return 0; }
+    static constexpr result_type max() { return std::__fcxx_rand_mask<result_type>(_Wp); }
+
+    /* From C++26 on, the seed of zero stands for the default one, which
+     * need not be representable in the result type. */
+    static constexpr uint_least32_t default_seed = 19780503u;
+
+    subtract_with_carry_engine() : subtract_with_carry_engine(0u) {}
+    explicit subtract_with_carry_engine(result_type __value) { seed(__value); }
+
+    template <class _Sseq, class = __fcxx_enable_if_t<__fcxx_is_seed_sequence<_Sseq, result_type>::value> >
+    explicit subtract_with_carry_engine(_Sseq& __q) {
+        seed(__q);
+    }
+
+    /* The values come from the engine that the standard defines as
+     * linear_congruential_engine<uint_least32_t, 40014u, 0u, 2147483563u>. */
+    void seed(result_type __value = 0u) {
+        unsigned long long __lcg = __value == 0u ? 19780503u : __value % 2147483563u;
+        if (__lcg == 0) {
+            __lcg = 1;
+        }
+        const size_t __n = (_Wp + 31) / 32;
+        for (size_t __i = 0; __i < _Rp; ++__i) {
+            __seed_type __x = 0;
+            for (size_t __j = 0; __j < __n; ++__j) {
+                __lcg = __lcg * 40014u % 2147483563u;
+                __x |= std::__fcxx_rand_shl(static_cast<__seed_type>(__lcg), 32 * __j);
+            }
+            __state[__i] = static_cast<_UIntType>(__x & __mask);
+        }
+        __carry = __state[_Rp - 1] == 0;
+        __pos = 0;
+    }
+
+    template <class _Sseq>
+    __fcxx_enable_if_t<__fcxx_is_seed_sequence<_Sseq, result_type>::value> seed(_Sseq& __q) {
+        const size_t __k = (_Wp + 31) / 32;
+        uint_least32_t __a[_Rp * __k];
+        __q.generate(__a + 0, __a + _Rp * __k);
+        for (size_t __i = 0; __i < _Rp; ++__i) {
+            __state[__i] = static_cast<_UIntType>(std::__fcxx_rand_from_words<__seed_type>(__a + __k * __i, __k)
+                                                  & __mask);
+        }
+        __carry = __state[_Rp - 1] == 0;
+        __pos = 0;
+    }
+
+    /* X(i-r) and the carry only affect what the engine produces through
+     * their sum. */
+    friend bool operator==(const subtract_with_carry_engine& __x, const subtract_with_carry_engine& __y) {
+        const _Wide __xo = __x.__state[__x.__pos];
+        const _Wide __yo = __y.__state[__y.__pos];
+        if (__x.__carry == __y.__carry ? __xo != __yo
+            : __x.__carry ? !(__yo > __xo && __yo - __xo == 1)
+            : !(__xo > __yo && __xo - __yo == 1)) {
+            return false;
+        }
+        for (size_t __j = 1; __j < _Rp; ++__j) {
+            if (__x.__at(__j) != __y.__at(__j)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    result_type operator()() {
+        const size_t __i = __pos;
+        const size_t __is = __i + (_Rp - _Sp) >= _Rp ? __i - _Sp : __i + (_Rp - _Sp);
+        const _Wide __xs = __state[__is];
+        const _Wide __xr = __state[__i];
+        _Wide __y;
+        if (__xs > __xr || (__xs == __xr && !__carry)) {
+            __y = __xs - __xr - (__carry ? 1u : 0u);
+            __carry = false;
+        } else {
+            __y = (__xs - __xr - (__carry ? 1u : 0u)) & __mask;
+            __carry = true;
+        }
+        __state[__i] = static_cast<_UIntType>(__y);
+        __pos = __i + 1 == _Rp ? 0 : __i + 1;
+        return static_cast<result_type>(__y);
+    }
+
+    void discard(unsigned long long __z) {
+        for (; __z != 0; --__z) {
+            (*this)();
+        }
+    }
+
+private:
+    /* X(i-r+j), for j from 0 to r-1. */
+    _UIntType __at(size_t __j) const { return __state[__pos + __j < _Rp ? __pos + __j : __pos + __j - _Rp]; }
+
+    _UIntType __state[_Rp];
+    bool __carry;
+    size_t __pos;
+};
+
+/* [rand.eng.philox], class template philox_engine */
+
+#if _FCXX_RANDOM_HAS_PHILOX
+/* Every other one of the constants, the multipliers or the round constants. */
+template <class _Tp, _Tp... _Consts, size_t... _Ip>
+constexpr array<_Tp, sizeof...(_Ip)> __fcxx_philox_pick(index_sequence<_Ip...>, size_t __offset) {
+    constexpr _Tp __consts[] = {_Consts...};
+    return array<_Tp, sizeof...(_Ip)>{__consts[2 * _Ip + __offset]...};
+}
+
+/* The high and the low w bits of the product of two w-bit values, which a
+ * type twice as wide as they are gives at once. */
+template <class _Tp, size_t _Wp>
+void __fcxx_philox_mulhilo(_Tp __a, _Tp __b, _Tp& __hi, _Tp& __lo) {
+    constexpr size_t __digits = std::__fcxx_rand_digits<_Tp>();
+    if constexpr (2 * _Wp <= __digits) {
+        const _Tp __p = __a * __b;
+        __lo = __p & std::__fcxx_rand_mask<_Tp>(_Wp);
+        __hi = __p >> _Wp;
+    } else {
+        _Tp __phi;
+        _Tp __plo;
+#  ifdef __SIZEOF_INT128__
+        if constexpr (__digits <= 64) {
+            const __fcxx_uint128 __p = static_cast<__fcxx_uint128>(__a) * __b;
+            __phi = static_cast<_Tp>(__p >> __digits);
+            __plo = static_cast<_Tp>(__p);
+        } else
+#  endif
+        {
+            /* Schoolbook multiplication of the halves. */
+            constexpr size_t __half = __digits / 2;
+            constexpr _Tp __half_mask = std::__fcxx_rand_mask<_Tp>(__half);
+            const _Tp __p00 = (__a & __half_mask) * (__b & __half_mask);
+            const _Tp __p01 = (__a & __half_mask) * (__b >> __half);
+            const _Tp __p10 = (__a >> __half) * (__b & __half_mask);
+            const _Tp __p11 = (__a >> __half) * (__b >> __half);
+            const _Tp __mid = (__p00 >> __half) + (__p01 & __half_mask) + (__p10 & __half_mask);
+            __plo = (__mid << __half) | (__p00 & __half_mask);
+            __phi = __p11 + (__p01 >> __half) + (__p10 >> __half) + (__mid >> __half);
+        }
+        if constexpr (_Wp == __digits) {
+            __hi = __phi;
+            __lo = __plo;
+        } else {
+            __lo = __plo & std::__fcxx_rand_mask<_Tp>(_Wp);
+            __hi = (__phi << (__digits - _Wp)) | (__plo >> _Wp);
+        }
+    }
+}
+
+template <class _UIntType, size_t _Wp, size_t _Np, size_t _Rp, _UIntType... _Consts>
+class philox_engine {
+    static_assert(__fcxx_rand_is_uint<_UIntType>::value, "std::philox_engine needs an unsigned integer type");
+    static_assert(sizeof...(_Consts) == _Np, "std::philox_engine needs n constants");
+    static_assert(_Np == 2 || _Np == 4, "std::philox_engine needs n to be 2 or 4");
+    static_assert(0 < _Rp, "std::philox_engine needs at least one round");
+    static_assert(0 < _Wp && _Wp <= std::__fcxx_rand_digits<_UIntType>(),
+                  "std::philox_engine needs 0 < w <= numeric_limits<UIntType>::digits");
+
+    static constexpr size_t __array_size = _Np / 2;
+
+    typedef typename __fcxx_rand_wide<_UIntType>::type _Wide;
+
+    static constexpr _Wide __mask = std::__fcxx_rand_mask<_Wide>(_Wp);
+    static constexpr _Wide __consts[_Np] = {static_cast<_Wide>(_Consts)...};
+
+public:
+    using result_type = _UIntType;
+
+    static constexpr size_t word_size = _Wp;
+    static constexpr size_t word_count = _Np;
+    static constexpr size_t round_count = _Rp;
+    static constexpr array<result_type, __array_size> multipliers =
+        std::__fcxx_philox_pick<result_type, _Consts...>(make_index_sequence<__array_size>(), 0);
+    static constexpr array<result_type, __array_size> round_consts =
+        std::__fcxx_philox_pick<result_type, _Consts...>(make_index_sequence<__array_size>(), 1);
+    static constexpr result_type min() { return 0; }
+    static constexpr result_type max() { return static_cast<result_type>(__mask); }
+    static constexpr result_type default_seed = static_cast<result_type>(20111115u);
+
+    philox_engine() : philox_engine(default_seed) {}
+    explicit philox_engine(result_type __value) { seed(__value); }
+
+    template <class _Sseq, class = __fcxx_enable_if_t<__fcxx_is_seed_sequence<_Sseq, result_type>::value> >
+    explicit philox_engine(_Sseq& __q) {
+        seed(__q);
+    }
+
+    void seed(result_type __value = default_seed) {
+        __key[0] = static_cast<result_type>(__value & __mask);
+        for (size_t __k = 1; __k < __array_size; ++__k) {
+            __key[__k] = 0;
+        }
+        __reset();
+    }
+
+    template <class _Sseq>
+    __fcxx_enable_if_t<__fcxx_is_seed_sequence<_Sseq, result_type>::value> seed(_Sseq& __q) {
+        const size_t __p = (_Wp + 31) / 32;
+        uint_least32_t __a[__array_size * __p];
+        __q.generate(__a + 0, __a + __array_size * __p);
+        for (size_t __k = 0; __k < __array_size; ++__k) {
+            __key[__k] = static_cast<result_type>(std::__fcxx_rand_from_words<_Wide>(__a + __k * __p, __p) & __mask);
+        }
+        __reset();
+    }
+
+    void set_counter(const array<result_type, _Np>& __c) {
+        for (size_t __j = 0; __j < _Np; ++__j) {
+            __counter[__j] = static_cast<result_type>(__c[_Np - 1 - __j] & __mask);
+        }
+        __index = _Np - 1;
+    }
+
+    /* The batch of outputs follows from the key and the counter. */
+    friend bool operator==(const philox_engine& __x, const philox_engine& __y) {
+        if (__x.__index != __y.__index) {
+            return false;
+        }
+        for (size_t __k = 0; __k < __array_size; ++__k) {
+            if (__x.__key[__k] != __y.__key[__k]) {
+                return false;
+            }
+        }
+        for (size_t __j = 0; __j < _Np; ++__j) {
+            if (__x.__counter[__j] != __y.__counter[__j]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    result_type operator()() {
+        if (++__index == _Np) {
+            __generate();
+            __index = 0;
+        }
+        return __outputs[__index];
+    }
+
+    void discard(unsigned long long __z) {
+        const size_t __left = _Np - 1 - __index;
+        if (__z <= __left) {
+            __index += static_cast<size_t>(__z);
+            return;
+        }
+        /* From the end of a batch, the counter of the batch the last value
+         * is in, and the value within the batch. */
+        __z -= __left;
+        __add_to_counter((__z - 1) / _Np);
+        __generate();
+        __index = static_cast<size_t>((__z - 1) % _Np);
+    }
+
+private:
+    void __reset() {
+        for (size_t __j = 0; __j < _Np; ++__j) {
+            __counter[__j] = 0;
+            __outputs[__j] = 0;
+        }
+        __index = _Np - 1;
+    }
+
+    void __add_to_counter(unsigned long long __v) {
+        for (size_t __j = 0; __j < _Np && __v != 0; ++__j) {
+            const _Wide __word = __counter[__j];
+            const _Wide __sum = (__word + (static_cast<_Wide>(__v) & __mask)) & __mask;
+            __v = std::__fcxx_rand_shr(__v, _Wp) + (__sum < __word ? 1u : 0u);
+            __counter[__j] = static_cast<result_type>(__sum);
+        }
+    }
+
+    /* Computes the batch of the counter, which is then incremented. */
+    void __generate() {
+        _Wide __x[_Np];
+        _Wide __key_q[__array_size];
+        for (size_t __j = 0; __j < _Np; ++__j) {
+            __x[__j] = __counter[__j];
+        }
+        for (size_t __k = 0; __k < __array_size; ++__k) {
+            __key_q[__k] = __key[__k];
+        }
+        for (size_t __q = 0; __q < _Rp; ++__q) {
+            _Wide __v[_Np];
+            if constexpr (_Np == 4) {
+                __v[0] = __x[2];
+                __v[1] = __x[1];
+                __v[2] = __x[0];
+                __v[3] = __x[3];
+            } else {
+                __v[0] = __x[0];
+                __v[1] = __x[1];
+            }
+            for (size_t __k = 0; __k < __array_size; ++__k) {
+                _Wide __hi;
+                _Wide __lo;
+                std::__fcxx_philox_mulhilo<_Wide, _Wp>(__v[2 * __k], __consts[2 * __k], __hi, __lo);
+                __x[2 * __k] = __hi ^ __key_q[__k] ^ __v[2 * __k + 1];
+                __x[2 * __k + 1] = __lo;
+                __key_q[__k] = (__key_q[__k] + __consts[2 * __k + 1]) & __mask;
+            }
+        }
+        for (size_t __j = 0; __j < _Np; ++__j) {
+            __outputs[__j] = static_cast<result_type>(__x[__j]);
+        }
+        for (size_t __j = 0; __j < _Np; ++__j) {
+            __counter[__j] = static_cast<result_type>((static_cast<_Wide>(__counter[__j]) + 1u) & __mask);
+            if (__counter[__j] != 0) {
+                break;
+            }
+        }
+    }
+
+    result_type __counter[_Np];
+    result_type __key[__array_size];
+    result_type __outputs[_Np];
+    size_t __index;
+};
+#endif
+
+/* [rand.adapt.disc], class template discard_block_engine */
+
+template <class _Engine, size_t _Pp, size_t _Rp>
+class discard_block_engine {
+    static_assert(0 < _Rp && _Rp <= _Pp, "std::discard_block_engine needs 0 < r <= p");
+
+public:
+    typedef typename _Engine::result_type result_type;
+
+    static constexpr size_t block_size = _Pp;
+    static constexpr size_t used_block = _Rp;
+    static constexpr result_type min() { return _Engine::min(); }
+    static constexpr result_type max() { return _Engine::max(); }
+
+    discard_block_engine() : __e(), __n(0) {}
+    explicit discard_block_engine(const _Engine& __engine) : __e(__engine), __n(0) {}
+    explicit discard_block_engine(_Engine&& __engine) : __e(static_cast<_Engine&&>(__engine)), __n(0) {}
+    explicit discard_block_engine(result_type __s) : __e(static_cast<result_type>(__s)), __n(0) {}
+
+    template <class _Sseq, class = __fcxx_enable_if_t<__fcxx_is_seed_sequence<_Sseq, result_type>::value> >
+    explicit discard_block_engine(_Sseq& __q) : __e(__q), __n(0) {}
+
+    void seed() {
+        __e.seed();
+        __n = 0;
+    }
+
+    void seed(result_type __s) {
+        __e.seed(static_cast<result_type>(__s));
+        __n = 0;
+    }
+
+    template <class _Sseq>
+    __fcxx_enable_if_t<__fcxx_is_seed_sequence<_Sseq, result_type>::value> seed(_Sseq& __q) {
+        __e.seed(__q);
+        __n = 0;
+    }
+
+    /* An adaptor that has used up a block is where the next block starts
+     * once the rest of the block is discarded. */
+    friend bool operator==(const discard_block_engine& __x, const discard_block_engine& __y) {
+        if (__x.__n == __y.__n) {
+            return __x.__e == __y.__e;
+        }
+        if (__x.__n == _Rp && __y.__n == 0) {
+            _Engine __next = __x.__e;
+            __next.discard(_Pp - _Rp);
+            return __next == __y.__e;
+        }
+        if (__y.__n == _Rp && __x.__n == 0) {
+            _Engine __next = __y.__e;
+            __next.discard(_Pp - _Rp);
+            return __x.__e == __next;
+        }
+        return false;
+    }
+
+    result_type operator()() {
+        if (__n >= _Rp) {
+            __e.discard(_Pp - _Rp);
+            __n = 0;
+        }
+        ++__n;
+        return __e();
+    }
+
+    void discard(unsigned long long __z) {
+        for (; __z != 0; --__z) {
+            (*this)();
+        }
+    }
+
+    const _Engine& base() const noexcept { return __e; }
+
+private:
+    _Engine __e;
+    size_t __n;
+};
+
+/* [rand.adapt.ibits], class template independent_bits_engine
+ *
+ * The constants of the algorithm, from the range R of the base engine,
+ * which may be 2^N for an N-bit result type. It is then kept as R-1, as
+ * are y0 and y1, which cannot be zero when they are used. */
+
+template <class _Engine, size_t _Wp>
+struct __fcxx_ibits_params {
+    typedef typename _Engine::result_type _Er;
+    typedef typename __fcxx_rand_wide<_Er>::type _Ew;
+
+    static constexpr size_t __digits = std::__fcxx_rand_digits<_Er>();
+    static constexpr _Ew __rm1 = static_cast<_Ew>(static_cast<_Ew>(_Engine::max()) - static_cast<_Ew>(_Engine::min()));
+    static constexpr bool __full = __rm1 == static_cast<_Ew>(std::__fcxx_rand_max<_Er>());
+    static constexpr size_t __m = __full ? __digits : std::__fcxx_rand_bit_width<_Ew>(__rm1 + 1) - 1;
+    static constexpr size_t __n_min = (_Wp + __m - 1) / __m;
+    static constexpr size_t __w0_min = _Wp / __n_min;
+    static constexpr _Ew __y0_min =
+        __full ? 0 : std::__fcxx_rand_shl<_Ew>(std::__fcxx_rand_shr<_Ew>(__rm1 + 1, __w0_min), __w0_min);
+    static constexpr size_t __n = __full || __rm1 + 1 - __y0_min <= __y0_min / __n_min ? __n_min : __n_min + 1;
+    static constexpr size_t __w0 = _Wp / __n;
+    static constexpr size_t __n0 = __n - _Wp % __n;
+    static constexpr _Ew __y0m1 =
+        __full ? __rm1 : std::__fcxx_rand_shl<_Ew>(std::__fcxx_rand_shr<_Ew>(__rm1 + 1, __w0), __w0) - 1;
+    static constexpr _Ew __y1 =
+        __full ? 0 : std::__fcxx_rand_shl<_Ew>(std::__fcxx_rand_shr<_Ew>(__rm1 + 1, __w0 + 1), __w0 + 1);
+    static constexpr _Ew __y1m1 = __full ? __rm1 : __y1 == 0 ? 0 : __y1 - 1;
+};
+
+template <class _Engine, size_t _Wp, class _UIntType>
+class independent_bits_engine {
+    static_assert(__fcxx_rand_is_uint<_UIntType>::value, "std::independent_bits_engine needs an unsigned integer type");
+    static_assert(0 < _Wp && _Wp <= std::__fcxx_rand_digits<_UIntType>(),
+                  "std::independent_bits_engine needs 0 < w <= numeric_limits<UIntType>::digits");
+
+    typedef __fcxx_ibits_params<_Engine, _Wp> __params;
+    typedef typename __params::_Ew _Ew;
+    typedef typename __fcxx_rand_wide<_UIntType>::type _Wide;
+
+public:
+    typedef _UIntType result_type;
+
+    static constexpr result_type min() { return 0; }
+    static constexpr result_type max() { return std::__fcxx_rand_mask<result_type>(_Wp); }
+
+    independent_bits_engine() : __e() {}
+    explicit independent_bits_engine(const _Engine& __engine) : __e(__engine) {}
+    explicit independent_bits_engine(_Engine&& __engine) : __e(static_cast<_Engine&&>(__engine)) {}
+    explicit independent_bits_engine(result_type __s) : __e(static_cast<typename _Engine::result_type>(__s)) {}
+
+    template <class _Sseq, class = __fcxx_enable_if_t<__fcxx_is_seed_sequence<_Sseq, result_type>::value> >
+    explicit independent_bits_engine(_Sseq& __q) : __e(__q) {}
+
+    void seed() { __e.seed(); }
+    void seed(result_type __s) { __e.seed(static_cast<typename _Engine::result_type>(__s)); }
+
+    template <class _Sseq>
+    __fcxx_enable_if_t<__fcxx_is_seed_sequence<_Sseq, result_type>::value> seed(_Sseq& __q) {
+        __e.seed(__q);
+    }
+
+    friend bool operator==(const independent_bits_engine& __x, const independent_bits_engine& __y) {
+        return __x.__e == __y.__e;
+    }
+
+    result_type operator()() {
+        const _Ew __emin = static_cast<_Ew>(_Engine::min());
+        _Wide __s = 0;
+        for (size_t __k = 0; __k != __params::__n0; ++__k) {
+            _Ew __u;
+            do {
+                __u = static_cast<_Ew>(static_cast<_Ew>(__e()) - __emin);
+            } while (__u > __params::__y0m1);
+            __s = static_cast<_Wide>(std::__fcxx_rand_shl(__s, __params::__w0)
+                                     | static_cast<_Wide>(__u & std::__fcxx_rand_mask<_Ew>(__params::__w0)));
+        }
+        for (size_t __k = __params::__n0; __k != __params::__n; ++__k) {
+            _Ew __u;
+            do {
+                __u = static_cast<_Ew>(static_cast<_Ew>(__e()) - __emin);
+            } while (__u > __params::__y1m1);
+            __s = static_cast<_Wide>(std::__fcxx_rand_shl(__s, __params::__w0 + 1)
+                                     | static_cast<_Wide>(__u & std::__fcxx_rand_mask<_Ew>(__params::__w0 + 1)));
+        }
+        return static_cast<result_type>(__s);
+    }
+
+    void discard(unsigned long long __z) {
+        for (; __z != 0; --__z) {
+            (*this)();
+        }
+    }
+
+    const _Engine& base() const noexcept { return __e; }
+
+private:
+    _Engine __e;
+};
+
+/* [rand.predef], engines and engine adaptors with predefined parameters */
+
+typedef linear_congruential_engine<uint_fast32_t, 16807, 0, 2147483647> minstd_rand0;
+typedef linear_congruential_engine<uint_fast32_t, 48271, 0, 2147483647> minstd_rand;
+typedef mersenne_twister_engine<uint_fast32_t, 32, 624, 397, 31, 0x9908b0dfu, 11, 0xffffffffu, 7, 0x9d2c5680u, 15,
+                                0xefc60000u, 18, 1812433253u>
+    mt19937;
+typedef mersenne_twister_engine<uint_fast64_t, 64, 312, 156, 31, 0xb5026f5aa96619e9ull, 29, 0x5555555555555555ull, 17,
+                                0x71d67fffeda60000ull, 37, 0xfff7eee000000000ull, 43, 6364136223846793005ull>
+    mt19937_64;
+typedef subtract_with_carry_engine<uint_fast32_t, 24, 10, 24> ranlux24_base;
+typedef subtract_with_carry_engine<uint_fast64_t, 48, 5, 12> ranlux48_base;
+typedef discard_block_engine<ranlux24_base, 223, 23> ranlux24;
+typedef discard_block_engine<ranlux48_base, 389, 11> ranlux48;
+#if _FCXX_RANDOM_HAS_PHILOX
+typedef philox_engine<uint_fast32_t, 32, 4, 10, 0xCD9E8D57u, 0x9E3779B9u, 0xD2511F53u, 0xBB67AE85u> philox4x32;
+typedef philox_engine<uint_fast64_t, 64, 4, 10, 0xCA5A826395121157ull, 0x9E3779B97F4A7C15ull, 0xD2E7470EE14C6C93ull,
+                      0xBB67AE8584CAA73Bull>
+    philox4x64;
+#endif
+
+/* [rand.dist.uni.int], class template uniform_int_distribution
+ *
+ * A value from 0 to __range, from a generator of whatever range. A larger
+ * range of the generator is folded onto the one wanted, rejecting what is
+ * left over, and a smaller one is extended with a value of a range the
+ * generator covers more times, rejecting what goes past the end. */
+template <class _Up, class _URBG>
+_Up __fcxx_rand_uniform(_URBG& __g, _Up __range);
+
+template <class _Up, class _URBG>
+_Up __fcxx_rand_uniform_extend(_URBG& __g, _Up __range, _Up __gmin, _Up __gsize) {
+    _Up __high;
+    _Up __value;
+    do {
+        __high = static_cast<_Up>(std::__fcxx_rand_uniform<_Up>(__g, static_cast<_Up>(__range / __gsize)) * __gsize);
+        __value = static_cast<_Up>(__high + static_cast<_Up>(static_cast<_Up>(__g()) - __gmin));
+    } while (__value > __range || __value < __high);
+    return __value;
+}
+
+template <class _Up, class _URBG>
+_Up __fcxx_rand_uniform(_URBG& __g, _Up __range) {
+    const _Up __gmin = static_cast<_Up>(_URBG::min());
+    const _Up __grange = static_cast<_Up>(static_cast<_Up>(_URBG::max()) - __gmin);
+    if (__grange == __range) {
+        return static_cast<_Up>(static_cast<_Up>(__g()) - __gmin);
+    }
+    if (__grange > __range) {
+        const _Up __n = static_cast<_Up>(__range + 1);
+        const _Up __limit = static_cast<_Up>(__grange - (__grange % __n + 1) % __n);
+        _Up __u;
+        do {
+            __u = static_cast<_Up>(static_cast<_Up>(__g()) - __gmin);
+        } while (__u > __limit);
+        return static_cast<_Up>(__u % __n);
+    }
+    return std::__fcxx_rand_uniform_extend<_Up>(__g, __range, __gmin, static_cast<_Up>(__grange + 1));
+}
+
+template <class _IntType = int>
+class uniform_int_distribution {
+    static_assert(__fcxx_rand_is_int<_IntType>::value,
+                  "std::uniform_int_distribution needs an integer type, other than bool and the character types");
+
+    typedef typename make_unsigned<_IntType>::type _UInt;
+
+public:
+    typedef _IntType result_type;
+
+    class param_type {
+    public:
+        typedef uniform_int_distribution distribution_type;
+
+        param_type() : param_type(0) {}
+        explicit param_type(result_type __a, result_type __b = std::__fcxx_rand_max<result_type>())
+            : __lower(__a), __upper(__b) {}
+
+        result_type a() const { return __lower; }
+        result_type b() const { return __upper; }
+
+        friend bool operator==(const param_type& __x, const param_type& __y) {
+            return __x.__lower == __y.__lower && __x.__upper == __y.__upper;
+        }
+
+    private:
+        result_type __lower;
+        result_type __upper;
+    };
+
+    uniform_int_distribution() : uniform_int_distribution(0) {}
+    explicit uniform_int_distribution(result_type __a, result_type __b = std::__fcxx_rand_max<result_type>())
+        : __param(__a, __b) {}
+    explicit uniform_int_distribution(const param_type& __p) : __param(__p) {}
+
+    void reset() {}
+
+    friend bool operator==(const uniform_int_distribution& __x, const uniform_int_distribution& __y) {
+        return __x.__param == __y.__param;
+    }
+
+    template <class _URBG>
+    result_type operator()(_URBG& __g) {
+        return (*this)(__g, __param);
+    }
+
+    template <class _URBG>
+    result_type operator()(_URBG& __g, const param_type& __p) {
+        typedef __fcxx_remove_cvref_t<decltype(__g())> _Gr;
+        static_assert(is_unsigned<_Gr>::value, "std::uniform_int_distribution needs a generator of unsigned values");
+        typedef typename __fcxx_rand_wide<__fcxx_conditional_t<(sizeof(_Gr) > sizeof(_UInt)), _Gr, _UInt> >::type _Up;
+        const _UInt __range = static_cast<_UInt>(static_cast<_UInt>(__p.b()) - static_cast<_UInt>(__p.a()));
+        const _Up __value = std::__fcxx_rand_uniform<_Up>(__g, static_cast<_Up>(__range));
+        return static_cast<result_type>(static_cast<_UInt>(static_cast<_UInt>(__p.a()) + static_cast<_UInt>(__value)));
+    }
+
+    result_type a() const { return __param.a(); }
+    result_type b() const { return __param.b(); }
+    param_type param() const { return __param; }
+    void param(const param_type& __p) { __param = __p; }
+    result_type min() const { return __param.a(); }
+    result_type max() const { return __param.b(); }
+
+private:
+    param_type __param;
+};
+
+} /* namespace std */
+
+#endif
+
+#endif

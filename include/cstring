@@ -1,0 +1,253 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_CSTRING
+#define __FREESTANDING_CXX_HDRS_CSTRING 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2026
+#  error "<cstring> is not a freestanding header before C++26"
+#endif
+
+#define _FCXX_VERSION_CSTRING
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_CSTRING
+
+#if _FCXX_STD >= 2026
+
+#undef NULL
+#define NULL __null
+
+namespace std {
+
+/* The functions are provided here, with C++ language linkage, as there is
+ * no C library to take them from. The four memory functions go through the
+ * builtins, as the compilers require an environment to provide those four
+ * anyway, and can then expand them inline. */
+
+inline void* memcpy(void* __s1, const void* __s2, size_t __n) {
+    return __builtin_memcpy(__s1, __s2, __n);
+}
+
+inline void* memmove(void* __s1, const void* __s2, size_t __n) {
+    return __builtin_memmove(__s1, __s2, __n);
+}
+
+inline void* memset(void* __s, int __c, size_t __n) {
+    return __builtin_memset(__s, __c, __n);
+}
+
+inline int memcmp(const void* __s1, const void* __s2, size_t __n) {
+    return __builtin_memcmp(__s1, __s2, __n);
+}
+
+inline void* memccpy(void* __s1, const void* __s2, int __c, size_t __n) {
+    unsigned char* __d = static_cast<unsigned char*>(__s1);
+    const unsigned char* __s = static_cast<const unsigned char*>(__s2);
+    const unsigned char __ch = static_cast<unsigned char>(__c);
+    for (; __n > 0; --__n) {
+        if ((*__d++ = *__s++) == __ch) {
+            return __d;
+        }
+    }
+    return 0;
+}
+
+/* The store must happen even if nothing reads it back, so the memory is
+ * made to look used afterwards. */
+inline void* memset_explicit(void* __s, int __c, size_t __n) {
+    __builtin_memset(__s, __c, __n);
+    __asm__ __volatile__("" : : "r"(__s) : "memory");
+    return __s;
+}
+
+inline char* strcpy(char* __s1, const char* __s2) {
+    char* __d = __s1;
+    while ((*__d++ = *__s2++) != '\0') {
+    }
+    return __s1;
+}
+
+inline char* strncpy(char* __s1, const char* __s2, size_t __n) {
+    char* __d = __s1;
+    for (; __n > 0 && *__s2 != '\0'; --__n) {
+        *__d++ = *__s2++;
+    }
+    for (; __n > 0; --__n) {
+        *__d++ = '\0';
+    }
+    return __s1;
+}
+
+inline size_t strlen(const char* __s) {
+    const char* __e = __s;
+    while (*__e != '\0') {
+        ++__e;
+    }
+    return static_cast<size_t>(__e - __s);
+}
+
+inline char* strcat(char* __s1, const char* __s2) {
+    strcpy(__s1 + strlen(__s1), __s2);
+    return __s1;
+}
+
+inline char* strncat(char* __s1, const char* __s2, size_t __n) {
+    char* __d = __s1 + strlen(__s1);
+    for (; __n > 0 && *__s2 != '\0'; --__n) {
+        *__d++ = *__s2++;
+    }
+    *__d = '\0';
+    return __s1;
+}
+
+inline int strcmp(const char* __s1, const char* __s2) {
+    for (;; ++__s1, ++__s2) {
+        const unsigned char __a = static_cast<unsigned char>(*__s1);
+        const unsigned char __b = static_cast<unsigned char>(*__s2);
+        if (__a != __b) {
+            return __a < __b ? -1 : 1;
+        }
+        if (__a == '\0') {
+            return 0;
+        }
+    }
+}
+
+inline int strncmp(const char* __s1, const char* __s2, size_t __n) {
+    for (; __n > 0; --__n, ++__s1, ++__s2) {
+        const unsigned char __a = static_cast<unsigned char>(*__s1);
+        const unsigned char __b = static_cast<unsigned char>(*__s2);
+        if (__a != __b) {
+            return __a < __b ? -1 : 1;
+        }
+        if (__a == '\0') {
+            return 0;
+        }
+    }
+    return 0;
+}
+
+inline const void* memchr(const void* __s, int __c, size_t __n) {
+    const unsigned char* __p = static_cast<const unsigned char*>(__s);
+    const unsigned char __ch = static_cast<unsigned char>(__c);
+    for (; __n > 0; --__n, ++__p) {
+        if (*__p == __ch) {
+            return __p;
+        }
+    }
+    return 0;
+}
+
+inline void* memchr(void* __s, int __c, size_t __n) {
+    return const_cast<void*>(memchr(static_cast<const void*>(__s), __c, __n));
+}
+
+inline const char* strchr(const char* __s, int __c) {
+    const char __ch = static_cast<char>(__c);
+    for (;; ++__s) {
+        if (*__s == __ch) {
+            return __s;
+        }
+        if (*__s == '\0') {
+            return 0;
+        }
+    }
+}
+
+inline char* strchr(char* __s, int __c) {
+    return const_cast<char*>(strchr(static_cast<const char*>(__s), __c));
+}
+
+inline const char* strrchr(const char* __s, int __c) {
+    const char __ch = static_cast<char>(__c);
+    const char* __found = 0;
+    for (;; ++__s) {
+        if (*__s == __ch) {
+            __found = __s;
+        }
+        if (*__s == '\0') {
+            return __found;
+        }
+    }
+}
+
+inline char* strrchr(char* __s, int __c) {
+    return const_cast<char*>(strrchr(static_cast<const char*>(__s), __c));
+}
+
+inline size_t strspn(const char* __s1, const char* __s2) {
+    size_t __n = 0;
+    for (; __s1[__n] != '\0'; ++__n) {
+        const char* __a = __s2;
+        while (*__a != '\0' && *__a != __s1[__n]) {
+            ++__a;
+        }
+        if (*__a == '\0') {
+            break;
+        }
+    }
+    return __n;
+}
+
+inline size_t strcspn(const char* __s1, const char* __s2) {
+    size_t __n = 0;
+    for (; __s1[__n] != '\0'; ++__n) {
+        const char* __r = __s2;
+        while (*__r != '\0' && *__r != __s1[__n]) {
+            ++__r;
+        }
+        if (*__r != '\0') {
+            break;
+        }
+    }
+    return __n;
+}
+
+inline const char* strpbrk(const char* __s1, const char* __s2) {
+    __s1 += strcspn(__s1, __s2);
+    return *__s1 != '\0' ? __s1 : 0;
+}
+
+inline char* strpbrk(char* __s1, const char* __s2) {
+    return const_cast<char*>(strpbrk(static_cast<const char*>(__s1), __s2));
+}
+
+inline const char* strstr(const char* __s1, const char* __s2) {
+    const size_t __n = strlen(__s2);
+    for (;; ++__s1) {
+        if (strncmp(__s1, __s2, __n) == 0) {
+            return __s1;
+        }
+        if (*__s1 == '\0') {
+            return 0;
+        }
+    }
+}
+
+inline char* strstr(char* __s1, const char* __s2) {
+    return const_cast<char*>(strstr(static_cast<const char*>(__s1), __s2));
+}
+
+} /* namespace std */
+
+#endif
+
+#endif

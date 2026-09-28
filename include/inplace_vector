@@ -1,0 +1,586 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+#ifndef __FREESTANDING_CXX_HDRS_INPLACE_VECTOR
+#define __FREESTANDING_CXX_HDRS_INPLACE_VECTOR 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2026
+#  error "<inplace_vector> requires C++26 or later"
+#endif
+
+#define _FCXX_VERSION_INPLACE_VECTOR
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_INPLACE_VECTOR
+
+#if _FCXX_STD >= 2026
+
+/* inplace_vector is new in C++26. Its special member functions are trivial
+ * where those of its elements are, which is chosen with requires-clauses,
+ * and try_emplace_back returns an optional of a reference. */
+
+#include <compare>
+#include <initializer_list>
+#include <optional>
+#include <type_traits>
+#include <utility>
+#include <__fcxx/addressof.h>
+#include <__fcxx/construct_at.h>
+#include <__fcxx/iterator_base.h>
+#include <__fcxx/range_access.h>
+#include <__fcxx/ranges_access.h>
+#include <__fcxx/ranges_core.h>
+#include <__fcxx/reverse_iterator.h>
+#include <__fcxx/synth_three_way.h>
+
+namespace std {
+
+/* container-compatible-range, of [container.intro.reqmts]. */
+template <class _Rp, class _Tp>
+concept __fcxx_iv_compatible_range = ranges::input_range<_Rp> && convertible_to<ranges::range_reference_t<_Rp>, _Tp>;
+
+/* Whether a type qualifies as an input iterator, for the members taking a
+ * pair of them: whether its category is that of one. */
+template <class _It>
+concept __fcxx_iv_input_iterator =
+    requires { typename iterator_traits<_It>::iterator_category; }
+    && is_convertible_v<typename iterator_traits<_It>::iterator_category, input_iterator_tag>;
+
+/* The size is kept in the smallest unsigned type that holds the capacity. */
+template <size_t _Np>
+using __fcxx_iv_size_t =
+    conditional_t<_Np <= static_cast<unsigned char>(-1), unsigned char,
+                  conditional_t<_Np <= static_cast<unsigned short>(-1), unsigned short,
+                                conditional_t<_Np <= static_cast<unsigned int>(-1), unsigned int, size_t> > >;
+
+struct __fcxx_iv_value_init_tag {
+    explicit __fcxx_iv_value_init_tag() = default;
+};
+
+/* The elements are those of an array in a union, which are constructed and
+ * destroyed one by one. The union is copied as the elements are, trivially
+ * where they are, and its destructor, which destroys nothing, is trivial
+ * where theirs is. The constructor with the tag value-initializes them all,
+ * for constant expressions (see below). */
+template <class _Tp, size_t _Np, bool = is_trivially_destructible_v<_Tp> >
+union __fcxx_iv_storage {
+    _Tp __elems[_Np];
+
+    constexpr __fcxx_iv_storage() noexcept {}
+
+    constexpr explicit __fcxx_iv_storage(__fcxx_iv_value_init_tag) : __elems() {}
+};
+
+template <class _Tp, size_t _Np>
+union __fcxx_iv_storage<_Tp, _Np, false> {
+    _Tp __elems[_Np];
+
+    constexpr __fcxx_iv_storage() noexcept {}
+
+    constexpr explicit __fcxx_iv_storage(__fcxx_iv_value_init_tag) : __elems() {}
+
+    constexpr ~__fcxx_iv_storage() {}
+};
+
+/* Whether value-initializing a _Tp is a constant expression, as it has to be
+ * in a template argument. */
+template <class _Tp, class = void>
+inline constexpr bool __fcxx_iv_constant_value_init = false;
+
+template <class _Tp>
+inline constexpr bool
+    __fcxx_iv_constant_value_init<_Tp, __fcxx_void_t<integral_constant<int, ((void)_Tp(), 0)> > > = true;
+
+/* Workaround: GCC up to 16 and Clang up to 23 (the latest), all targets:
+ * in a constant expression, Clang and GCC before 16 construct no element in
+ * an array that is an inactive member of a union, which C++26 has programs
+ * make the active member with std::start_lifetime (P3726R2), which no
+ * compiler has; and GCC 16, which does, takes no union whose array of
+ * scalars, or of trivially destructible classes, has elements that have
+ * been destroyed to be the value of a constant, which C++26 allows (P3726R2
+ * leaves the elements that are not alive out of its constituent values). So where they can be, all the
+ * elements are value-initialized in constant expressions instead, when the
+ * storage is, which makes the array active and all of it alive, and those
+ * that are destroyed are value-initialized again. This has no effects a
+ * constant expression can see, as value-initialization has no arguments to
+ * reach anything else by. The other elements can only be constructed in
+ * constant expressions by GCC from 16 on. */
+template <class _Tp>
+inline constexpr bool __fcxx_iv_initialize_in_constant_evaluation =
+    (is_trivially_default_constructible_v<_Tp> && is_trivially_destructible_v<_Tp>)
+    || __fcxx_iv_constant_value_init<_Tp>;
+
+/* The members of an inplace_vector, of which there are none for a capacity
+ * of zero, which makes it empty and trivial. */
+template <class _Tp, size_t _Np>
+struct __fcxx_iv_data {
+    __fcxx_iv_storage<_Tp, _Np> __storage_;
+    __fcxx_iv_size_t<_Np> __size_ = 0;
+
+    constexpr __fcxx_iv_data() noexcept {
+        if consteval {
+            if constexpr (__fcxx_iv_initialize_in_constant_evaluation<_Tp>) {
+                std::construct_at(std::addressof(__storage_), __fcxx_iv_value_init_tag());
+            }
+        }
+    }
+};
+
+template <class _Tp>
+struct __fcxx_iv_data<_Tp, 0> {};
+
+/* [inplace.vector], class template inplace_vector. The members that throw in
+ * a hosted implementation, bad_alloc where the capacity would be exceeded,
+ * which all those that add elements other than the try_ and unchecked_ ones
+ * and reserve can, or out_of_range, which at can, are freestanding deleted,
+ * and defined as deleted. Its iterators are pointers. */
+template <class _Tp, size_t _Np>
+class inplace_vector : private __fcxx_iv_data<_Tp, _Np> {
+    /* [inplace.vector.overview], the special member functions that are
+     * trivial. The others are provided where the elements can be copied or
+     * moved, and are not there otherwise. */
+    static constexpr bool __trivial_copy_ctor = _Np == 0 || is_trivially_copy_constructible_v<_Tp>;
+    static constexpr bool __trivial_move_ctor = _Np == 0 || is_trivially_move_constructible_v<_Tp>;
+    static constexpr bool __trivial_dtor = _Np == 0 || is_trivially_destructible_v<_Tp>;
+    static constexpr bool __trivial_copy_assign =
+        _Np == 0
+        || (is_trivially_destructible_v<_Tp> && is_trivially_copy_constructible_v<_Tp>
+            && is_trivially_copy_assignable_v<_Tp>);
+    static constexpr bool __trivial_move_assign =
+        _Np == 0
+        || (is_trivially_destructible_v<_Tp> && is_trivially_move_constructible_v<_Tp>
+            && is_trivially_move_assignable_v<_Tp>);
+
+public:
+    /* types */
+    using value_type = _Tp;
+    using pointer = _Tp*;
+    using const_pointer = const _Tp*;
+    using reference = value_type&;
+    using const_reference = const value_type&;
+    using size_type = size_t;
+    using difference_type = ptrdiff_t;
+    using iterator = _Tp*;
+    using const_iterator = const _Tp*;
+    using reverse_iterator = std::reverse_iterator<iterator>;
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+
+    /* [inplace.vector.cons], construct/copy/destroy. The copies and moves
+     * that are not trivial start from an empty vector, whose destructor
+     * destroys the elements already there if one of the others throws. */
+    constexpr inplace_vector() noexcept = default;
+
+    explicit inplace_vector(size_type __n) = delete;
+
+    inplace_vector(size_type __n, const _Tp& __value) = delete;
+
+    template <__fcxx_iv_input_iterator _InputIterator>
+    inplace_vector(_InputIterator __first, _InputIterator __last) = delete;
+
+    template <__fcxx_iv_compatible_range<_Tp> _Rp>
+    inplace_vector(from_range_t, _Rp&& __rg) = delete;
+
+    constexpr inplace_vector(const inplace_vector&)
+        requires __trivial_copy_ctor
+    = default;
+
+    constexpr inplace_vector(const inplace_vector& __other) noexcept(is_nothrow_copy_constructible_v<_Tp>)
+        requires (!__trivial_copy_ctor && is_copy_constructible_v<_Tp>)
+        : inplace_vector() {
+        for (const _Tp& __x : __other) {
+            unchecked_emplace_back(__x);
+        }
+    }
+
+    constexpr inplace_vector(inplace_vector&&) noexcept(_Np == 0 || is_nothrow_move_constructible_v<_Tp>)
+        requires __trivial_move_ctor
+    = default;
+
+    constexpr inplace_vector(inplace_vector&& __other) noexcept(_Np == 0 || is_nothrow_move_constructible_v<_Tp>)
+        requires (!__trivial_move_ctor && is_move_constructible_v<_Tp>)
+        : inplace_vector() {
+        for (_Tp& __x : __other) {
+            unchecked_emplace_back(std::move(__x));
+        }
+    }
+
+    inplace_vector(initializer_list<_Tp> __il) = delete;
+
+    constexpr ~inplace_vector()
+        requires __trivial_dtor
+    = default;
+
+    constexpr ~inplace_vector()
+        requires (!__trivial_dtor)
+    {
+        __destroy_from(0);
+    }
+
+    constexpr inplace_vector& operator=(const inplace_vector&)
+        requires __trivial_copy_assign
+    = default;
+
+    constexpr inplace_vector& operator=(const inplace_vector& __other)
+        noexcept(is_nothrow_copy_constructible_v<_Tp> && is_nothrow_copy_assignable_v<_Tp>)
+        requires (!__trivial_copy_assign && is_copy_constructible_v<_Tp> && is_copy_assignable_v<_Tp>)
+    {
+        if (this != std::addressof(__other)) {
+            const size_type __n = __other.size();
+            const size_type __common = __n < size() ? __n : size();
+            for (size_type __i = 0; __i < __common; ++__i) {
+                __data()[__i] = __other[__i];
+            }
+            __destroy_from(__common);
+            for (size_type __i = __common; __i < __n; ++__i) {
+                unchecked_emplace_back(__other[__i]);
+            }
+        }
+        return *this;
+    }
+
+    constexpr inplace_vector& operator=(inplace_vector&&) noexcept(
+        _Np == 0 || (is_nothrow_move_assignable_v<_Tp> && is_nothrow_move_constructible_v<_Tp>))
+        requires __trivial_move_assign
+    = default;
+
+    constexpr inplace_vector& operator=(inplace_vector&& __other) noexcept(
+        _Np == 0 || (is_nothrow_move_assignable_v<_Tp> && is_nothrow_move_constructible_v<_Tp>))
+        requires (!__trivial_move_assign && is_move_constructible_v<_Tp> && is_move_assignable_v<_Tp>)
+    {
+        if (this != std::addressof(__other)) {
+            const size_type __n = __other.size();
+            const size_type __common = __n < size() ? __n : size();
+            for (size_type __i = 0; __i < __common; ++__i) {
+                __data()[__i] = std::move(__other[__i]);
+            }
+            __destroy_from(__common);
+            for (size_type __i = __common; __i < __n; ++__i) {
+                unchecked_emplace_back(std::move(__other[__i]));
+            }
+        }
+        return *this;
+    }
+
+    inplace_vector& operator=(initializer_list<_Tp>) = delete;
+
+    template <__fcxx_iv_input_iterator _InputIterator>
+    void assign(_InputIterator __first, _InputIterator __last) = delete;
+
+    template <__fcxx_iv_compatible_range<_Tp> _Rp>
+    void assign_range(_Rp&& __rg) = delete;
+
+    void assign(size_type __n, const _Tp& __u) = delete;
+
+    void assign(initializer_list<_Tp> __il) = delete;
+
+    /* iterators */
+    constexpr iterator begin() noexcept { return __data(); }
+
+    constexpr const_iterator begin() const noexcept { return __data(); }
+
+    constexpr iterator end() noexcept { return __data() + size(); }
+
+    constexpr const_iterator end() const noexcept { return __data() + size(); }
+
+    constexpr reverse_iterator rbegin() noexcept { return reverse_iterator(end()); }
+
+    constexpr const_reverse_iterator rbegin() const noexcept { return const_reverse_iterator(end()); }
+
+    constexpr reverse_iterator rend() noexcept { return reverse_iterator(begin()); }
+
+    constexpr const_reverse_iterator rend() const noexcept { return const_reverse_iterator(begin()); }
+
+    constexpr const_iterator cbegin() const noexcept { return __data(); }
+
+    constexpr const_iterator cend() const noexcept { return __data() + size(); }
+
+    constexpr const_reverse_iterator crbegin() const noexcept { return const_reverse_iterator(end()); }
+
+    constexpr const_reverse_iterator crend() const noexcept { return const_reverse_iterator(begin()); }
+
+    /* [inplace.vector.capacity], capacity */
+    [[nodiscard]] constexpr bool empty() const noexcept { return size() == 0; }
+
+    constexpr size_type size() const noexcept {
+        if constexpr (_Np == 0) {
+            return 0;
+        } else {
+            return this->__size_;
+        }
+    }
+
+    static constexpr size_type max_size() noexcept { return _Np; }
+
+    static constexpr size_type capacity() noexcept { return _Np; }
+
+    void resize(size_type __sz) = delete;
+
+    void resize(size_type __sz, const _Tp& __c) = delete;
+
+    static void reserve(size_type __n) = delete;
+
+    static constexpr void shrink_to_fit() noexcept {}
+
+    /* element access */
+    constexpr reference operator[](size_type __n) { return __data()[__n]; }
+
+    constexpr const_reference operator[](size_type __n) const { return __data()[__n]; }
+
+    reference at(size_type __n) = delete;
+
+    const_reference at(size_type __n) const = delete;
+
+    constexpr reference front() { return __data()[0]; }
+
+    constexpr const_reference front() const { return __data()[0]; }
+
+    constexpr reference back() { return __data()[size() - 1]; }
+
+    constexpr const_reference back() const { return __data()[size() - 1]; }
+
+    /* [inplace.vector.data], data access */
+    constexpr _Tp* data() noexcept { return __data(); }
+
+    constexpr const _Tp* data() const noexcept { return __data(); }
+
+    /* [inplace.vector.modifiers], modifiers */
+    template <class... _Args>
+    reference emplace_back(_Args&&... __args) = delete;
+
+    reference push_back(const _Tp& __x) = delete;
+
+    reference push_back(_Tp&& __x) = delete;
+
+    template <__fcxx_iv_compatible_range<_Tp> _Rp>
+    void append_range(_Rp&& __rg) = delete;
+
+    constexpr void pop_back() { __destroy_from(size() - 1); }
+
+    template <class... _Args>
+    constexpr optional<reference> try_emplace_back(_Args&&... __args) {
+        if constexpr (_Np == 0) {
+            return nullopt;
+        } else {
+            if (size() == _Np) {
+                return nullopt;
+            }
+            return optional<reference>(in_place, unchecked_emplace_back(std::forward<_Args>(__args)...));
+        }
+    }
+
+    constexpr optional<reference> try_push_back(const _Tp& __x) { return try_emplace_back(__x); }
+
+    constexpr optional<reference> try_push_back(_Tp&& __x) { return try_emplace_back(std::move(__x)); }
+
+    template <class... _Args>
+    constexpr reference unchecked_emplace_back(_Args&&... __args) {
+        _Tp* __p = std::construct_at(__data() + size(), std::forward<_Args>(__args)...);
+        __set_size(size() + 1);
+        return *__p;
+    }
+
+    constexpr reference unchecked_push_back(const _Tp& __x) { return unchecked_emplace_back(__x); }
+
+    constexpr reference unchecked_push_back(_Tp&& __x) { return unchecked_emplace_back(std::move(__x)); }
+
+    template <class... _Args>
+    iterator emplace(const_iterator __position, _Args&&... __args) = delete;
+
+    iterator insert(const_iterator __position, const _Tp& __x) = delete;
+
+    iterator insert(const_iterator __position, _Tp&& __x) = delete;
+
+    iterator insert(const_iterator __position, size_type __n, const _Tp& __x) = delete;
+
+    template <__fcxx_iv_input_iterator _InputIterator>
+    iterator insert(const_iterator __position, _InputIterator __first, _InputIterator __last) = delete;
+
+    template <__fcxx_iv_compatible_range<_Tp> _Rp>
+    iterator insert_range(const_iterator __position, _Rp&& __rg) = delete;
+
+    iterator insert(const_iterator __position, initializer_list<_Tp> __il) = delete;
+
+    constexpr iterator erase(const_iterator __position) { return erase(__position, __position + 1); }
+
+    /* The elements after those erased are moved to their place, and those
+     * left over at the end are destroyed. */
+    constexpr iterator erase(const_iterator __first, const_iterator __last) {
+        _Tp* const __begin = __data();
+        _Tp* const __f = __begin + (__first - __begin);
+        if (__first != __last) {
+            _Tp* __to = __f;
+            for (_Tp* __from = __begin + (__last - __begin), *__end = __begin + size(); __from != __end;
+                 ++__from, ++__to) {
+                *__to = std::move(*__from);
+            }
+            __destroy_from(static_cast<size_type>(__to - __begin));
+        }
+        return __f;
+    }
+
+    /* The elements both have are swapped, and those only the longer has are
+     * moved to the shorter. */
+    constexpr void swap(inplace_vector& __x) noexcept(_Np == 0
+                                                     || (is_nothrow_swappable_v<_Tp>
+                                                         && is_nothrow_move_constructible_v<_Tp>)) {
+        if constexpr (_Np != 0) {
+            if (this == std::addressof(__x)) {
+                return;
+            }
+            inplace_vector* __shorter = this;
+            inplace_vector* __longer = std::addressof(__x);
+            if (__shorter->size() > __longer->size()) {
+                __shorter = std::addressof(__x);
+                __longer = this;
+            }
+            const size_type __n = __shorter->size();
+            for (size_type __i = 0; __i < __n; ++__i) {
+                using std::swap;
+                swap(__shorter->__data()[__i], __longer->__data()[__i]);
+            }
+            for (size_type __i = __n; __i < __longer->size(); ++__i) {
+                __shorter->unchecked_emplace_back(std::move(__longer->__data()[__i]));
+            }
+            __longer->__destroy_from(__n);
+        }
+    }
+
+    constexpr void clear() noexcept { __destroy_from(0); }
+
+    friend constexpr bool operator==(const inplace_vector& __x, const inplace_vector& __y) {
+        const size_type __n = __x.size();
+        if (__n != __y.size()) {
+            return false;
+        }
+        for (size_type __i = 0; __i < __n; ++__i) {
+            if (!static_cast<bool>(__x[__i] == __y[__i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /* lexicographical_compare_three_way with synth-three-way. */
+    friend constexpr auto operator<=>(const inplace_vector& __x, const inplace_vector& __y)
+        requires requires(const _Tp __t) { __fcxx_synth_three_way(__t, __t); }
+    {
+        const size_type __n = __x.size() < __y.size() ? __x.size() : __y.size();
+        for (size_type __i = 0; __i < __n; ++__i) {
+            if (auto __c = __fcxx_synth_three_way(__x[__i], __y[__i]); __c != 0) {
+                return __c;
+            }
+        }
+        return static_cast<__fcxx_synth_three_way_result<const _Tp> >(__x.size() <=> __y.size());
+    }
+
+    friend constexpr void swap(inplace_vector& __x, inplace_vector& __y) noexcept(
+        _Np == 0 || (is_nothrow_swappable_v<_Tp> && is_nothrow_move_constructible_v<_Tp>)) {
+        __x.swap(__y);
+    }
+
+private:
+    constexpr _Tp* __data() noexcept {
+        if constexpr (_Np == 0) {
+            return nullptr;
+        } else {
+            return this->__storage_.__elems;
+        }
+    }
+
+    constexpr const _Tp* __data() const noexcept {
+        if constexpr (_Np == 0) {
+            return nullptr;
+        } else {
+            return this->__storage_.__elems;
+        }
+    }
+
+    constexpr void __set_size(size_type __n) noexcept {
+        if constexpr (_Np != 0) {
+            this->__size_ = static_cast<__fcxx_iv_size_t<_Np> >(__n);
+        }
+    }
+
+    /* Destroys the elements from the one at __n on, of which there are none
+     * to destroy where their destructor is trivial, and value-initializes them
+     * again in constant expressions where the storage was (see above). */
+    constexpr void __destroy_from(size_type __n) noexcept {
+        if constexpr (!is_trivially_destructible_v<_Tp>) {
+            for (size_type __i = __n, __end = size(); __i < __end; ++__i) {
+                std::destroy_at(__data() + __i);
+                if consteval {
+                    if constexpr (__fcxx_iv_initialize_in_constant_evaluation<_Tp>) {
+                        std::construct_at(__data() + __i);
+                    }
+                }
+            }
+        }
+        __set_size(__n);
+    }
+};
+
+/* [inplace.vector.erasure], erasure, as remove and remove_if followed by
+ * erase. */
+template <class _Tp, size_t _Np, class _Up = _Tp>
+constexpr typename inplace_vector<_Tp, _Np>::size_type erase(inplace_vector<_Tp, _Np>& __c, const _Up& __value) {
+    _Tp* __first = __c.begin();
+    _Tp* const __last = __c.end();
+    while (__first != __last && !static_cast<bool>(*__first == __value)) {
+        ++__first;
+    }
+    if (__first != __last) {
+        for (_Tp* __i = __first + 1; __i != __last; ++__i) {
+            if (!static_cast<bool>(*__i == __value)) {
+                *__first = std::move(*__i);
+                ++__first;
+            }
+        }
+    }
+    const typename inplace_vector<_Tp, _Np>::size_type __r =
+        static_cast<typename inplace_vector<_Tp, _Np>::size_type>(__last - __first);
+    __c.erase(__first, __last);
+    return __r;
+}
+
+template <class _Tp, size_t _Np, class _Predicate>
+constexpr typename inplace_vector<_Tp, _Np>::size_type erase_if(inplace_vector<_Tp, _Np>& __c, _Predicate __pred) {
+    _Tp* __first = __c.begin();
+    _Tp* const __last = __c.end();
+    while (__first != __last && !static_cast<bool>(__pred(*__first))) {
+        ++__first;
+    }
+    if (__first != __last) {
+        for (_Tp* __i = __first + 1; __i != __last; ++__i) {
+            if (!static_cast<bool>(__pred(*__i))) {
+                *__first = std::move(*__i);
+                ++__first;
+            }
+        }
+    }
+    const typename inplace_vector<_Tp, _Np>::size_type __r =
+        static_cast<typename inplace_vector<_Tp, _Np>::size_type>(__last - __first);
+    __c.erase(__first, __last);
+    return __r;
+}
+
+} /* namespace std */
+
+#endif
+
+#endif

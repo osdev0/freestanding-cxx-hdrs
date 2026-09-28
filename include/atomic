@@ -1,0 +1,2537 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_ATOMIC
+#define __FREESTANDING_CXX_HDRS_ATOMIC 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2011
+#  error "<atomic> requires C++11 or later"
+#endif
+
+#define _FCXX_VERSION_ATOMIC
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_ATOMIC
+
+#if _FCXX_STD >= 2011
+
+#include <cstdint>
+#include <type_traits>
+#include <__fcxx/addressof.h>
+
+/* The operations are those of the __atomic builtins of GCC and Clang, whose
+ * generic forms take objects of any size. For the sizes the target has no
+ * lock-free operations for, they call the functions of the atomic library,
+ * of the names of the builtins, which the program then has to provide. Clang warns about these calls where the
+ * objects are aligned less than their size, which is by design here. */
+#if defined(__clang__)
+#  pragma clang diagnostic push
+#  pragma clang diagnostic ignored "-Wunknown-warning-option"
+#  pragma clang diagnostic ignored "-Watomic-alignment"
+#endif
+
+/* From C++26 on, the operations can be used in constant evaluation, where
+ * they are ordinary accesses to the objects. */
+#if _FCXX_STD >= 2026 && _FCXX_HAS_CONSTEXPR20 && _FCXX_HAS_IS_CONSTANT_EVALUATED
+#  define _FCXX_ATOMIC_CONSTEXPR 1
+#  define _FCXX_ATOMIC_CE constexpr
+#else
+#  define _FCXX_ATOMIC_CONSTEXPR 0
+#  define _FCXX_ATOMIC_CE inline
+#endif
+
+/* The builtin that clears the padding bits of an object, for the comparison
+ * of the compare-and-exchange operations to be on the value representations
+ * only. Where the compiler lacks it, only the padding of the 80-bit format
+ * of x87 is known, and cleared by hand. */
+#if _FCXX_HAS_BUILTIN(__builtin_clear_padding)
+#  define _FCXX_ATOMIC_CLEAR_PADDING 1
+#else
+#  define _FCXX_ATOMIC_CLEAR_PADDING 0
+#endif
+
+/* The volatile overloads of most of the members of atomic are constrained
+ * by C++20 to the types that are always lock-free, while Annex D keeps them
+ * available, deprecated, for the other types. Each such member is declared
+ * by one of these, from its parenthesized declaration and its body: the
+ * first one for the members of Annex D, and the second one for the others,
+ * which only have the constraint. */
+#define _FCXX_ATOMIC_UNPAREN(...) __VA_ARGS__
+#if _FCXX_STD >= 2020 && _FCXX_HAS_CONCEPTS
+#  define _FCXX_ATOMIC_VOLATILE(decl, ...) \
+    _FCXX_ATOMIC_UNPAREN decl requires(__fcxx_atomic_always_lock_free<_Tp>::value) __VA_ARGS__ \
+    _FCXX_DEPRECATED("volatile atomic operations are deprecated when the type is not always lock-free") \
+    _FCXX_ATOMIC_UNPAREN decl requires(!__fcxx_atomic_always_lock_free<_Tp>::value) __VA_ARGS__
+#  define _FCXX_ATOMIC_VOLATILE_LOCK_FREE(decl, ...) \
+    _FCXX_ATOMIC_UNPAREN decl requires(__fcxx_atomic_always_lock_free<_Tp>::value) __VA_ARGS__
+#else
+#  define _FCXX_ATOMIC_VOLATILE(decl, ...) _FCXX_ATOMIC_UNPAREN decl __VA_ARGS__
+#  define _FCXX_ATOMIC_VOLATILE_LOCK_FREE(decl, ...) _FCXX_ATOMIC_UNPAREN decl __VA_ARGS__
+#endif
+
+/* The members of atomic_ref that modify the object are constrained by C++26
+ * to the specializations for types that are not const. */
+#if _FCXX_STD >= 2026
+#  define _FCXX_ATOMIC_REF_MUTABLE requires(!is_const<_Tp>::value)
+#else
+#  define _FCXX_ATOMIC_REF_MUTABLE
+#endif
+
+namespace std {
+
+/* [atomics.order], order and consistency */
+
+#if _FCXX_STD >= 2020
+enum class memory_order : int {
+    relaxed = 0,
+    consume _FCXX_DEPRECATED_CXX26("memory_order::consume is deprecated, use memory_order::acquire") = 1,
+    acquire = 2,
+    release = 3,
+    acq_rel = 4,
+    seq_cst = 5
+};
+
+_FCXX_INLINE_VAR constexpr memory_order memory_order_relaxed = memory_order::relaxed;
+_FCXX_DEPRECATED_CXX26("memory_order_consume is deprecated, use memory_order_acquire")
+_FCXX_INLINE_VAR constexpr memory_order memory_order_consume = static_cast<memory_order>(1);
+_FCXX_INLINE_VAR constexpr memory_order memory_order_acquire = memory_order::acquire;
+_FCXX_INLINE_VAR constexpr memory_order memory_order_release = memory_order::release;
+_FCXX_INLINE_VAR constexpr memory_order memory_order_acq_rel = memory_order::acq_rel;
+_FCXX_INLINE_VAR constexpr memory_order memory_order_seq_cst = memory_order::seq_cst;
+#else
+typedef enum memory_order {
+    memory_order_relaxed,
+    memory_order_consume,
+    memory_order_acquire,
+    memory_order_release,
+    memory_order_acq_rel,
+    memory_order_seq_cst
+} memory_order;
+#endif
+
+/* The orders are passed on to the builtins as they are, which only works as
+ * the values of their macros are those of the enumerators. */
+static_assert(__ATOMIC_RELAXED == 0 && __ATOMIC_CONSUME == 1 && __ATOMIC_ACQUIRE == 2 && __ATOMIC_RELEASE == 3
+                  && __ATOMIC_ACQ_REL == 4 && __ATOMIC_SEQ_CST == 5,
+              "the memory orders of the compiler are not those of the library");
+
+/* In Annex D in C++26, where the dependencies it kills are no more. */
+template <class _Tp>
+_FCXX_DEPRECATED_CXX26("kill_dependency is deprecated")
+_FCXX_CONSTEXPR26 _Tp kill_dependency(_Tp __y) noexcept {
+    return __y;
+}
+
+} /* namespace std */
+
+/* [atomics.lockfree], lock-free property. The types of the sizes the target
+ * has lock-free operations for are aligned to their size in atomic, which
+ * makes them always lock-free, whatever the compiler says of the types that
+ * are aligned less: Clang before 19 has long long only sometimes lock-free
+ * for i686. */
+#if defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1)
+#  define ATOMIC_BOOL_LOCK_FREE 2
+#else
+#  define ATOMIC_BOOL_LOCK_FREE __GCC_ATOMIC_BOOL_LOCK_FREE
+#endif
+#if defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1)
+#  define ATOMIC_CHAR_LOCK_FREE 2
+#else
+#  define ATOMIC_CHAR_LOCK_FREE __GCC_ATOMIC_CHAR_LOCK_FREE
+#endif
+#if _FCXX_STD >= 2020 && _FCXX_HAS_CHAR8_T
+#  if defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1)
+#    define ATOMIC_CHAR8_T_LOCK_FREE 2
+#  elif defined(__GCC_ATOMIC_CHAR8_T_LOCK_FREE)
+#    define ATOMIC_CHAR8_T_LOCK_FREE __GCC_ATOMIC_CHAR8_T_LOCK_FREE
+#  else
+#    define ATOMIC_CHAR8_T_LOCK_FREE __GCC_ATOMIC_CHAR_LOCK_FREE
+#  endif
+#endif
+#if defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2)
+#  define ATOMIC_CHAR16_T_LOCK_FREE 2
+#else
+#  define ATOMIC_CHAR16_T_LOCK_FREE __GCC_ATOMIC_CHAR16_T_LOCK_FREE
+#endif
+#if defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4)
+#  define ATOMIC_CHAR32_T_LOCK_FREE 2
+#else
+#  define ATOMIC_CHAR32_T_LOCK_FREE __GCC_ATOMIC_CHAR32_T_LOCK_FREE
+#endif
+#if (__SIZEOF_WCHAR_T__ == 1 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1)) \
+    || (__SIZEOF_WCHAR_T__ == 2 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2)) \
+    || (__SIZEOF_WCHAR_T__ == 4 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4)) \
+    || (__SIZEOF_WCHAR_T__ == 8 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8))
+#  define ATOMIC_WCHAR_T_LOCK_FREE 2
+#else
+#  define ATOMIC_WCHAR_T_LOCK_FREE __GCC_ATOMIC_WCHAR_T_LOCK_FREE
+#endif
+#if (__SIZEOF_SHORT__ == 1 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1)) \
+    || (__SIZEOF_SHORT__ == 2 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2)) \
+    || (__SIZEOF_SHORT__ == 4 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4)) \
+    || (__SIZEOF_SHORT__ == 8 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8))
+#  define ATOMIC_SHORT_LOCK_FREE 2
+#else
+#  define ATOMIC_SHORT_LOCK_FREE __GCC_ATOMIC_SHORT_LOCK_FREE
+#endif
+#if (__SIZEOF_INT__ == 1 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1)) \
+    || (__SIZEOF_INT__ == 2 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2)) \
+    || (__SIZEOF_INT__ == 4 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4)) \
+    || (__SIZEOF_INT__ == 8 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8))
+#  define ATOMIC_INT_LOCK_FREE 2
+#else
+#  define ATOMIC_INT_LOCK_FREE __GCC_ATOMIC_INT_LOCK_FREE
+#endif
+#if (__SIZEOF_LONG__ == 1 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1)) \
+    || (__SIZEOF_LONG__ == 2 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2)) \
+    || (__SIZEOF_LONG__ == 4 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4)) \
+    || (__SIZEOF_LONG__ == 8 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8))
+#  define ATOMIC_LONG_LOCK_FREE 2
+#else
+#  define ATOMIC_LONG_LOCK_FREE __GCC_ATOMIC_LONG_LOCK_FREE
+#endif
+#if (__SIZEOF_LONG_LONG__ == 1 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1)) \
+    || (__SIZEOF_LONG_LONG__ == 2 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2)) \
+    || (__SIZEOF_LONG_LONG__ == 4 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4)) \
+    || (__SIZEOF_LONG_LONG__ == 8 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8))
+#  define ATOMIC_LLONG_LOCK_FREE 2
+#else
+#  define ATOMIC_LLONG_LOCK_FREE __GCC_ATOMIC_LLONG_LOCK_FREE
+#endif
+#if (__SIZEOF_POINTER__ == 1 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1)) \
+    || (__SIZEOF_POINTER__ == 2 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2)) \
+    || (__SIZEOF_POINTER__ == 4 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4)) \
+    || (__SIZEOF_POINTER__ == 8 && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8))
+#  define ATOMIC_POINTER_LOCK_FREE 2
+#else
+#  define ATOMIC_POINTER_LOCK_FREE __GCC_ATOMIC_POINTER_LOCK_FREE
+#endif
+
+namespace std {
+
+/* The operations of all of the atomic types, on the objects of a pointer
+ * type that is either volatile or not, as the builtins take both. From C++26
+ * on, they are constexpr, and when evaluated in a constant expression they
+ * access non-volatile objects as ordinary ones. */
+
+/* Workaround: GCC before 14.4, and 15.1 and 15.2, MicroBlaze: its
+ * compare-and-exchange of 4 bytes gives back the comparison it makes, which
+ * is 0 where it succeeds, for its result. The builtin, and the operations
+ * GCC and the atomic library build on it, the exchanges, the other
+ * read-modify-write operations, test-and-set and those on 1 and 2 bytes,
+ * get the wrong values then. Those on the objects of up to 4 bytes are
+ * compare-and-exchange operations of the library there instead, with the
+ * instructions GCC has used since. */
+#if _FCXX_GCC && defined(__MICROBLAZE__) && (_FCXX_GCC < 1404 || (_FCXX_GCC >= 1500 && _FCXX_GCC < 1503))
+#  define _FCXX_ATOMIC_MICROBLAZE 1
+#else
+#  define _FCXX_ATOMIC_MICROBLAZE 0
+#endif
+
+#if _FCXX_ATOMIC_MICROBLAZE
+/* The compare-and-exchange of an aligned word, which gives back the value
+ * found in it. */
+inline unsigned int __fcxx_atomic_mb_cas(volatile unsigned int* __w, unsigned int __e, unsigned int __d) noexcept {
+    unsigned int __found, __c;
+    __asm__ __volatile__("addc\tr0,r0,r0\n"
+                         "1:\tlwx\t%0,%2,r0\n\t"
+                         "addic\t%1,r0,0\n\t"
+                         "bnei\t%1,1b\n\t"
+                         "cmp\t%1,%0,%3\n\t"
+                         "bnei\t%1,2f\n\t"
+                         "swx\t%4,%2,r0\n\t"
+                         "addic\t%1,r0,0\n\t"
+                         "bnei\t%1,1b\n"
+                         "2:"
+                         : "=&r"(__found), "=&r"(__c)
+                         : "r"(__w), "r"(__e), "r"(__d)
+                         : "cc", "memory");
+    return __found;
+}
+
+/* The compare-and-exchange of the _Size bytes at __p, of up to 4, with that
+ * of the aligned word they are in, which writes the value found to __e when
+ * it fails. */
+template <size_t _Size>
+inline bool __fcxx_atomic_mb_compare_exchange(const volatile void* __p, void* __e, const void* __d) noexcept {
+    volatile unsigned int* const __w = reinterpret_cast<volatile unsigned int*>(
+        reinterpret_cast<_FCXX_UINTPTR>(__p) & ~static_cast<_FCXX_UINTPTR>(sizeof(unsigned int) - 1));
+    const size_t __at = static_cast<size_t>(reinterpret_cast<_FCXX_UINTPTR>(__p) & (sizeof(unsigned int) - 1));
+    unsigned int __found = *__w;
+    for (;;) {
+        unsigned int __want = __found;
+        unsigned int __new = __found;
+        __builtin_memcpy(reinterpret_cast<unsigned char*>(&__want) + __at, __e, _Size);
+        __builtin_memcpy(reinterpret_cast<unsigned char*>(&__new) + __at, __d, _Size);
+        __found = __fcxx_atomic_mb_cas(__w, __want, __new);
+        if (__found == __want) {
+            return true;
+        }
+        if (__builtin_memcmp(reinterpret_cast<const unsigned char*>(&__found) + __at, __e, _Size) != 0) {
+            __builtin_memcpy(__e, reinterpret_cast<const unsigned char*>(&__found) + __at, _Size);
+            return false;
+        }
+    }
+}
+#endif
+
+/* Whether the operations on the objects of the type are always lock-free,
+ * as they are when the objects are aligned to their size, which the storage
+ * of atomic always is. */
+template <class _Tp>
+struct __fcxx_atomic_lock_free
+    : __fcxx_bool_constant<__atomic_always_lock_free(sizeof(_Tp), 0)> {};
+
+/* Whether the lock-free macros of all of the types of the size are 2, which
+ * is_always_lock_free has to agree with. The compiler can take the operations
+ * to be always lock-free where its macros have them only sometimes lock-free:
+ * GCC does, for the sizes it only has lock-free operations for through
+ * functions of its runtime library, as on ARM before ARMv6. The types are
+ * not always lock-free as far as the library knows then, which cannot tell
+ * what those functions do. */
+template <size_t _Size>
+struct __fcxx_atomic_macros_lock_free
+    : __fcxx_bool_constant<(sizeof(bool) != _Size || ATOMIC_BOOL_LOCK_FREE == 2)
+                           && (sizeof(char) != _Size || ATOMIC_CHAR_LOCK_FREE == 2)
+#if defined(ATOMIC_CHAR8_T_LOCK_FREE)
+                           && (sizeof(char8_t) != _Size || ATOMIC_CHAR8_T_LOCK_FREE == 2)
+#endif
+                           && (sizeof(char16_t) != _Size || ATOMIC_CHAR16_T_LOCK_FREE == 2)
+                           && (sizeof(char32_t) != _Size || ATOMIC_CHAR32_T_LOCK_FREE == 2)
+                           && (sizeof(wchar_t) != _Size || ATOMIC_WCHAR_T_LOCK_FREE == 2)
+                           && (sizeof(short) != _Size || ATOMIC_SHORT_LOCK_FREE == 2)
+                           && (sizeof(int) != _Size || ATOMIC_INT_LOCK_FREE == 2)
+                           && (sizeof(long) != _Size || ATOMIC_LONG_LOCK_FREE == 2)
+                           && (sizeof(long long) != _Size || ATOMIC_LLONG_LOCK_FREE == 2)
+                           && (sizeof(void*) != _Size || ATOMIC_POINTER_LOCK_FREE == 2)> {};
+
+/* Whether atomic and atomic_ref of the type are always lock-free, as their
+ * is_always_lock_free says. */
+template <class _Tp>
+struct __fcxx_atomic_always_lock_free
+    : __fcxx_bool_constant<__fcxx_atomic_lock_free<_Tp>::value
+                           && __fcxx_atomic_macros_lock_free<sizeof(_Tp)>::value> {};
+
+/* Whether the size is one lock-free operations can exist for. */
+template <class _Tp>
+struct __fcxx_atomic_sized : __fcxx_bool_constant<(sizeof(_Tp) & (sizeof(_Tp) - 1)) == 0 && sizeof(_Tp) <= 16> {};
+
+/* The alignment of the storage of atomic, which is that of the size for the
+ * sizes lock-free operations can exist for, as with _Atomic in C: the
+ * lock-free operations need it for the types that are aligned less. GCC 4.8
+ * only takes it spelt out in the attribute. */
+#define _FCXX_ATOMIC_ALIGNMENT(_Tp)                                                                        \
+    ((sizeof(_Tp) & (sizeof(_Tp) - 1)) == 0 && sizeof(_Tp) <= 16 && sizeof(_Tp) > alignof(_Tp) ? sizeof(_Tp) \
+                                                                                                : alignof(_Tp))
+
+/* The alignment atomic_ref requires, which is only raised for the types it
+ * then makes always lock-free. */
+template <class _Tp>
+struct __fcxx_atomic_ref_align
+    : integral_constant<size_t, (__fcxx_atomic_lock_free<_Tp>::value && __fcxx_atomic_sized<_Tp>::value
+                                         && sizeof(_Tp) > alignof(_Tp)
+                                     ? sizeof(_Tp)
+                                     : alignof(_Tp))> {};
+
+/* Whether the type is the 80-bit format of x87, stored with padding after
+ * its first ten bytes. */
+template <class _Tp>
+struct __fcxx_atomic_is_x87
+#if (defined(__i386__) || defined(__x86_64__)) && __LDBL_MANT_DIG__ == 64 && __SIZEOF_LONG_DOUBLE__ > 10
+    : is_same<_Tp, long double> {};
+#else
+    : false_type {};
+#endif
+
+/* The objects and the values as the builtins take them.
+ *
+ * Workaround: Clang up to 23 (the latest), x86: the x87 format is given to
+ * the builtins as the bytes of its representation, as Clang otherwise copies
+ * only the bytes of its value, into temporaries with whatever padding, and
+ * does not give back the value a compare-and-exchange finds.
+ *
+ * The builtins go by the alignment of the type, and Clang calls the atomic
+ * library for the types that are aligned less than their size, even when they are
+ * always lock-free with that alignment, which the objects of atomic, and
+ * those atomic_ref refers to, have then. Their address is taken as that of
+ * the type with that alignment. */
+template <size_t _Size, size_t _Align>
+struct __fcxx_atomic_bytes {
+    unsigned char __b[_Size] __attribute__((__aligned__(_Align)));
+};
+
+template <class _Tp, bool = __fcxx_atomic_is_x87<_Tp>::value>
+struct __fcxx_atomic_repr {
+    typedef _Tp type;
+};
+
+template <class _Tp>
+struct __fcxx_atomic_repr<_Tp, true> {
+    typedef __fcxx_atomic_bytes<sizeof(_Tp), alignof(_Tp)> type;
+
+    /* Which also completes the type, as the builtins need. */
+    static_assert(sizeof(type) == sizeof(_Tp) && alignof(type) == alignof(_Tp), "the bytes of the representation");
+};
+
+/* The alignment the builtins are given the object with: 0 for that of the
+ * type, and 1 for its size. */
+template <class _Vp>
+struct __fcxx_atomic_address_kind
+    : integral_constant<int, __fcxx_atomic_lock_free<_Vp>::value && __fcxx_atomic_sized<_Vp>::value
+                                     && (sizeof(_Vp) > alignof(_Vp))
+                                 ? 1
+                                 : 0> {};
+
+template <class _Up, class _Vp = __fcxx_remove_cv_t<_Up>, int = __fcxx_atomic_address_kind<_Vp>::value>
+struct __fcxx_atomic_address {
+    typedef typename __fcxx_copy_cv<_Up, typename __fcxx_atomic_repr<_Vp>::type>::type __object;
+    typedef __object type;
+};
+
+template <class _Up, class _Vp>
+struct __fcxx_atomic_address<_Up, _Vp, 1> {
+    typedef typename __fcxx_atomic_address<_Up, _Vp, 0>::__object __object;
+    typedef __object type __attribute__((__aligned__(sizeof(_Vp))));
+};
+
+template <class _Up>
+_FCXX_ALWAYS_INLINE inline typename __fcxx_atomic_address<_Up>::type* __fcxx_atomic_addr(_Up* __p) noexcept {
+    return reinterpret_cast<typename __fcxx_atomic_address<_Up>::type*>(
+        const_cast<typename __fcxx_atomic_address<_Up>::__object*>(
+            reinterpret_cast<const volatile typename __fcxx_atomic_repr<__fcxx_remove_cv_t<_Up> >::type*>(__p)));
+}
+
+template <class _Tp>
+_FCXX_ALWAYS_INLINE inline typename __fcxx_atomic_repr<_Tp>::type* __fcxx_atomic_val(_Tp* __v) noexcept {
+    return reinterpret_cast<typename __fcxx_atomic_repr<_Tp>::type*>(__v);
+}
+
+/* Storage for a value that the builtins write, without constructing it. */
+template <class _Tp>
+union __fcxx_atomic_holder {
+    _Tp __value;
+
+    __fcxx_atomic_holder() noexcept {}
+};
+
+/* Whether the objects of the type can have padding bits, which the builtins
+ * would compare. */
+template <class _Tp>
+struct __fcxx_atomic_padded
+#if _FCXX_ATOMIC_CLEAR_PADDING
+    : __fcxx_bool_constant<(!is_scalar<_Tp>::value && !__has_unique_object_representations(_Tp))
+                           || __fcxx_atomic_is_x87<_Tp>::value> {};
+#else
+    : __fcxx_atomic_is_x87<_Tp> {};
+#endif
+
+template <bool _Padded>
+struct __fcxx_atomic_padding {
+    template <class _Tp>
+    static _FCXX_ALWAYS_INLINE void __clear(_Tp*) noexcept {}
+};
+
+template <>
+struct __fcxx_atomic_padding<true> {
+    template <class _Tp>
+    static _FCXX_ALWAYS_INLINE void __clear(_Tp* __p) noexcept {
+#if _FCXX_ATOMIC_CLEAR_PADDING
+        __builtin_clear_padding(__p);
+#else
+        __builtin_memset(reinterpret_cast<unsigned char*>(__p) + 10, 0, sizeof(_Tp) - 10);
+#endif
+    }
+};
+
+template <class _Tp>
+_FCXX_ALWAYS_INLINE inline void __fcxx_atomic_clear_padding(_Tp* __p) noexcept {
+    __fcxx_atomic_padding<__fcxx_atomic_padded<_Tp>::value>::__clear(__p);
+}
+
+/* The result of is_lock_free, only asked of the atomic library for the
+ * types that are not always lock-free. */
+template <bool _Always>
+struct __fcxx_atomic_lock_free_query {
+    static bool __query(size_t, const volatile void*) noexcept {
+        return true;
+    }
+};
+
+template <>
+struct __fcxx_atomic_lock_free_query<false> {
+    static bool __query(size_t __size, const volatile void* __p) noexcept {
+        return __atomic_is_lock_free(__size, const_cast<void*>(__p));
+    }
+};
+
+_FCXX_CONSTEXPR11 int __fcxx_atomic_order(memory_order __m) noexcept {
+    return static_cast<int>(__m);
+}
+
+/* The order of the failure of a compare-and-exchange given a single order. */
+_FCXX_CONSTEXPR11 memory_order __fcxx_atomic_failure_order(memory_order __m) noexcept {
+    return __m == memory_order_acq_rel ? memory_order_acquire
+         : __m == memory_order_release ? memory_order_relaxed
+                                       : __m;
+}
+
+/* The order of the success of a compare-and-exchange, which the builtins
+ * need at least as strong as the order of the failure, as C++11 did. From
+ * C++17 on, the failure can have the stronger one, and the success gets
+ * strengthened to it then. */
+_FCXX_CONSTEXPR11 int __fcxx_atomic_success_order(int __s, int __f) noexcept {
+    return __f == __ATOMIC_SEQ_CST ? __ATOMIC_SEQ_CST
+         : __f != __ATOMIC_ACQUIRE && __f != __ATOMIC_CONSUME ? __s
+         : __s == __ATOMIC_RELAXED || __s == __ATOMIC_CONSUME ? __ATOMIC_ACQUIRE
+         : __s == __ATOMIC_RELEASE ? __ATOMIC_ACQ_REL
+                                   : __s;
+}
+
+/* What a waiting operation does while the value has not changed, as nothing
+ * can make it block in a freestanding environment: it spins on the value,
+ * hinting the processor at it where the architecture has an instruction for
+ * that. */
+_FCXX_ALWAYS_INLINE inline void __fcxx_atomic_pause() noexcept {
+#if defined(__i386__) || defined(__x86_64__)
+#  if _FCXX_GCC || _FCXX_HAS_BUILTIN(__builtin_ia32_pause)
+    __builtin_ia32_pause();
+#  else
+    __asm__ __volatile__("pause");
+#  endif
+#elif defined(__aarch64__)                                                                                        \
+    || (defined(__arm__)                                                                                          \
+        && ((defined(__ARM_ARCH) && __ARM_ARCH >= 7) || defined(__ARM_ARCH_6K__) || defined(__ARM_ARCH_6KZ__)    \
+            || defined(__ARM_ARCH_6ZK__) || defined(__ARM_ARCH_6T2__) || defined(__ARM_ARCH_6M__)               \
+            || defined(__ARM_ARCH_7__) || defined(__ARM_ARCH_7A__) || defined(__ARM_ARCH_7R__)                   \
+            || defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)))
+    __asm__ __volatile__("yield");
+#elif defined(__riscv_zihintpause)
+    __asm__ __volatile__("pause");
+#endif
+}
+
+#if _FCXX_ATOMIC_CONSTEXPR
+/* Whether two values have the same value representation, in constant
+ * evaluation. The padding of the x87 format cannot be read there, and its
+ * values are compared as numbers, with the sign of zero and NaN. */
+template <class _Tp>
+constexpr bool __fcxx_atomic_same_ce(const _Tp& __a, const _Tp& __b) noexcept {
+    if constexpr (is_scalar<_Tp>::value && !is_floating_point<_Tp>::value) {
+        return __a == __b;
+    } else if constexpr (__fcxx_atomic_is_x87<_Tp>::value) {
+        return (__a == __b && __builtin_signbit(__a) == __builtin_signbit(__b)) || (__a != __a && __b != __b);
+    } else {
+        struct __bytes {
+            unsigned char __b[sizeof(_Tp)];
+        };
+        const __bytes __x = __builtin_bit_cast(__bytes, __a);
+        const __bytes __y = __builtin_bit_cast(__bytes, __b);
+        for (size_t __i = 0; __i != sizeof(_Tp); ++__i) {
+            if (__x.__b[__i] != __y.__b[__i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+/* Called by a waiting operation that would block forever in constant
+ * evaluation, which it makes fail. */
+inline void __fcxx_atomic_wait_blocks() noexcept {}
+#endif
+
+/* Workaround: Clang before 9, i386: it loads an object of 8 bytes with a
+ * compare-and-exchange, which faults where the object is read-only, as a
+ * constant atomic object can be. It is loaded with x87 there instead, which
+ * reads 8 aligned bytes at once, where the target has it. */
+#if _FCXX_CLANG && _FCXX_CLANG < 900 && defined(__i386__) && !defined(_SOFT_FLOAT)
+#  define _FCXX_ATOMIC_X87_LOAD 1
+#else
+#  define _FCXX_ATOMIC_X87_LOAD 0
+#endif
+
+template <bool _X87>
+struct __fcxx_atomic_loader {
+    template <class _Tp, class _Up>
+    static _FCXX_ALWAYS_INLINE void __load(_Up* __p, _Tp* __r, int __mo) noexcept {
+        __atomic_load(__fcxx_atomic_addr(__p), __fcxx_atomic_val(__r), __mo);
+    }
+};
+
+#if _FCXX_ATOMIC_X87_LOAD
+template <>
+struct __fcxx_atomic_loader<true> {
+    template <class _Tp, class _Up>
+    static _FCXX_ALWAYS_INLINE void __load(_Up* __p, _Tp* __r, int) noexcept {
+        __asm__ __volatile__("fildll %1\n\tfistpll %0"
+                             : "=m"(*reinterpret_cast<long long*>(__r))
+                             : "m"(*reinterpret_cast<const volatile long long*>(__p))
+                             : "memory");
+    }
+};
+#endif
+
+template <class _Tp, class _Up>
+_FCXX_ALWAYS_INLINE _FCXX_ATOMIC_CE _Tp __fcxx_atomic_load(_Up* __p, memory_order __m) noexcept {
+#if _FCXX_ATOMIC_CONSTEXPR
+    if constexpr (!is_volatile<_Up>::value) {
+        if (__builtin_is_constant_evaluated()) {
+            return *__p;
+        }
+    }
+#endif
+    __fcxx_atomic_holder<_Tp> __r;
+    __fcxx_atomic_loader<_FCXX_ATOMIC_X87_LOAD && sizeof(_Tp) == 8 && __fcxx_atomic_lock_free<_Tp>::value>::__load(
+        __p, &__r.__value, __fcxx_atomic_order(__m));
+    return __r.__value;
+}
+
+template <class _Tp, class _Up>
+_FCXX_ALWAYS_INLINE _FCXX_ATOMIC_CE void __fcxx_atomic_store(_Up* __p, _Tp __v, memory_order __m) noexcept {
+#if _FCXX_ATOMIC_CONSTEXPR
+    if constexpr (!is_volatile<_Up>::value) {
+        if (__builtin_is_constant_evaluated()) {
+            *__p = __v;
+            return;
+        }
+    }
+#endif
+    __fcxx_atomic_clear_padding(&__v);
+    __atomic_store(__fcxx_atomic_addr(__p), __fcxx_atomic_val(&__v), __fcxx_atomic_order(__m));
+}
+
+/* The compare-and-exchange builtin, or the one of the library where GCC
+ * gets it wrong (see _FCXX_ATOMIC_MICROBLAZE). */
+template <class _Tp, bool = _FCXX_ATOMIC_MICROBLAZE && sizeof(_Tp) <= 4>
+struct __fcxx_atomic_builtin {
+    template <class _Up>
+    static _FCXX_ALWAYS_INLINE bool __cas(_Up* __p, _Tp* __e, _Tp* __d, bool __weak, int __s, int __f) noexcept {
+        return __weak ? __atomic_compare_exchange(__fcxx_atomic_addr(__p), __fcxx_atomic_val(__e),
+                                                  __fcxx_atomic_val(__d), true, __s, __f)
+                      : __atomic_compare_exchange(__fcxx_atomic_addr(__p), __fcxx_atomic_val(__e),
+                                                  __fcxx_atomic_val(__d), false, __s, __f);
+    }
+};
+
+#if _FCXX_ATOMIC_MICROBLAZE
+template <class _Tp>
+struct __fcxx_atomic_builtin<_Tp, true> {
+    template <class _Up>
+    static _FCXX_ALWAYS_INLINE bool __cas(_Up* __p, _Tp* __e, _Tp* __d, bool, int, int) noexcept {
+        return __fcxx_atomic_mb_compare_exchange<sizeof(_Tp)>(__p, __e, __d);
+    }
+};
+#endif
+
+/* A value made to go through memory before a builtin gets it, for every
+ * version of GCC on the targets of two bugs of GCC 14, the version they
+ * were found with.
+ * Workaround: GCC 14, RISC-V: it crashes on a compare-and-exchange of 16
+ * bits of a value it has just computed as a floating-point one, such as a
+ * _Float16.
+ * Workaround: GCC 14, MIPS with the o32 ABI: it passes a structure of 8
+ * bytes aligned to 4, which was a parameter, to __atomic_exchange_8 of the
+ * atomic library in the registers of such a structure, $5 and $6, rather
+ * than in those of the integer that function takes, $6 and $7. */
+#if _FCXX_GCC && (defined(__riscv) || (defined(__mips__) && defined(_ABIO32) && _MIPS_SIM == _ABIO32))
+#  define _FCXX_ATOMIC_THROUGH_MEMORY(x) __asm__("" : "+m"(x))
+#else
+#  define _FCXX_ATOMIC_THROUGH_MEMORY(x) ((void)0)
+#endif
+
+/* The exchange, generic.
+ * Workaround: GCC 4.8.0 to 4.8.2, all targets: they do not compile the
+ * generic __atomic_exchange of a size without a builtin of its own (the
+ * call of the atomic library it becomes is taken for the builtin itself,
+ * without the size), which is made of compare-and-exchanges there, which
+ * they compile. */
+#if _FCXX_GCC == 408 && __GNUC_PATCHLEVEL__ < 3
+template <bool _Sized>
+struct __fcxx_atomic_exchange_generic {
+    template <class _Up, class _Vp>
+    static _FCXX_ALWAYS_INLINE void __exchange(_Up* __p, _Vp* __v, _Vp* __r, int __m) noexcept {
+        __atomic_exchange(__p, __v, __r, __m);
+    }
+};
+
+template <>
+struct __fcxx_atomic_exchange_generic<false> {
+    template <class _Up, class _Vp>
+    static _FCXX_ALWAYS_INLINE void __exchange(_Up* __p, _Vp* __v, _Vp* __r, int __m) noexcept {
+        __atomic_load(__p, __r, __ATOMIC_RELAXED);
+        while (!__atomic_compare_exchange(__p, __r, __v, false, __m, __ATOMIC_RELAXED)) {
+        }
+    }
+};
+
+#  define _FCXX_ATOMIC_EXCHANGE(p, v, r, m) \
+      __fcxx_atomic_exchange_generic<sizeof(*(v)) == 1 || sizeof(*(v)) == 2 || sizeof(*(v)) == 4 \
+                                     || sizeof(*(v)) == 8 || sizeof(*(v)) == 16>::__exchange(p, v, r, m)
+#else
+#  define _FCXX_ATOMIC_EXCHANGE(p, v, r, m) __atomic_exchange(p, v, r, m)
+#endif
+
+template <class _Tp, class _Up>
+_FCXX_ALWAYS_INLINE _FCXX_ATOMIC_CE _Tp __fcxx_atomic_exchange(_Up* __p, _Tp __v, memory_order __m) noexcept {
+#if _FCXX_ATOMIC_CONSTEXPR
+    if constexpr (!is_volatile<_Up>::value) {
+        if (__builtin_is_constant_evaluated()) {
+            _Tp __old = *__p;
+            *__p = __v;
+            return __old;
+        }
+    }
+#endif
+    __fcxx_atomic_clear_padding(&__v);
+#if _FCXX_ATOMIC_MICROBLAZE
+    if (sizeof(_Tp) <= 4) {
+        _Tp __old = __fcxx_atomic_load<_Tp>(__p, memory_order_relaxed);
+        while (!__fcxx_atomic_builtin<_Tp>::__cas(__p, &__old, &__v, true, __ATOMIC_SEQ_CST, __ATOMIC_RELAXED)) {
+        }
+        return __old;
+    }
+#endif
+    _FCXX_ATOMIC_THROUGH_MEMORY(__v);
+    __fcxx_atomic_holder<_Tp> __r;
+    _FCXX_ATOMIC_EXCHANGE(__fcxx_atomic_addr(__p), __fcxx_atomic_val(&__v), __fcxx_atomic_val(&__r.__value),
+                          __fcxx_atomic_order(__m));
+    return __r.__value;
+}
+
+/* The comparison of a compare-and-exchange is on the value representations,
+ * without the padding bits. The values stored have theirs cleared, but those
+ * of the object can have any value still, from its initialization when it
+ * is not constant, or when the object is one atomic_ref refers to. When the
+ * builtin fails on a value with only the padding different from the one
+ * expected, it is retried with the padding found. */
+template <bool _Padded>
+struct __fcxx_atomic_cas {
+    template <class _Tp, class _Up>
+    static _FCXX_ALWAYS_INLINE bool __exchange(_Up* __p, _Tp& __e, _Tp& __d, bool __weak, int __s, int __f) noexcept {
+        return __fcxx_atomic_builtin<_Tp>::__cas(__p, &__e, &__d, __weak, __s, __f);
+    }
+};
+
+template <>
+struct __fcxx_atomic_cas<true> {
+    template <class _Tp, class _Up>
+    static _FCXX_ALWAYS_INLINE bool __exchange(_Up* __p, _Tp& __e, _Tp& __d, bool __weak, int __s, int __f) noexcept {
+        __fcxx_atomic_holder<_Tp> __want, __try, __found;
+        __builtin_memcpy(static_cast<void*>(&__want.__value), static_cast<const void*>(&__e), sizeof(_Tp));
+        __fcxx_atomic_clear_padding(&__want.__value);
+        __builtin_memcpy(static_cast<void*>(&__try.__value), static_cast<const void*>(&__want.__value), sizeof(_Tp));
+        for (;;) {
+            if (__fcxx_atomic_builtin<_Tp>::__cas(__p, &__try.__value, &__d, __weak, __s, __f)) {
+                return true;
+            }
+            __builtin_memcpy(static_cast<void*>(&__found.__value), static_cast<const void*>(&__try.__value),
+                             sizeof(_Tp));
+            __fcxx_atomic_clear_padding(&__found.__value);
+            if (__builtin_memcmp(&__found.__value, &__want.__value, sizeof(_Tp)) != 0) {
+                __builtin_memcpy(static_cast<void*>(&__e), static_cast<const void*>(&__try.__value), sizeof(_Tp));
+                return false;
+            }
+        }
+    }
+};
+
+template <class _Tp, class _Up>
+_FCXX_ALWAYS_INLINE _FCXX_ATOMIC_CE bool __fcxx_atomic_compare_exchange(_Up* __p, _Tp& __e, _Tp __d, bool __weak,
+                                                                        memory_order __s, memory_order __f) noexcept {
+#if _FCXX_ATOMIC_CONSTEXPR
+    if constexpr (!is_volatile<_Up>::value) {
+        if (__builtin_is_constant_evaluated()) {
+            if (__fcxx_atomic_same_ce(*__p, __e)) {
+                *__p = __d;
+                return true;
+            }
+            __e = *__p;
+            return false;
+        }
+    }
+#endif
+    __fcxx_atomic_clear_padding(&__d);
+    const int __fo = __fcxx_atomic_order(__f);
+    return __fcxx_atomic_cas<__fcxx_atomic_padded<_Tp>::value>::__exchange(
+        __p, __e, __d, __weak, __fcxx_atomic_success_order(__fcxx_atomic_order(__s), __fo), __fo);
+}
+
+/* Waits by spinning until the value representation differs from that of
+ * the old value. */
+template <class _Tp, class _Up>
+_FCXX_ALWAYS_INLINE _FCXX_ATOMIC_CE void __fcxx_atomic_wait(_Up* __p, _Tp __old, memory_order __m) noexcept {
+#if _FCXX_ATOMIC_CONSTEXPR
+    if constexpr (!is_volatile<_Up>::value) {
+        if (__builtin_is_constant_evaluated()) {
+            if (__fcxx_atomic_same_ce(*__p, __old)) {
+                __fcxx_atomic_wait_blocks();
+            }
+            return;
+        }
+    }
+#endif
+    __fcxx_atomic_clear_padding(&__old);
+    for (;;) {
+        __fcxx_atomic_holder<_Tp> __cur;
+        __atomic_load(__fcxx_atomic_addr(__p), __fcxx_atomic_val(&__cur.__value), __fcxx_atomic_order(__m));
+        __fcxx_atomic_clear_padding(&__cur.__value);
+        if (__builtin_memcmp(&__cur.__value, &__old, sizeof(_Tp)) != 0) {
+            return;
+        }
+        __fcxx_atomic_pause();
+    }
+}
+
+/* The arithmetic of the read-modify-write operations. That of the integers
+ * wraps around, which constant evaluation needs spelt out. */
+template <class _Tp, bool = is_integral<_Tp>::value>
+struct __fcxx_atomic_arith {
+    static _FCXX_ATOMIC_CE _Tp __add(_Tp __a, _Tp __b) noexcept {
+        return __a + __b;
+    }
+    static _FCXX_ATOMIC_CE _Tp __sub(_Tp __a, _Tp __b) noexcept {
+        return __a - __b;
+    }
+};
+
+template <class _Tp>
+struct __fcxx_atomic_arith<_Tp, true> {
+    typedef typename make_unsigned<_Tp>::type _Up;
+
+    static _FCXX_ATOMIC_CE _Tp __add(_Tp __a, _Tp __b) noexcept {
+        return static_cast<_Tp>(static_cast<_Up>(static_cast<_Up>(__a) + static_cast<_Up>(__b)));
+    }
+    static _FCXX_ATOMIC_CE _Tp __sub(_Tp __a, _Tp __b) noexcept {
+        return static_cast<_Tp>(static_cast<_Up>(static_cast<_Up>(__a) - static_cast<_Up>(__b)));
+    }
+};
+
+struct __fcxx_atomic_op_add {
+    template <class _Tp>
+    _FCXX_ATOMIC_CE _Tp operator()(_Tp __a, _Tp __b) const noexcept {
+        return __fcxx_atomic_arith<_Tp>::__add(__a, __b);
+    }
+};
+
+struct __fcxx_atomic_op_sub {
+    template <class _Tp>
+    _FCXX_ATOMIC_CE _Tp operator()(_Tp __a, _Tp __b) const noexcept {
+        return __fcxx_atomic_arith<_Tp>::__sub(__a, __b);
+    }
+};
+
+struct __fcxx_atomic_op_and {
+    template <class _Tp>
+    _FCXX_ATOMIC_CE _Tp operator()(_Tp __a, _Tp __b) const noexcept {
+        return static_cast<_Tp>(__a & __b);
+    }
+};
+
+struct __fcxx_atomic_op_or {
+    template <class _Tp>
+    _FCXX_ATOMIC_CE _Tp operator()(_Tp __a, _Tp __b) const noexcept {
+        return static_cast<_Tp>(__a | __b);
+    }
+};
+
+struct __fcxx_atomic_op_xor {
+    template <class _Tp>
+    _FCXX_ATOMIC_CE _Tp operator()(_Tp __a, _Tp __b) const noexcept {
+        return static_cast<_Tp>(__a ^ __b);
+    }
+};
+
+/* The read-modify-write operations the builtins have no direct form for,
+ * as a loop of compare-and-exchange operations. The first value expected is
+ * read with its padding cleared, as the values stored have theirs.
+ *
+ * Workaround: GCC before 11 (found with 8 to 10), i386: its peephole
+ * optimizations lose a store to the object before such a loop, unless
+ * something is taken to read and write the object in between. */
+#if _FCXX_GCC && _FCXX_GCC < 1100 && defined(__i386__)
+#  define _FCXX_ATOMIC_OBJECT_BARRIER(x) __asm__("" : "+m"(x))
+#else
+#  define _FCXX_ATOMIC_OBJECT_BARRIER(x) ((void)0)
+#endif
+
+template <class _Tp, class _Up, class _Fn>
+_FCXX_ALWAYS_INLINE inline _Tp __fcxx_atomic_fetch_loop(_Up* __p, _Tp __v, memory_order __m, _Fn __fn) noexcept {
+    const int __mo = __fcxx_atomic_order(__m);
+    _FCXX_ATOMIC_OBJECT_BARRIER(*__p);
+    _Tp __old = __fcxx_atomic_load<_Tp>(__p, memory_order_relaxed);
+    __fcxx_atomic_clear_padding(&__old);
+    for (;;) {
+        _Tp __new = __fn(__old, __v);
+        __fcxx_atomic_clear_padding(&__new);
+        _FCXX_ATOMIC_THROUGH_MEMORY(__new);
+        if (__fcxx_atomic_builtin<_Tp>::__cas(__p, &__old, &__new, true, __mo, __ATOMIC_RELAXED)) {
+            return __old;
+        }
+    }
+}
+
+/* A read-modify-write operation with a loop at run time. */
+template <class _Tp, class _Up, class _Fn>
+_FCXX_ALWAYS_INLINE _FCXX_ATOMIC_CE _Tp __fcxx_atomic_fetch_op(_Up* __p, _Tp __v, memory_order __m, _Fn __fn) noexcept {
+#if _FCXX_ATOMIC_CONSTEXPR
+    if constexpr (!is_volatile<_Up>::value) {
+        if (__builtin_is_constant_evaluated()) {
+            _Tp __old = *__p;
+            *__p = __fn(__old, __v);
+            return __old;
+        }
+    }
+#endif
+    return __fcxx_atomic_fetch_loop(__p, __v, __m, __fn);
+}
+
+/* The read-modify-write operations of the integers, which the builtins do
+ * with the arithmetic wrapping around, with the result before or after the
+ * operation. */
+#if _FCXX_ATOMIC_CONSTEXPR
+#  define _FCXX_ATOMIC_INTEGRAL_CE(op, after)                                                                     \
+    if constexpr (!is_volatile<_Up>::value) {                                                                    \
+        if (__builtin_is_constant_evaluated()) {                                                                  \
+            const _Tp __old = *__p;                                                                               \
+            *__p = __fcxx_atomic_op_##op()(__old, __v);                                                           \
+            return after ? *__p : __old;                                                                          \
+        }                                                                                                         \
+    }
+#else
+#  define _FCXX_ATOMIC_INTEGRAL_CE(op, after)
+#endif
+
+/* The operations that are loops of compare-and-exchange operations where
+ * the builtins do not do: those on the integers of up to 4 bytes for the
+ * targets of _FCXX_ATOMIC_MICROBLAZE. */
+#if _FCXX_ATOMIC_MICROBLAZE
+#  define _FCXX_ATOMIC_INTEGRAL_LOOP(op, after)                                                                   \
+    if (sizeof(_Tp) <= 4) {                                                                                       \
+        const _Tp __old = __fcxx_atomic_fetch_loop(__p, __v, __m, __fcxx_atomic_op_##op());                      \
+        return after ? __fcxx_atomic_op_##op()(__old, __v) : __old;                                               \
+    }
+#else
+#  define _FCXX_ATOMIC_INTEGRAL_LOOP(op, after)
+#endif
+
+#define _FCXX_ATOMIC_INTEGRAL_OP(op)                                                                              \
+    template <class _Tp, class _Up>                                                                               \
+    _FCXX_ALWAYS_INLINE _FCXX_ATOMIC_CE _Tp __fcxx_atomic_fetch_##op(_Up* __p, _Tp __v, memory_order __m) noexcept { \
+        _FCXX_ATOMIC_INTEGRAL_CE(op, false)                                                                       \
+        _FCXX_ATOMIC_INTEGRAL_LOOP(op, false)                                                                     \
+        return __atomic_fetch_##op(__fcxx_atomic_addr(__p), __v, __fcxx_atomic_order(__m));                     \
+    }                                                                                                             \
+    template <class _Tp, class _Up>                                                                               \
+    _FCXX_ALWAYS_INLINE _FCXX_ATOMIC_CE _Tp __fcxx_atomic_##op##_fetch(_Up* __p, _Tp __v, memory_order __m) noexcept { \
+        _FCXX_ATOMIC_INTEGRAL_CE(op, true)                                                                        \
+        _FCXX_ATOMIC_INTEGRAL_LOOP(op, true)                                                                      \
+        return __atomic_##op##_fetch(__fcxx_atomic_addr(__p), __v, __fcxx_atomic_order(__m));                     \
+    }
+
+_FCXX_ATOMIC_INTEGRAL_OP(add)
+_FCXX_ATOMIC_INTEGRAL_OP(sub)
+_FCXX_ATOMIC_INTEGRAL_OP(and)
+_FCXX_ATOMIC_INTEGRAL_OP(or)
+_FCXX_ATOMIC_INTEGRAL_OP(xor)
+
+#undef _FCXX_ATOMIC_EXCHANGE
+#undef _FCXX_ATOMIC_INTEGRAL_OP
+#undef _FCXX_ATOMIC_INTEGRAL_CE
+#undef _FCXX_ATOMIC_INTEGRAL_LOOP
+
+/* The arithmetic on the pointers, which the builtins do on the addresses
+ * without scaling the operand. Where they are loops of compare-and-exchange
+ * operations (see _FCXX_ATOMIC_MICROBLAZE), the addresses are added to as
+ * integers, as the builtins do, which is defined for every result. */
+#if _FCXX_ATOMIC_MICROBLAZE
+template <class _Tp>
+struct __fcxx_atomic_op_advance {
+    _FCXX_UINTPTR __bytes;
+
+    _Tp operator()(_Tp __old, _Tp) const noexcept {
+        return reinterpret_cast<_Tp>(reinterpret_cast<_FCXX_UINTPTR>(__old) + __bytes);
+    }
+};
+#endif
+
+template <class _Tp, class _Up>
+_FCXX_ALWAYS_INLINE _FCXX_ATOMIC_CE _Tp __fcxx_atomic_fetch_add_pointer(_Up* __p, ptrdiff_t __d,
+                                                                        memory_order __m) noexcept {
+    typedef typename remove_pointer<_Tp>::type _Pointee;
+    static_assert(is_object<_Pointee>::value, "atomic pointer arithmetic needs a pointer to an object type");
+#if _FCXX_ATOMIC_CONSTEXPR
+    if constexpr (!is_volatile<_Up>::value) {
+        if (__builtin_is_constant_evaluated()) {
+            const _Tp __old = *__p;
+            *__p = __old + __d;
+            return __old;
+        }
+    }
+#endif
+#if _FCXX_ATOMIC_MICROBLAZE
+    const __fcxx_atomic_op_advance<_Tp> __advance = {static_cast<_FCXX_UINTPTR>(__d) * sizeof(_Pointee)};
+    return __fcxx_atomic_fetch_loop(__p, _Tp(), __m, __advance);
+#else
+    return __atomic_fetch_add(__fcxx_atomic_addr(__p),
+                              static_cast<ptrdiff_t>(static_cast<size_t>(__d) * sizeof(_Pointee)),
+                              __fcxx_atomic_order(__m));
+#endif
+}
+
+template <class _Tp, class _Up>
+_FCXX_ALWAYS_INLINE _FCXX_ATOMIC_CE _Tp __fcxx_atomic_fetch_sub_pointer(_Up* __p, ptrdiff_t __d,
+                                                                        memory_order __m) noexcept {
+    typedef typename remove_pointer<_Tp>::type _Pointee;
+    static_assert(is_object<_Pointee>::value, "atomic pointer arithmetic needs a pointer to an object type");
+#if _FCXX_ATOMIC_CONSTEXPR
+    if constexpr (!is_volatile<_Up>::value) {
+        if (__builtin_is_constant_evaluated()) {
+            const _Tp __old = *__p;
+            *__p = __old - __d;
+            return __old;
+        }
+    }
+#endif
+#if _FCXX_ATOMIC_MICROBLAZE
+    const __fcxx_atomic_op_advance<_Tp> __advance = {static_cast<_FCXX_UINTPTR>(0)
+                                                     - static_cast<_FCXX_UINTPTR>(__d) * sizeof(_Pointee)};
+    return __fcxx_atomic_fetch_loop(__p, _Tp(), __m, __advance);
+#else
+    return __atomic_fetch_sub(__fcxx_atomic_addr(__p),
+                              static_cast<ptrdiff_t>(static_cast<size_t>(__d) * sizeof(_Pointee)),
+                              __fcxx_atomic_order(__m));
+#endif
+}
+
+#if _FCXX_STD >= 2026
+/* The maximum and the minimum, as by max and min for the integers and the
+ * pointers, and as by fmaximum_num and fminimum_num of C for the
+ * floating-point types, and fmaximum, fminimum and the others. */
+struct __fcxx_atomic_op_max {
+    template <class _Tp>
+    constexpr _Tp operator()(_Tp __a, _Tp __b) const noexcept {
+        if constexpr (is_floating_point<_Tp>::value) {
+            return __a != __a ? __b
+                 : __b != __b ? __a
+                 : __a < __b  ? __b
+                 : __b < __a  ? __a
+                 : __builtin_signbit(__a) ? __b
+                                          : __a;
+        } else {
+            return __a < __b ? __b : __a;
+        }
+    }
+};
+
+struct __fcxx_atomic_op_min {
+    template <class _Tp>
+    constexpr _Tp operator()(_Tp __a, _Tp __b) const noexcept {
+        if constexpr (is_floating_point<_Tp>::value) {
+            return __a != __a ? __b
+                 : __b != __b ? __a
+                 : __b < __a  ? __b
+                 : __a < __b  ? __a
+                 : __builtin_signbit(__a) ? __a
+                                          : __b;
+        } else {
+            return __b < __a ? __b : __a;
+        }
+    }
+};
+
+struct __fcxx_atomic_op_fmaximum {
+    template <class _Tp>
+    constexpr _Tp operator()(_Tp __a, _Tp __b) const noexcept {
+        return __a != __a ? __a : __b != __b ? __b : __fcxx_atomic_op_max()(__a, __b);
+    }
+};
+
+struct __fcxx_atomic_op_fminimum {
+    template <class _Tp>
+    constexpr _Tp operator()(_Tp __a, _Tp __b) const noexcept {
+        return __a != __a ? __a : __b != __b ? __b : __fcxx_atomic_op_min()(__a, __b);
+    }
+};
+
+/* The maximum and the minimum of the integers, for which Clang has builtins
+ * where they are lock-free. */
+template <class _Tp, class _Up>
+_FCXX_ALWAYS_INLINE _FCXX_ATOMIC_CE _Tp __fcxx_atomic_fetch_max(_Up* __p, _Tp __v, memory_order __m) noexcept {
+#  if _FCXX_HAS_BUILTIN(__atomic_fetch_max)
+    if constexpr (is_integral<_Tp>::value && __fcxx_atomic_lock_free<_Tp>::value) {
+#    if _FCXX_ATOMIC_CONSTEXPR
+        if constexpr (!is_volatile<_Up>::value) {
+            if (__builtin_is_constant_evaluated()) {
+                const _Tp __old = *__p;
+                *__p = __fcxx_atomic_op_max()(__old, __v);
+                return __old;
+            }
+        }
+#    endif
+        return __atomic_fetch_max(__fcxx_atomic_addr(__p), __v, __fcxx_atomic_order(__m));
+    } else
+#  endif
+    {
+        return __fcxx_atomic_fetch_op(__p, __v, __m, __fcxx_atomic_op_max());
+    }
+}
+
+template <class _Tp, class _Up>
+_FCXX_ALWAYS_INLINE _FCXX_ATOMIC_CE _Tp __fcxx_atomic_fetch_min(_Up* __p, _Tp __v, memory_order __m) noexcept {
+#  if _FCXX_HAS_BUILTIN(__atomic_fetch_min)
+    if constexpr (is_integral<_Tp>::value && __fcxx_atomic_lock_free<_Tp>::value) {
+#    if _FCXX_ATOMIC_CONSTEXPR
+        if constexpr (!is_volatile<_Up>::value) {
+            if (__builtin_is_constant_evaluated()) {
+                const _Tp __old = *__p;
+                *__p = __fcxx_atomic_op_min()(__old, __v);
+                return __old;
+            }
+        }
+#    endif
+        return __atomic_fetch_min(__fcxx_atomic_addr(__p), __v, __fcxx_atomic_order(__m));
+    } else
+#  endif
+    {
+        return __fcxx_atomic_fetch_op(__p, __v, __m, __fcxx_atomic_op_min());
+    }
+}
+
+/* Whether two types are similar, as for the qualification conversions. */
+template <class _Tp>
+struct __fcxx_atomic_unqualified;
+
+template <class _Tp>
+struct __fcxx_atomic_unqualified_impl {
+    typedef _Tp type;
+};
+
+template <class _Tp>
+struct __fcxx_atomic_unqualified_impl<_Tp*> {
+    typedef typename __fcxx_atomic_unqualified<_Tp>::type* type;
+};
+
+template <class _Tp, class _Cp>
+struct __fcxx_atomic_unqualified_impl<_Tp _Cp::*> {
+    typedef typename __fcxx_atomic_unqualified<_Tp>::type _Cp::* type;
+};
+
+template <class _Tp>
+struct __fcxx_atomic_unqualified_impl<_Tp[]> {
+    typedef typename __fcxx_atomic_unqualified<_Tp>::type type[];
+};
+
+template <class _Tp, size_t _Np>
+struct __fcxx_atomic_unqualified_impl<_Tp[_Np]> {
+    typedef typename __fcxx_atomic_unqualified<_Tp>::type type[_Np];
+};
+
+template <class _Tp>
+struct __fcxx_atomic_unqualified : __fcxx_atomic_unqualified_impl<__fcxx_remove_cv_t<_Tp> > {};
+
+template <class _Tp, class _Up>
+struct __fcxx_atomic_similar
+    : is_same<typename __fcxx_atomic_unqualified<_Tp>::type, typename __fcxx_atomic_unqualified<_Up>::type> {};
+#endif
+
+/* [atomics.types.generic], class template atomic
+ *
+ * The members are those of the bases, one for the operations of all of the
+ * types, and one for those of each kind of type that has more. The standard
+ * layout of the specializations comes from the value being in the first. */
+
+template <class _Tp>
+struct __fcxx_atomic_base {
+#if _FCXX_STD >= 2017
+    typedef _Tp value_type;
+
+    static constexpr bool is_always_lock_free = __fcxx_atomic_always_lock_free<_Tp>::value;
+#endif
+
+    bool is_lock_free() const volatile noexcept {
+        return __fcxx_atomic_lock_free_query<__fcxx_atomic_always_lock_free<_Tp>::value>::__query(sizeof(_Tp),
+                                                                                                 &__value);
+    }
+    bool is_lock_free() const noexcept {
+        return __fcxx_atomic_lock_free_query<__fcxx_atomic_always_lock_free<_Tp>::value>::__query(sizeof(_Tp),
+                                                                                                 &__value);
+    }
+
+    _FCXX_ATOMIC_VOLATILE((void store(_Tp __d, memory_order __m = memory_order_seq_cst) volatile noexcept), {
+        __fcxx_atomic_store<_Tp>(&__value, __d, __m);
+    })
+    _FCXX_ATOMIC_CE void store(_Tp __d, memory_order __m = memory_order_seq_cst) noexcept {
+        __fcxx_atomic_store<_Tp>(&__value, __d, __m);
+    }
+
+    _FCXX_ATOMIC_VOLATILE((_Tp load(memory_order __m = memory_order_seq_cst) const volatile noexcept), {
+        return __fcxx_atomic_load<_Tp>(&__value, __m);
+    })
+    _FCXX_ATOMIC_CE _Tp load(memory_order __m = memory_order_seq_cst) const noexcept {
+        return __fcxx_atomic_load<_Tp>(&__value, __m);
+    }
+
+    _FCXX_ATOMIC_VOLATILE((operator _Tp() const volatile noexcept), {
+        return __fcxx_atomic_load<_Tp>(&__value, memory_order_seq_cst);
+    })
+    _FCXX_ATOMIC_CE operator _Tp() const noexcept {
+        return __fcxx_atomic_load<_Tp>(&__value, memory_order_seq_cst);
+    }
+
+    _FCXX_ATOMIC_VOLATILE((_Tp exchange(_Tp __d, memory_order __m = memory_order_seq_cst) volatile noexcept), {
+        return __fcxx_atomic_exchange<_Tp>(&__value, __d, __m);
+    })
+    _FCXX_ATOMIC_CE _Tp exchange(_Tp __d, memory_order __m = memory_order_seq_cst) noexcept {
+        return __fcxx_atomic_exchange<_Tp>(&__value, __d, __m);
+    }
+
+    _FCXX_ATOMIC_VOLATILE(
+        (bool compare_exchange_weak(_Tp& __e, _Tp __d, memory_order __s, memory_order __f) volatile noexcept), {
+            return __fcxx_atomic_compare_exchange<_Tp>(&__value, __e, __d, true, __s, __f);
+        })
+    _FCXX_ATOMIC_CE bool compare_exchange_weak(_Tp& __e, _Tp __d, memory_order __s, memory_order __f) noexcept {
+        return __fcxx_atomic_compare_exchange<_Tp>(&__value, __e, __d, true, __s, __f);
+    }
+    _FCXX_ATOMIC_VOLATILE(
+        (bool compare_exchange_strong(_Tp& __e, _Tp __d, memory_order __s, memory_order __f) volatile noexcept), {
+            return __fcxx_atomic_compare_exchange<_Tp>(&__value, __e, __d, false, __s, __f);
+        })
+    _FCXX_ATOMIC_CE bool compare_exchange_strong(_Tp& __e, _Tp __d, memory_order __s, memory_order __f) noexcept {
+        return __fcxx_atomic_compare_exchange<_Tp>(&__value, __e, __d, false, __s, __f);
+    }
+    _FCXX_ATOMIC_VOLATILE(
+        (bool compare_exchange_weak(_Tp& __e, _Tp __d, memory_order __m = memory_order_seq_cst) volatile noexcept), {
+            return __fcxx_atomic_compare_exchange<_Tp>(&__value, __e, __d, true, __m, __fcxx_atomic_failure_order(__m));
+        })
+    _FCXX_ATOMIC_CE bool compare_exchange_weak(_Tp& __e, _Tp __d, memory_order __m = memory_order_seq_cst) noexcept {
+        return __fcxx_atomic_compare_exchange<_Tp>(&__value, __e, __d, true, __m, __fcxx_atomic_failure_order(__m));
+    }
+    _FCXX_ATOMIC_VOLATILE(
+        (bool compare_exchange_strong(_Tp& __e, _Tp __d, memory_order __m = memory_order_seq_cst) volatile noexcept), {
+            return __fcxx_atomic_compare_exchange<_Tp>(&__value, __e, __d, false, __m,
+                                                       __fcxx_atomic_failure_order(__m));
+        })
+    _FCXX_ATOMIC_CE bool compare_exchange_strong(_Tp& __e, _Tp __d, memory_order __m = memory_order_seq_cst) noexcept {
+        return __fcxx_atomic_compare_exchange<_Tp>(&__value, __e, __d, false, __m, __fcxx_atomic_failure_order(__m));
+    }
+
+#if _FCXX_STD >= 2020
+    void wait(_Tp __old, memory_order __m = memory_order_seq_cst) const volatile noexcept {
+        __fcxx_atomic_wait<_Tp>(&__value, __old, __m);
+    }
+    _FCXX_ATOMIC_CE void wait(_Tp __old, memory_order __m = memory_order_seq_cst) const noexcept {
+        __fcxx_atomic_wait<_Tp>(&__value, __old, __m);
+    }
+
+    /* Nothing blocks on the waiting operations, which spin. */
+    void notify_one() volatile noexcept {}
+    _FCXX_ATOMIC_CE void notify_one() noexcept {}
+    void notify_all() volatile noexcept {}
+    _FCXX_ATOMIC_CE void notify_all() noexcept {}
+#endif
+
+protected:
+    _Tp __value __attribute__((__aligned__(_FCXX_ATOMIC_ALIGNMENT(_Tp))));
+
+#if _FCXX_STD >= 2020
+    constexpr __fcxx_atomic_base() noexcept(is_nothrow_default_constructible<_Tp>::value) : __value() {}
+#else
+    __fcxx_atomic_base() noexcept = default;
+#endif
+    constexpr __fcxx_atomic_base(_Tp __d) noexcept : __value(__d) {}
+    __fcxx_atomic_base(const __fcxx_atomic_base&) = delete;
+    __fcxx_atomic_base& operator=(const __fcxx_atomic_base&) = delete;
+    __fcxx_atomic_base& operator=(const __fcxx_atomic_base&) volatile = delete;
+};
+
+#if _FCXX_STD >= 2017 && !_FCXX_HAS_INLINE_VARIABLES
+template <class _Tp>
+constexpr bool __fcxx_atomic_base<_Tp>::is_always_lock_free;
+#endif
+
+/* The members of the integral types, whose operand is of the value type. */
+#define _FCXX_ATOMIC_FETCH(key)                                                                                  \
+    _FCXX_ATOMIC_VOLATILE((_Tp fetch_##key(_Tp __v, memory_order __m = memory_order_seq_cst) volatile noexcept), { \
+        return __fcxx_atomic_fetch_##key<_Tp>(&this->__value, __v, __m);                                         \
+    })                                                                                                           \
+    _FCXX_ATOMIC_CE _Tp fetch_##key(_Tp __v, memory_order __m = memory_order_seq_cst) noexcept {               \
+        return __fcxx_atomic_fetch_##key<_Tp>(&this->__value, __v, __m);                                         \
+    }
+
+#define _FCXX_ATOMIC_STORE_OP(key, fetch)                                                                        \
+    _FCXX_ATOMIC_VOLATILE_LOCK_FREE(                                                                             \
+        (void store_##key(_Tp __v, memory_order __m = memory_order_seq_cst) volatile noexcept),                 \
+        { (void)fetch<_Tp>(&this->__value, __v, __m); })                                                         \
+    _FCXX_ATOMIC_CE void store_##key(_Tp __v, memory_order __m = memory_order_seq_cst) noexcept {              \
+        (void)fetch<_Tp>(&this->__value, __v, __m);                                                              \
+    }
+
+#define _FCXX_ATOMIC_ASSIGN_OP(op, key)                                                                          \
+    _FCXX_ATOMIC_VOLATILE((_Tp operator op##=(_Tp __v) volatile noexcept), {                                   \
+        return __fcxx_atomic_##key##_fetch<_Tp>(&this->__value, __v, memory_order_seq_cst);                      \
+    })                                                                                                           \
+    _FCXX_ATOMIC_CE _Tp operator op##=(_Tp __v) noexcept {                                                      \
+        return __fcxx_atomic_##key##_fetch<_Tp>(&this->__value, __v, memory_order_seq_cst);                      \
+    }
+
+template <class _Tp>
+struct __fcxx_atomic_integral : __fcxx_atomic_base<_Tp> {
+#if _FCXX_STD >= 2017
+    typedef _Tp difference_type;
+#endif
+
+    _FCXX_ATOMIC_FETCH(add)
+    _FCXX_ATOMIC_FETCH(sub)
+    _FCXX_ATOMIC_FETCH(and)
+    _FCXX_ATOMIC_FETCH(or)
+    _FCXX_ATOMIC_FETCH(xor)
+#if _FCXX_STD >= 2026
+    _FCXX_ATOMIC_FETCH(max)
+    _FCXX_ATOMIC_FETCH(min)
+
+    _FCXX_ATOMIC_STORE_OP(add, __fcxx_atomic_fetch_add)
+    _FCXX_ATOMIC_STORE_OP(sub, __fcxx_atomic_fetch_sub)
+    _FCXX_ATOMIC_STORE_OP(and, __fcxx_atomic_fetch_and)
+    _FCXX_ATOMIC_STORE_OP(or, __fcxx_atomic_fetch_or)
+    _FCXX_ATOMIC_STORE_OP(xor, __fcxx_atomic_fetch_xor)
+    _FCXX_ATOMIC_STORE_OP(max, __fcxx_atomic_fetch_max)
+    _FCXX_ATOMIC_STORE_OP(min, __fcxx_atomic_fetch_min)
+#endif
+
+    _FCXX_ATOMIC_VOLATILE_LOCK_FREE((_Tp operator++(int) volatile noexcept), {
+        return __fcxx_atomic_fetch_add<_Tp>(&this->__value, _Tp(1), memory_order_seq_cst);
+    })
+    _FCXX_ATOMIC_CE _Tp operator++(int) noexcept {
+        return __fcxx_atomic_fetch_add<_Tp>(&this->__value, _Tp(1), memory_order_seq_cst);
+    }
+    _FCXX_ATOMIC_VOLATILE_LOCK_FREE((_Tp operator--(int) volatile noexcept), {
+        return __fcxx_atomic_fetch_sub<_Tp>(&this->__value, _Tp(1), memory_order_seq_cst);
+    })
+    _FCXX_ATOMIC_CE _Tp operator--(int) noexcept {
+        return __fcxx_atomic_fetch_sub<_Tp>(&this->__value, _Tp(1), memory_order_seq_cst);
+    }
+    _FCXX_ATOMIC_VOLATILE_LOCK_FREE((_Tp operator++() volatile noexcept), {
+        return __fcxx_atomic_add_fetch<_Tp>(&this->__value, _Tp(1), memory_order_seq_cst);
+    })
+    _FCXX_ATOMIC_CE _Tp operator++() noexcept {
+        return __fcxx_atomic_add_fetch<_Tp>(&this->__value, _Tp(1), memory_order_seq_cst);
+    }
+    _FCXX_ATOMIC_VOLATILE_LOCK_FREE((_Tp operator--() volatile noexcept), {
+        return __fcxx_atomic_sub_fetch<_Tp>(&this->__value, _Tp(1), memory_order_seq_cst);
+    })
+    _FCXX_ATOMIC_CE _Tp operator--() noexcept {
+        return __fcxx_atomic_sub_fetch<_Tp>(&this->__value, _Tp(1), memory_order_seq_cst);
+    }
+
+    _FCXX_ATOMIC_ASSIGN_OP(+, add)
+    _FCXX_ATOMIC_ASSIGN_OP(-, sub)
+    _FCXX_ATOMIC_ASSIGN_OP(&, and)
+    _FCXX_ATOMIC_ASSIGN_OP(|, or)
+    _FCXX_ATOMIC_ASSIGN_OP(^, xor)
+
+protected:
+    __fcxx_atomic_integral() = default;
+    constexpr __fcxx_atomic_integral(_Tp __d) noexcept : __fcxx_atomic_base<_Tp>(__d) {}
+};
+
+#undef _FCXX_ATOMIC_FETCH
+#undef _FCXX_ATOMIC_ASSIGN_OP
+
+#if _FCXX_STD >= 2020
+/* The members of the floating-point types, whose read-modify-write
+ * operations are loops of compare-and-exchange operations. */
+#  define _FCXX_ATOMIC_FETCH_FLOAT(key, op)                                                                      \
+    _FCXX_ATOMIC_VOLATILE((_Tp fetch_##key(_Tp __v, memory_order __m = memory_order_seq_cst) volatile noexcept), { \
+        return __fcxx_atomic_fetch_op(&this->__value, __v, __m, op());                                           \
+    })                                                                                                           \
+    _FCXX_ATOMIC_CE _Tp fetch_##key(_Tp __v, memory_order __m = memory_order_seq_cst) noexcept {               \
+        return __fcxx_atomic_fetch_op(&this->__value, __v, __m, op());                                           \
+    }
+
+#  define _FCXX_ATOMIC_STORE_FLOAT(key, op)                                                                      \
+    _FCXX_ATOMIC_VOLATILE_LOCK_FREE(                                                                             \
+        (void store_##key(_Tp __v, memory_order __m = memory_order_seq_cst) volatile noexcept),                 \
+        { (void)__fcxx_atomic_fetch_op(&this->__value, __v, __m, op()); })                                       \
+    _FCXX_ATOMIC_CE void store_##key(_Tp __v, memory_order __m = memory_order_seq_cst) noexcept {              \
+        (void)__fcxx_atomic_fetch_op(&this->__value, __v, __m, op());                                            \
+    }
+
+template <class _Tp>
+struct __fcxx_atomic_floating : __fcxx_atomic_base<_Tp> {
+    typedef _Tp difference_type;
+
+    _FCXX_ATOMIC_FETCH_FLOAT(add, __fcxx_atomic_op_add)
+    _FCXX_ATOMIC_FETCH_FLOAT(sub, __fcxx_atomic_op_sub)
+#  if _FCXX_STD >= 2026
+    _FCXX_ATOMIC_FETCH_FLOAT(max, __fcxx_atomic_op_max)
+    _FCXX_ATOMIC_FETCH_FLOAT(min, __fcxx_atomic_op_min)
+    _FCXX_ATOMIC_FETCH_FLOAT(fmaximum, __fcxx_atomic_op_fmaximum)
+    _FCXX_ATOMIC_FETCH_FLOAT(fminimum, __fcxx_atomic_op_fminimum)
+    _FCXX_ATOMIC_FETCH_FLOAT(fmaximum_num, __fcxx_atomic_op_max)
+    _FCXX_ATOMIC_FETCH_FLOAT(fminimum_num, __fcxx_atomic_op_min)
+
+    _FCXX_ATOMIC_STORE_FLOAT(add, __fcxx_atomic_op_add)
+    _FCXX_ATOMIC_STORE_FLOAT(sub, __fcxx_atomic_op_sub)
+    _FCXX_ATOMIC_STORE_FLOAT(max, __fcxx_atomic_op_max)
+    _FCXX_ATOMIC_STORE_FLOAT(min, __fcxx_atomic_op_min)
+    _FCXX_ATOMIC_STORE_FLOAT(fmaximum, __fcxx_atomic_op_fmaximum)
+    _FCXX_ATOMIC_STORE_FLOAT(fminimum, __fcxx_atomic_op_fminimum)
+    _FCXX_ATOMIC_STORE_FLOAT(fmaximum_num, __fcxx_atomic_op_max)
+    _FCXX_ATOMIC_STORE_FLOAT(fminimum_num, __fcxx_atomic_op_min)
+#  endif
+
+    _FCXX_ATOMIC_VOLATILE((_Tp operator+=(_Tp __v) volatile noexcept), {
+        return __fcxx_atomic_fetch_op(&this->__value, __v, memory_order_seq_cst, __fcxx_atomic_op_add()) + __v;
+    })
+    _FCXX_ATOMIC_CE _Tp operator+=(_Tp __v) noexcept {
+        return __fcxx_atomic_fetch_op(&this->__value, __v, memory_order_seq_cst, __fcxx_atomic_op_add()) + __v;
+    }
+    _FCXX_ATOMIC_VOLATILE((_Tp operator-=(_Tp __v) volatile noexcept), {
+        return __fcxx_atomic_fetch_op(&this->__value, __v, memory_order_seq_cst, __fcxx_atomic_op_sub()) - __v;
+    })
+    _FCXX_ATOMIC_CE _Tp operator-=(_Tp __v) noexcept {
+        return __fcxx_atomic_fetch_op(&this->__value, __v, memory_order_seq_cst, __fcxx_atomic_op_sub()) - __v;
+    }
+
+protected:
+    __fcxx_atomic_floating() = default;
+    constexpr __fcxx_atomic_floating(_Tp __d) noexcept : __fcxx_atomic_base<_Tp>(__d) {}
+};
+
+#  undef _FCXX_ATOMIC_FETCH_FLOAT
+#  undef _FCXX_ATOMIC_STORE_FLOAT
+#endif
+
+/* The members of the pointer types, whose arithmetic operand is a
+ * ptrdiff_t. */
+template <class _Tp>
+struct __fcxx_atomic_pointer : __fcxx_atomic_base<_Tp> {
+#if _FCXX_STD >= 2017
+    typedef ptrdiff_t difference_type;
+#endif
+
+    _FCXX_ATOMIC_VOLATILE((_Tp fetch_add(ptrdiff_t __d, memory_order __m = memory_order_seq_cst) volatile noexcept), {
+        return __fcxx_atomic_fetch_add_pointer<_Tp>(&this->__value, __d, __m);
+    })
+    _FCXX_ATOMIC_CE _Tp fetch_add(ptrdiff_t __d, memory_order __m = memory_order_seq_cst) noexcept {
+        return __fcxx_atomic_fetch_add_pointer<_Tp>(&this->__value, __d, __m);
+    }
+    _FCXX_ATOMIC_VOLATILE((_Tp fetch_sub(ptrdiff_t __d, memory_order __m = memory_order_seq_cst) volatile noexcept), {
+        return __fcxx_atomic_fetch_sub_pointer<_Tp>(&this->__value, __d, __m);
+    })
+    _FCXX_ATOMIC_CE _Tp fetch_sub(ptrdiff_t __d, memory_order __m = memory_order_seq_cst) noexcept {
+        return __fcxx_atomic_fetch_sub_pointer<_Tp>(&this->__value, __d, __m);
+    }
+#if _FCXX_STD >= 2026
+    _FCXX_ATOMIC_VOLATILE((_Tp fetch_max(_Tp __v, memory_order __m = memory_order_seq_cst) volatile noexcept), {
+        static_assert(is_object<typename remove_pointer<_Tp>::type>::value, "fetch_max needs a pointer to an object");
+        return __fcxx_atomic_fetch_op(&this->__value, __v, __m, __fcxx_atomic_op_max());
+    })
+    _FCXX_ATOMIC_CE _Tp fetch_max(_Tp __v, memory_order __m = memory_order_seq_cst) noexcept {
+        static_assert(is_object<typename remove_pointer<_Tp>::type>::value, "fetch_max needs a pointer to an object");
+        return __fcxx_atomic_fetch_op(&this->__value, __v, __m, __fcxx_atomic_op_max());
+    }
+    _FCXX_ATOMIC_VOLATILE((_Tp fetch_min(_Tp __v, memory_order __m = memory_order_seq_cst) volatile noexcept), {
+        static_assert(is_object<typename remove_pointer<_Tp>::type>::value, "fetch_min needs a pointer to an object");
+        return __fcxx_atomic_fetch_op(&this->__value, __v, __m, __fcxx_atomic_op_min());
+    })
+    _FCXX_ATOMIC_CE _Tp fetch_min(_Tp __v, memory_order __m = memory_order_seq_cst) noexcept {
+        static_assert(is_object<typename remove_pointer<_Tp>::type>::value, "fetch_min needs a pointer to an object");
+        return __fcxx_atomic_fetch_op(&this->__value, __v, __m, __fcxx_atomic_op_min());
+    }
+
+    _FCXX_ATOMIC_VOLATILE_LOCK_FREE(
+        (void store_add(ptrdiff_t __d, memory_order __m = memory_order_seq_cst) volatile noexcept),
+        { (void)__fcxx_atomic_fetch_add_pointer<_Tp>(&this->__value, __d, __m); })
+    _FCXX_ATOMIC_CE void store_add(ptrdiff_t __d, memory_order __m = memory_order_seq_cst) noexcept {
+        (void)__fcxx_atomic_fetch_add_pointer<_Tp>(&this->__value, __d, __m);
+    }
+    _FCXX_ATOMIC_VOLATILE_LOCK_FREE(
+        (void store_sub(ptrdiff_t __d, memory_order __m = memory_order_seq_cst) volatile noexcept),
+        { (void)__fcxx_atomic_fetch_sub_pointer<_Tp>(&this->__value, __d, __m); })
+    _FCXX_ATOMIC_CE void store_sub(ptrdiff_t __d, memory_order __m = memory_order_seq_cst) noexcept {
+        (void)__fcxx_atomic_fetch_sub_pointer<_Tp>(&this->__value, __d, __m);
+    }
+    _FCXX_ATOMIC_VOLATILE_LOCK_FREE(
+        (void store_max(_Tp __v, memory_order __m = memory_order_seq_cst) volatile noexcept),
+        { (void)this->fetch_max(__v, __m); })
+    _FCXX_ATOMIC_CE void store_max(_Tp __v, memory_order __m = memory_order_seq_cst) noexcept {
+        (void)this->fetch_max(__v, __m);
+    }
+    _FCXX_ATOMIC_VOLATILE_LOCK_FREE(
+        (void store_min(_Tp __v, memory_order __m = memory_order_seq_cst) volatile noexcept),
+        { (void)this->fetch_min(__v, __m); })
+    _FCXX_ATOMIC_CE void store_min(_Tp __v, memory_order __m = memory_order_seq_cst) noexcept {
+        (void)this->fetch_min(__v, __m);
+    }
+#endif
+
+    _FCXX_ATOMIC_VOLATILE_LOCK_FREE((_Tp operator++(int) volatile noexcept), {
+        return __fcxx_atomic_fetch_add_pointer<_Tp>(&this->__value, 1, memory_order_seq_cst);
+    })
+    _FCXX_ATOMIC_CE _Tp operator++(int) noexcept {
+        return __fcxx_atomic_fetch_add_pointer<_Tp>(&this->__value, 1, memory_order_seq_cst);
+    }
+    _FCXX_ATOMIC_VOLATILE_LOCK_FREE((_Tp operator--(int) volatile noexcept), {
+        return __fcxx_atomic_fetch_sub_pointer<_Tp>(&this->__value, 1, memory_order_seq_cst);
+    })
+    _FCXX_ATOMIC_CE _Tp operator--(int) noexcept {
+        return __fcxx_atomic_fetch_sub_pointer<_Tp>(&this->__value, 1, memory_order_seq_cst);
+    }
+    _FCXX_ATOMIC_VOLATILE_LOCK_FREE((_Tp operator++() volatile noexcept), {
+        return __fcxx_atomic_fetch_add_pointer<_Tp>(&this->__value, 1, memory_order_seq_cst) + 1;
+    })
+    _FCXX_ATOMIC_CE _Tp operator++() noexcept {
+        return __fcxx_atomic_fetch_add_pointer<_Tp>(&this->__value, 1, memory_order_seq_cst) + 1;
+    }
+    _FCXX_ATOMIC_VOLATILE_LOCK_FREE((_Tp operator--() volatile noexcept), {
+        return __fcxx_atomic_fetch_sub_pointer<_Tp>(&this->__value, 1, memory_order_seq_cst) - 1;
+    })
+    _FCXX_ATOMIC_CE _Tp operator--() noexcept {
+        return __fcxx_atomic_fetch_sub_pointer<_Tp>(&this->__value, 1, memory_order_seq_cst) - 1;
+    }
+    _FCXX_ATOMIC_VOLATILE((_Tp operator+=(ptrdiff_t __d) volatile noexcept), {
+        return __fcxx_atomic_fetch_add_pointer<_Tp>(&this->__value, __d, memory_order_seq_cst) + __d;
+    })
+    _FCXX_ATOMIC_CE _Tp operator+=(ptrdiff_t __d) noexcept {
+        return __fcxx_atomic_fetch_add_pointer<_Tp>(&this->__value, __d, memory_order_seq_cst) + __d;
+    }
+    _FCXX_ATOMIC_VOLATILE((_Tp operator-=(ptrdiff_t __d) volatile noexcept), {
+        return __fcxx_atomic_fetch_sub_pointer<_Tp>(&this->__value, __d, memory_order_seq_cst) - __d;
+    })
+    _FCXX_ATOMIC_CE _Tp operator-=(ptrdiff_t __d) noexcept {
+        return __fcxx_atomic_fetch_sub_pointer<_Tp>(&this->__value, __d, memory_order_seq_cst) - __d;
+    }
+
+protected:
+    __fcxx_atomic_pointer() = default;
+    constexpr __fcxx_atomic_pointer(_Tp __d) noexcept : __fcxx_atomic_base<_Tp>(__d) {}
+};
+
+#undef _FCXX_ATOMIC_STORE_OP
+
+/* The base of each kind of type. The floating-point types have the one of
+ * all of the types before C++20. */
+template <class _Tp, bool = is_integral<_Tp>::value && !is_same<_Tp, bool>::value,
+          bool = is_floating_point<_Tp>::value, bool = is_pointer<_Tp>::value>
+struct __fcxx_atomic_select {
+    typedef __fcxx_atomic_base<_Tp> type;
+};
+
+template <class _Tp>
+struct __fcxx_atomic_select<_Tp, true, false, false> {
+    typedef __fcxx_atomic_integral<_Tp> type;
+};
+
+#if _FCXX_STD >= 2020
+template <class _Tp>
+struct __fcxx_atomic_select<_Tp, false, true, false> {
+    typedef __fcxx_atomic_floating<_Tp> type;
+};
+#endif
+
+template <class _Tp>
+struct __fcxx_atomic_select<_Tp, false, false, true> {
+    typedef __fcxx_atomic_pointer<_Tp> type;
+};
+
+template <class _Tp>
+struct atomic : __fcxx_atomic_select<_Tp>::type {
+private:
+    typedef typename __fcxx_atomic_select<_Tp>::type __base;
+
+#if _FCXX_HAS_TRIVIALLY_CONSTRUCTIBLE
+    static_assert(is_trivially_copyable<_Tp>::value, "atomic<T> needs a trivially copyable T");
+#endif
+#if _FCXX_STD >= 2020
+    static_assert(is_copy_constructible<_Tp>::value && is_move_constructible<_Tp>::value
+                      && is_copy_assignable<_Tp>::value && is_move_assignable<_Tp>::value,
+                  "atomic<T> needs a copyable T");
+#endif
+#if _FCXX_STD >= 2026
+    static_assert(is_same<_Tp, __fcxx_remove_cv_t<_Tp> >::value, "atomic<T> needs a cv-unqualified T");
+#endif
+
+public:
+#if _FCXX_STD >= 2020
+    /* The value is value-initialized from C++20 on. */
+#  if _FCXX_HAS_CONCEPTS
+    constexpr atomic() noexcept(is_nothrow_default_constructible<_Tp>::value)
+        requires(is_default_constructible<_Tp>::value)
+        : __base() {}
+#  else
+    constexpr atomic() noexcept(is_nothrow_default_constructible<_Tp>::value) : __base() {}
+#  endif
+#else
+    atomic() noexcept = default;
+#endif
+    constexpr atomic(_Tp __d) noexcept : __base(__d) {}
+    atomic(const atomic&) = delete;
+    atomic& operator=(const atomic&) = delete;
+    atomic& operator=(const atomic&) volatile = delete;
+
+    _FCXX_ATOMIC_VOLATILE((_Tp operator=(_Tp __d) volatile noexcept), {
+        __fcxx_atomic_store<_Tp>(&this->__value, __d, memory_order_seq_cst);
+        return __d;
+    })
+    _FCXX_ATOMIC_CE _Tp operator=(_Tp __d) noexcept {
+        __fcxx_atomic_store<_Tp>(&this->__value, __d, memory_order_seq_cst);
+        return __d;
+    }
+};
+
+#if _FCXX_STD >= 2020
+/* [atomics.ref.generic], class template atomic_ref
+ *
+ * Its members are those of the bases too. Up to C++23, the specializations
+ * with more members are those of the cv-unqualified types, and from C++26
+ * on, those of all of the types of each kind, cv-qualified or not. */
+
+template <class _Tp>
+struct __fcxx_atomic_ref_base {
+#  if _FCXX_STD >= 2026
+    typedef __fcxx_remove_cv_t<_Tp> value_type;
+#  else
+    typedef _Tp value_type;
+#  endif
+
+    static constexpr size_t required_alignment = __fcxx_atomic_ref_align<value_type>::value;
+
+    static constexpr bool is_always_lock_free = __fcxx_atomic_always_lock_free<value_type>::value;
+
+    bool is_lock_free() const noexcept {
+        return __fcxx_atomic_lock_free_query<__fcxx_atomic_always_lock_free<value_type>::value>::__query(
+            sizeof(value_type), __ptr);
+    }
+
+    _FCXX_ATOMIC_CE void store(value_type __d, memory_order __m = memory_order_seq_cst) const noexcept
+        _FCXX_ATOMIC_REF_MUTABLE {
+        __fcxx_atomic_store<value_type>(__ptr, __d, __m);
+    }
+
+    _FCXX_ATOMIC_CE value_type load(memory_order __m = memory_order_seq_cst) const noexcept {
+        return __fcxx_atomic_load<value_type>(__ptr, __m);
+    }
+
+    _FCXX_ATOMIC_CE operator value_type() const noexcept {
+        return __fcxx_atomic_load<value_type>(__ptr, memory_order_seq_cst);
+    }
+
+    _FCXX_ATOMIC_CE value_type exchange(value_type __d, memory_order __m = memory_order_seq_cst) const noexcept
+        _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_exchange<value_type>(__ptr, __d, __m);
+    }
+
+    _FCXX_ATOMIC_CE bool compare_exchange_weak(value_type& __e, value_type __d, memory_order __s,
+                                               memory_order __f) const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_compare_exchange<value_type>(__ptr, __e, __d, true, __s, __f);
+    }
+    _FCXX_ATOMIC_CE bool compare_exchange_strong(value_type& __e, value_type __d, memory_order __s,
+                                                 memory_order __f) const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_compare_exchange<value_type>(__ptr, __e, __d, false, __s, __f);
+    }
+    _FCXX_ATOMIC_CE bool compare_exchange_weak(value_type& __e, value_type __d,
+                                               memory_order __m = memory_order_seq_cst) const noexcept
+        _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_compare_exchange<value_type>(__ptr, __e, __d, true, __m, __fcxx_atomic_failure_order(__m));
+    }
+    _FCXX_ATOMIC_CE bool compare_exchange_strong(value_type& __e, value_type __d,
+                                                 memory_order __m = memory_order_seq_cst) const noexcept
+        _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_compare_exchange<value_type>(__ptr, __e, __d, false, __m,
+                                                          __fcxx_atomic_failure_order(__m));
+    }
+
+    _FCXX_ATOMIC_CE void wait(value_type __old, memory_order __m = memory_order_seq_cst) const noexcept {
+        __fcxx_atomic_wait<value_type>(__ptr, __old, __m);
+    }
+    _FCXX_ATOMIC_CE void notify_one() const noexcept _FCXX_ATOMIC_REF_MUTABLE {}
+    _FCXX_ATOMIC_CE void notify_all() const noexcept _FCXX_ATOMIC_REF_MUTABLE {}
+
+#  if _FCXX_STD >= 2026
+    constexpr typename __fcxx_copy_cv<_Tp, void>::type* address() const noexcept {
+        return __ptr;
+    }
+#  endif
+
+    /* Public, for the conversions between the specializations. */
+    _Tp* __ptr;
+
+protected:
+    _FCXX_ATOMIC_CE explicit __fcxx_atomic_ref_base(_Tp* __p) noexcept : __ptr(__p) {}
+};
+
+#  define _FCXX_ATOMIC_REF_FETCH(key, operand)                                                                 \
+    _FCXX_ATOMIC_CE value_type fetch_##key(operand __v, memory_order __m = memory_order_seq_cst) const noexcept \
+        _FCXX_ATOMIC_REF_MUTABLE {                                                                               \
+        return __fcxx_atomic_fetch_##key<value_type>(this->__ptr, __v, __m);                                     \
+    }
+
+#  define _FCXX_ATOMIC_REF_STORE(key, operand)                                                                 \
+    _FCXX_ATOMIC_CE void store_##key(operand __v, memory_order __m = memory_order_seq_cst) const noexcept       \
+        _FCXX_ATOMIC_REF_MUTABLE {                                                                               \
+        (void)this->fetch_##key(__v, __m);                                                                       \
+    }
+
+template <class _Tp>
+struct __fcxx_atomic_ref_integral : __fcxx_atomic_ref_base<_Tp> {
+    typedef typename __fcxx_atomic_ref_base<_Tp>::value_type value_type;
+    typedef value_type difference_type;
+
+    _FCXX_ATOMIC_REF_FETCH(add, value_type)
+    _FCXX_ATOMIC_REF_FETCH(sub, value_type)
+    _FCXX_ATOMIC_REF_FETCH(and, value_type)
+    _FCXX_ATOMIC_REF_FETCH(or, value_type)
+    _FCXX_ATOMIC_REF_FETCH(xor, value_type)
+#  if _FCXX_STD >= 2026
+    _FCXX_ATOMIC_REF_FETCH(max, value_type)
+    _FCXX_ATOMIC_REF_FETCH(min, value_type)
+
+    _FCXX_ATOMIC_REF_STORE(add, value_type)
+    _FCXX_ATOMIC_REF_STORE(sub, value_type)
+    _FCXX_ATOMIC_REF_STORE(and, value_type)
+    _FCXX_ATOMIC_REF_STORE(or, value_type)
+    _FCXX_ATOMIC_REF_STORE(xor, value_type)
+    _FCXX_ATOMIC_REF_STORE(max, value_type)
+    _FCXX_ATOMIC_REF_STORE(min, value_type)
+#  endif
+
+    _FCXX_ATOMIC_CE value_type operator++(int) const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_fetch_add<value_type>(this->__ptr, value_type(1), memory_order_seq_cst);
+    }
+    _FCXX_ATOMIC_CE value_type operator--(int) const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_fetch_sub<value_type>(this->__ptr, value_type(1), memory_order_seq_cst);
+    }
+    _FCXX_ATOMIC_CE value_type operator++() const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_add_fetch<value_type>(this->__ptr, value_type(1), memory_order_seq_cst);
+    }
+    _FCXX_ATOMIC_CE value_type operator--() const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_sub_fetch<value_type>(this->__ptr, value_type(1), memory_order_seq_cst);
+    }
+    _FCXX_ATOMIC_CE value_type operator+=(value_type __v) const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_add_fetch<value_type>(this->__ptr, __v, memory_order_seq_cst);
+    }
+    _FCXX_ATOMIC_CE value_type operator-=(value_type __v) const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_sub_fetch<value_type>(this->__ptr, __v, memory_order_seq_cst);
+    }
+    _FCXX_ATOMIC_CE value_type operator&=(value_type __v) const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_and_fetch<value_type>(this->__ptr, __v, memory_order_seq_cst);
+    }
+    _FCXX_ATOMIC_CE value_type operator|=(value_type __v) const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_or_fetch<value_type>(this->__ptr, __v, memory_order_seq_cst);
+    }
+    _FCXX_ATOMIC_CE value_type operator^=(value_type __v) const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_xor_fetch<value_type>(this->__ptr, __v, memory_order_seq_cst);
+    }
+
+protected:
+    _FCXX_ATOMIC_CE explicit __fcxx_atomic_ref_integral(_Tp* __p) noexcept : __fcxx_atomic_ref_base<_Tp>(__p) {}
+};
+
+#  define _FCXX_ATOMIC_REF_FLOAT(key, op)                                                                      \
+    _FCXX_ATOMIC_CE value_type fetch_##key(value_type __v, memory_order __m = memory_order_seq_cst) const noexcept \
+        _FCXX_ATOMIC_REF_MUTABLE {                                                                               \
+        return __fcxx_atomic_fetch_op(this->__ptr, __v, __m, op());                                              \
+    }
+
+template <class _Tp>
+struct __fcxx_atomic_ref_floating : __fcxx_atomic_ref_base<_Tp> {
+    typedef typename __fcxx_atomic_ref_base<_Tp>::value_type value_type;
+    typedef value_type difference_type;
+
+    _FCXX_ATOMIC_REF_FLOAT(add, __fcxx_atomic_op_add)
+    _FCXX_ATOMIC_REF_FLOAT(sub, __fcxx_atomic_op_sub)
+#  if _FCXX_STD >= 2026
+    _FCXX_ATOMIC_REF_FLOAT(max, __fcxx_atomic_op_max)
+    _FCXX_ATOMIC_REF_FLOAT(min, __fcxx_atomic_op_min)
+    _FCXX_ATOMIC_REF_FLOAT(fmaximum, __fcxx_atomic_op_fmaximum)
+    _FCXX_ATOMIC_REF_FLOAT(fminimum, __fcxx_atomic_op_fminimum)
+    _FCXX_ATOMIC_REF_FLOAT(fmaximum_num, __fcxx_atomic_op_max)
+    _FCXX_ATOMIC_REF_FLOAT(fminimum_num, __fcxx_atomic_op_min)
+
+    _FCXX_ATOMIC_REF_STORE(add, value_type)
+    _FCXX_ATOMIC_REF_STORE(sub, value_type)
+    _FCXX_ATOMIC_REF_STORE(max, value_type)
+    _FCXX_ATOMIC_REF_STORE(min, value_type)
+    _FCXX_ATOMIC_REF_STORE(fmaximum, value_type)
+    _FCXX_ATOMIC_REF_STORE(fminimum, value_type)
+    _FCXX_ATOMIC_REF_STORE(fmaximum_num, value_type)
+    _FCXX_ATOMIC_REF_STORE(fminimum_num, value_type)
+#  endif
+
+    _FCXX_ATOMIC_CE value_type operator+=(value_type __v) const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_fetch_op(this->__ptr, __v, memory_order_seq_cst, __fcxx_atomic_op_add()) + __v;
+    }
+    _FCXX_ATOMIC_CE value_type operator-=(value_type __v) const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_fetch_op(this->__ptr, __v, memory_order_seq_cst, __fcxx_atomic_op_sub()) - __v;
+    }
+
+protected:
+    _FCXX_ATOMIC_CE explicit __fcxx_atomic_ref_floating(_Tp* __p) noexcept : __fcxx_atomic_ref_base<_Tp>(__p) {}
+};
+
+#  undef _FCXX_ATOMIC_REF_FLOAT
+
+template <class _Tp>
+struct __fcxx_atomic_ref_pointer : __fcxx_atomic_ref_base<_Tp> {
+    typedef typename __fcxx_atomic_ref_base<_Tp>::value_type value_type;
+    typedef ptrdiff_t difference_type;
+
+    _FCXX_ATOMIC_CE value_type fetch_add(ptrdiff_t __d, memory_order __m = memory_order_seq_cst) const noexcept
+        _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_fetch_add_pointer<value_type>(this->__ptr, __d, __m);
+    }
+    _FCXX_ATOMIC_CE value_type fetch_sub(ptrdiff_t __d, memory_order __m = memory_order_seq_cst) const noexcept
+        _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_fetch_sub_pointer<value_type>(this->__ptr, __d, __m);
+    }
+#  if _FCXX_STD >= 2026
+    _FCXX_ATOMIC_CE value_type fetch_max(value_type __v, memory_order __m = memory_order_seq_cst) const noexcept
+        _FCXX_ATOMIC_REF_MUTABLE {
+        static_assert(is_object<typename remove_pointer<value_type>::type>::value,
+                      "fetch_max needs a pointer to an object");
+        return __fcxx_atomic_fetch_op(this->__ptr, __v, __m, __fcxx_atomic_op_max());
+    }
+    _FCXX_ATOMIC_CE value_type fetch_min(value_type __v, memory_order __m = memory_order_seq_cst) const noexcept
+        _FCXX_ATOMIC_REF_MUTABLE {
+        static_assert(is_object<typename remove_pointer<value_type>::type>::value,
+                      "fetch_min needs a pointer to an object");
+        return __fcxx_atomic_fetch_op(this->__ptr, __v, __m, __fcxx_atomic_op_min());
+    }
+
+    _FCXX_ATOMIC_REF_STORE(add, ptrdiff_t)
+    _FCXX_ATOMIC_REF_STORE(sub, ptrdiff_t)
+    _FCXX_ATOMIC_REF_STORE(max, value_type)
+    _FCXX_ATOMIC_REF_STORE(min, value_type)
+#  endif
+
+    _FCXX_ATOMIC_CE value_type operator++(int) const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_fetch_add_pointer<value_type>(this->__ptr, 1, memory_order_seq_cst);
+    }
+    _FCXX_ATOMIC_CE value_type operator--(int) const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_fetch_sub_pointer<value_type>(this->__ptr, 1, memory_order_seq_cst);
+    }
+    _FCXX_ATOMIC_CE value_type operator++() const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_fetch_add_pointer<value_type>(this->__ptr, 1, memory_order_seq_cst) + 1;
+    }
+    _FCXX_ATOMIC_CE value_type operator--() const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_fetch_sub_pointer<value_type>(this->__ptr, 1, memory_order_seq_cst) - 1;
+    }
+    _FCXX_ATOMIC_CE value_type operator+=(ptrdiff_t __d) const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_fetch_add_pointer<value_type>(this->__ptr, __d, memory_order_seq_cst) + __d;
+    }
+    _FCXX_ATOMIC_CE value_type operator-=(ptrdiff_t __d) const noexcept _FCXX_ATOMIC_REF_MUTABLE {
+        return __fcxx_atomic_fetch_sub_pointer<value_type>(this->__ptr, __d, memory_order_seq_cst) - __d;
+    }
+
+protected:
+    _FCXX_ATOMIC_CE explicit __fcxx_atomic_ref_pointer(_Tp* __p) noexcept : __fcxx_atomic_ref_base<_Tp>(__p) {}
+};
+
+#  undef _FCXX_ATOMIC_REF_FETCH
+#  undef _FCXX_ATOMIC_REF_STORE
+
+template <class _Tp>
+struct __fcxx_atomic_ref_select {
+#  if _FCXX_STD >= 2026
+    typedef __fcxx_remove_cv_t<_Tp> _Vp;
+    static const bool __integral = is_integral<_Vp>::value && !is_same<_Vp, bool>::value;
+    static const bool __floating = is_floating_point<_Vp>::value;
+    static const bool __pointer = is_pointer<_Vp>::value && is_object<typename remove_pointer<_Vp>::type>::value;
+#  else
+    static const bool __unqualified = is_same<_Tp, __fcxx_remove_cv_t<_Tp> >::value;
+    static const bool __integral = __unqualified && is_integral<_Tp>::value && !is_same<_Tp, bool>::value;
+    static const bool __floating = __unqualified && is_floating_point<_Tp>::value;
+    static const bool __pointer = __unqualified && is_pointer<_Tp>::value;
+#  endif
+
+    typedef __fcxx_conditional_t<__pointer, __fcxx_atomic_ref_pointer<_Tp>, __fcxx_atomic_ref_base<_Tp> > __other;
+    typedef __fcxx_conditional_t<__floating, __fcxx_atomic_ref_floating<_Tp>, __other> __other_than_integral;
+    typedef __fcxx_conditional_t<__integral, __fcxx_atomic_ref_integral<_Tp>, __other_than_integral> type;
+};
+
+template <class _Tp>
+struct atomic_ref : __fcxx_atomic_ref_select<_Tp>::type {
+private:
+    typedef typename __fcxx_atomic_ref_select<_Tp>::type __base;
+
+    static_assert(is_trivially_copyable<_Tp>::value, "atomic_ref<T> needs a trivially copyable T");
+#  if _FCXX_STD >= 2026
+    static_assert(!is_volatile<_Tp>::value || __base::is_always_lock_free,
+                  "atomic_ref<T> needs an always lock-free T when T is volatile");
+#  endif
+
+public:
+    _FCXX_ATOMIC_CE explicit atomic_ref(_Tp& __obj) : __base(std::__fcxx_addressof(__obj)) {}
+#  if _FCXX_STD >= 2026
+    explicit atomic_ref(_Tp&&) = delete;
+#  endif
+    atomic_ref(const atomic_ref&) noexcept = default;
+#  if _FCXX_STD >= 2026
+    template <class _Up>
+        requires(__fcxx_atomic_similar<_Tp, _Up>::value && is_convertible<_Up*, _Tp*>::value)
+    constexpr atomic_ref(const atomic_ref<_Up>& __ref) noexcept : __base(__ref.__ptr) {}
+#  endif
+    atomic_ref& operator=(const atomic_ref&) = delete;
+
+    _FCXX_ATOMIC_CE typename __base::value_type operator=(typename __base::value_type __d) const noexcept
+        _FCXX_ATOMIC_REF_MUTABLE {
+        __fcxx_atomic_store<typename __base::value_type>(this->__ptr, __d, memory_order_seq_cst);
+        return __d;
+    }
+};
+#endif
+
+/* [atomics.flag], flag type and operations
+ *
+ * The flag is a byte, which the builtins for it take. Before C++20, its
+ * default constructor is trivial, and ATOMIC_FLAG_INIT value-initializes it,
+ * which zero-initializes it, statically for the static objects. */
+
+struct atomic_flag {
+private:
+    unsigned char __flag;
+
+#if _FCXX_ATOMIC_MICROBLAZE
+    /* See _FCXX_ATOMIC_MICROBLAZE. */
+    static bool __test_and_set(volatile unsigned char* __f) noexcept {
+        unsigned char __old = __atomic_load_n(__f, __ATOMIC_RELAXED);
+        const unsigned char __set = 1;
+        while (!__fcxx_atomic_mb_compare_exchange<1>(__f, &__old, &__set)) {
+        }
+        return __old != 0;
+    }
+#endif
+
+public:
+#if _FCXX_STD >= 2020
+    constexpr atomic_flag() noexcept : __flag(0) {}
+#else
+    atomic_flag() noexcept = default;
+#endif
+    atomic_flag(const atomic_flag&) = delete;
+    atomic_flag& operator=(const atomic_flag&) = delete;
+    atomic_flag& operator=(const atomic_flag&) volatile = delete;
+
+#if _FCXX_STD >= 2020
+    bool test(memory_order __m = memory_order_seq_cst) const volatile noexcept {
+        return __atomic_load_n(&__flag, __fcxx_atomic_order(__m)) != 0;
+    }
+    _FCXX_ATOMIC_CE bool test(memory_order __m = memory_order_seq_cst) const noexcept {
+#  if _FCXX_ATOMIC_CONSTEXPR
+        if (__builtin_is_constant_evaluated()) {
+            return __flag != 0;
+        }
+#  endif
+        return __atomic_load_n(&__flag, __fcxx_atomic_order(__m)) != 0;
+    }
+#endif
+
+    bool test_and_set(memory_order __m = memory_order_seq_cst) volatile noexcept {
+#if _FCXX_ATOMIC_MICROBLAZE
+        return __test_and_set(&__flag);
+#else
+        return __atomic_test_and_set(&__flag, __fcxx_atomic_order(__m));
+#endif
+    }
+    _FCXX_ATOMIC_CE bool test_and_set(memory_order __m = memory_order_seq_cst) noexcept {
+#if _FCXX_ATOMIC_CONSTEXPR
+        if (__builtin_is_constant_evaluated()) {
+            const bool __old = __flag != 0;
+            __flag = 1;
+            return __old;
+        }
+#endif
+#if _FCXX_ATOMIC_MICROBLAZE
+        return __test_and_set(&__flag);
+#else
+        return __atomic_test_and_set(&__flag, __fcxx_atomic_order(__m));
+#endif
+    }
+
+    void clear(memory_order __m = memory_order_seq_cst) volatile noexcept {
+        __atomic_clear(&__flag, __fcxx_atomic_order(__m));
+    }
+    _FCXX_ATOMIC_CE void clear(memory_order __m = memory_order_seq_cst) noexcept {
+#if _FCXX_ATOMIC_CONSTEXPR
+        if (__builtin_is_constant_evaluated()) {
+            __flag = 0;
+            return;
+        }
+#endif
+        __atomic_clear(&__flag, __fcxx_atomic_order(__m));
+    }
+
+#if _FCXX_STD >= 2020
+    void wait(bool __old, memory_order __m = memory_order_seq_cst) const volatile noexcept {
+        while ((__atomic_load_n(&__flag, __fcxx_atomic_order(__m)) != 0) == __old) {
+            __fcxx_atomic_pause();
+        }
+    }
+    _FCXX_ATOMIC_CE void wait(bool __old, memory_order __m = memory_order_seq_cst) const noexcept {
+#  if _FCXX_ATOMIC_CONSTEXPR
+        if (__builtin_is_constant_evaluated()) {
+            if ((__flag != 0) == __old) {
+                __fcxx_atomic_wait_blocks();
+            }
+            return;
+        }
+#  endif
+        while ((__atomic_load_n(&__flag, __fcxx_atomic_order(__m)) != 0) == __old) {
+            __fcxx_atomic_pause();
+        }
+    }
+
+    /* Nothing blocks on the waiting operations, which spin. */
+    void notify_one() volatile noexcept {}
+    _FCXX_ATOMIC_CE void notify_one() noexcept {}
+    void notify_all() volatile noexcept {}
+    _FCXX_ATOMIC_CE void notify_all() noexcept {}
+#endif
+};
+
+/* [atomics.nonmembers], non-member functions
+ *
+ * They call the members, which the specializations of atomic for the types
+ * of the program have to have. Up to C++14, the value operands are of the
+ * type T they deduce T from as well, and from C++17 on, they are of the
+ * member types, where T is only deduced from the atomic object. The volatile
+ * members they call can be deprecated, while they are not. */
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
+#if _FCXX_STD >= 2017
+#  define _FCXX_ATOMIC_VALUE(_Tp) typename atomic<_Tp>::value_type
+#else
+#  define _FCXX_ATOMIC_VALUE(_Tp) _Tp
+#endif
+
+template <class _Tp>
+inline bool atomic_is_lock_free(const volatile atomic<_Tp>* __a) noexcept {
+    return __a->is_lock_free();
+}
+template <class _Tp>
+inline bool atomic_is_lock_free(const atomic<_Tp>* __a) noexcept {
+    return __a->is_lock_free();
+}
+
+template <class _Tp>
+inline void atomic_store(volatile atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp) __d) noexcept {
+    __a->store(__d);
+}
+template <class _Tp>
+_FCXX_ATOMIC_CE void atomic_store(atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp) __d) noexcept {
+    __a->store(__d);
+}
+template <class _Tp>
+inline void atomic_store_explicit(volatile atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp) __d, memory_order __m) noexcept {
+    __a->store(__d, __m);
+}
+template <class _Tp>
+_FCXX_ATOMIC_CE void atomic_store_explicit(atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp) __d, memory_order __m) noexcept {
+    __a->store(__d, __m);
+}
+
+template <class _Tp>
+inline _Tp atomic_load(const volatile atomic<_Tp>* __a) noexcept {
+    return __a->load();
+}
+template <class _Tp>
+_FCXX_ATOMIC_CE _Tp atomic_load(const atomic<_Tp>* __a) noexcept {
+    return __a->load();
+}
+template <class _Tp>
+inline _Tp atomic_load_explicit(const volatile atomic<_Tp>* __a, memory_order __m) noexcept {
+    return __a->load(__m);
+}
+template <class _Tp>
+_FCXX_ATOMIC_CE _Tp atomic_load_explicit(const atomic<_Tp>* __a, memory_order __m) noexcept {
+    return __a->load(__m);
+}
+
+template <class _Tp>
+inline _Tp atomic_exchange(volatile atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp) __d) noexcept {
+    return __a->exchange(__d);
+}
+template <class _Tp>
+_FCXX_ATOMIC_CE _Tp atomic_exchange(atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp) __d) noexcept {
+    return __a->exchange(__d);
+}
+template <class _Tp>
+inline _Tp atomic_exchange_explicit(volatile atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp) __d, memory_order __m) noexcept {
+    return __a->exchange(__d, __m);
+}
+template <class _Tp>
+_FCXX_ATOMIC_CE _Tp atomic_exchange_explicit(atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp) __d, memory_order __m) noexcept {
+    return __a->exchange(__d, __m);
+}
+
+template <class _Tp>
+inline bool atomic_compare_exchange_weak(volatile atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp)* __e,
+                                         _FCXX_ATOMIC_VALUE(_Tp) __d) noexcept {
+    return __a->compare_exchange_weak(*__e, __d);
+}
+template <class _Tp>
+_FCXX_ATOMIC_CE bool atomic_compare_exchange_weak(atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp)* __e,
+                                                  _FCXX_ATOMIC_VALUE(_Tp) __d) noexcept {
+    return __a->compare_exchange_weak(*__e, __d);
+}
+template <class _Tp>
+inline bool atomic_compare_exchange_strong(volatile atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp)* __e,
+                                           _FCXX_ATOMIC_VALUE(_Tp) __d) noexcept {
+    return __a->compare_exchange_strong(*__e, __d);
+}
+template <class _Tp>
+_FCXX_ATOMIC_CE bool atomic_compare_exchange_strong(atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp)* __e,
+                                                    _FCXX_ATOMIC_VALUE(_Tp) __d) noexcept {
+    return __a->compare_exchange_strong(*__e, __d);
+}
+template <class _Tp>
+inline bool atomic_compare_exchange_weak_explicit(volatile atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp)* __e,
+                                                  _FCXX_ATOMIC_VALUE(_Tp) __d, memory_order __s,
+                                                  memory_order __f) noexcept {
+    return __a->compare_exchange_weak(*__e, __d, __s, __f);
+}
+template <class _Tp>
+_FCXX_ATOMIC_CE bool atomic_compare_exchange_weak_explicit(atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp)* __e,
+                                                           _FCXX_ATOMIC_VALUE(_Tp) __d, memory_order __s,
+                                                           memory_order __f) noexcept {
+    return __a->compare_exchange_weak(*__e, __d, __s, __f);
+}
+template <class _Tp>
+inline bool atomic_compare_exchange_strong_explicit(volatile atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp)* __e,
+                                                    _FCXX_ATOMIC_VALUE(_Tp) __d, memory_order __s,
+                                                    memory_order __f) noexcept {
+    return __a->compare_exchange_strong(*__e, __d, __s, __f);
+}
+template <class _Tp>
+_FCXX_ATOMIC_CE bool atomic_compare_exchange_strong_explicit(atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp)* __e,
+                                                             _FCXX_ATOMIC_VALUE(_Tp) __d, memory_order __s,
+                                                             memory_order __f) noexcept {
+    return __a->compare_exchange_strong(*__e, __d, __s, __f);
+}
+
+/* The read-modify-write operations. Up to C++14, those of the pointers are
+ * overloads of their own, as their operand is not of the value type. */
+#if _FCXX_STD >= 2017
+#  define _FCXX_ATOMIC_NONMEMBER_FETCH(key, operand)                                                            \
+    template <class _Tp>                                                                                         \
+    inline _Tp atomic_fetch_##key(volatile atomic<_Tp>* __a, typename atomic<_Tp>::operand __v) noexcept {      \
+        return __a->fetch_##key(__v);                                                                            \
+    }                                                                                                            \
+    template <class _Tp>                                                                                         \
+    _FCXX_ATOMIC_CE _Tp atomic_fetch_##key(atomic<_Tp>* __a, typename atomic<_Tp>::operand __v) noexcept {      \
+        return __a->fetch_##key(__v);                                                                            \
+    }                                                                                                            \
+    template <class _Tp>                                                                                         \
+    inline _Tp atomic_fetch_##key##_explicit(volatile atomic<_Tp>* __a, typename atomic<_Tp>::operand __v,      \
+                                             memory_order __m) noexcept {                                        \
+        return __a->fetch_##key(__v, __m);                                                                       \
+    }                                                                                                            \
+    template <class _Tp>                                                                                         \
+    _FCXX_ATOMIC_CE _Tp atomic_fetch_##key##_explicit(atomic<_Tp>* __a, typename atomic<_Tp>::operand __v,      \
+                                                      memory_order __m) noexcept {                               \
+        return __a->fetch_##key(__v, __m);                                                                       \
+    }
+#else
+#  define _FCXX_ATOMIC_NONMEMBER_FETCH(key, operand)                                                            \
+    template <class _Tp>                                                                                         \
+    inline _Tp atomic_fetch_##key(volatile atomic<_Tp>* __a, _Tp __v) noexcept {                               \
+        return __a->fetch_##key(__v);                                                                            \
+    }                                                                                                            \
+    template <class _Tp>                                                                                         \
+    inline _Tp atomic_fetch_##key(atomic<_Tp>* __a, _Tp __v) noexcept {                                         \
+        return __a->fetch_##key(__v);                                                                            \
+    }                                                                                                            \
+    template <class _Tp>                                                                                         \
+    inline _Tp atomic_fetch_##key##_explicit(volatile atomic<_Tp>* __a, _Tp __v, memory_order __m) noexcept {  \
+        return __a->fetch_##key(__v, __m);                                                                       \
+    }                                                                                                            \
+    template <class _Tp>                                                                                         \
+    inline _Tp atomic_fetch_##key##_explicit(atomic<_Tp>* __a, _Tp __v, memory_order __m) noexcept {           \
+        return __a->fetch_##key(__v, __m);                                                                       \
+    }
+
+#  define _FCXX_ATOMIC_NONMEMBER_FETCH_POINTER(key)                                                             \
+    template <class _Tp>                                                                                         \
+    inline _Tp* atomic_fetch_##key(volatile atomic<_Tp*>* __a, ptrdiff_t __d) noexcept {                        \
+        return __a->fetch_##key(__d);                                                                            \
+    }                                                                                                            \
+    template <class _Tp>                                                                                         \
+    inline _Tp* atomic_fetch_##key(atomic<_Tp*>* __a, ptrdiff_t __d) noexcept {                                  \
+        return __a->fetch_##key(__d);                                                                            \
+    }                                                                                                            \
+    template <class _Tp>                                                                                         \
+    inline _Tp* atomic_fetch_##key##_explicit(volatile atomic<_Tp*>* __a, ptrdiff_t __d,                        \
+                                              memory_order __m) noexcept {                                       \
+        return __a->fetch_##key(__d, __m);                                                                       \
+    }                                                                                                            \
+    template <class _Tp>                                                                                         \
+    inline _Tp* atomic_fetch_##key##_explicit(atomic<_Tp*>* __a, ptrdiff_t __d, memory_order __m) noexcept {    \
+        return __a->fetch_##key(__d, __m);                                                                       \
+    }
+
+_FCXX_ATOMIC_NONMEMBER_FETCH_POINTER(add)
+_FCXX_ATOMIC_NONMEMBER_FETCH_POINTER(sub)
+
+#  undef _FCXX_ATOMIC_NONMEMBER_FETCH_POINTER
+#endif
+
+_FCXX_ATOMIC_NONMEMBER_FETCH(add, difference_type)
+_FCXX_ATOMIC_NONMEMBER_FETCH(sub, difference_type)
+_FCXX_ATOMIC_NONMEMBER_FETCH(and, value_type)
+_FCXX_ATOMIC_NONMEMBER_FETCH(or, value_type)
+_FCXX_ATOMIC_NONMEMBER_FETCH(xor, value_type)
+#if _FCXX_STD >= 2026
+_FCXX_ATOMIC_NONMEMBER_FETCH(max, value_type)
+_FCXX_ATOMIC_NONMEMBER_FETCH(min, value_type)
+
+#  define _FCXX_ATOMIC_NONMEMBER_STORE(key, operand)                                                            \
+    template <class _Tp>                                                                                         \
+    inline void atomic_store_##key(volatile atomic<_Tp>* __a, typename atomic<_Tp>::operand __v) noexcept {     \
+        __a->store_##key(__v);                                                                                   \
+    }                                                                                                            \
+    template <class _Tp>                                                                                         \
+    _FCXX_ATOMIC_CE void atomic_store_##key(atomic<_Tp>* __a, typename atomic<_Tp>::operand __v) noexcept {           \
+        __a->store_##key(__v);                                                                                   \
+    }                                                                                                            \
+    template <class _Tp>                                                                                         \
+    inline void atomic_store_##key##_explicit(volatile atomic<_Tp>* __a, typename atomic<_Tp>::operand __v,     \
+                                              memory_order __m) noexcept {                                       \
+        __a->store_##key(__v, __m);                                                                              \
+    }                                                                                                            \
+    template <class _Tp>                                                                                         \
+    _FCXX_ATOMIC_CE void atomic_store_##key##_explicit(atomic<_Tp>* __a, typename atomic<_Tp>::operand __v,           \
+                                                 memory_order __m) noexcept {                                    \
+        __a->store_##key(__v, __m);                                                                              \
+    }
+
+_FCXX_ATOMIC_NONMEMBER_STORE(add, difference_type)
+_FCXX_ATOMIC_NONMEMBER_STORE(sub, difference_type)
+_FCXX_ATOMIC_NONMEMBER_STORE(and, value_type)
+_FCXX_ATOMIC_NONMEMBER_STORE(or, value_type)
+_FCXX_ATOMIC_NONMEMBER_STORE(xor, value_type)
+_FCXX_ATOMIC_NONMEMBER_STORE(max, value_type)
+_FCXX_ATOMIC_NONMEMBER_STORE(min, value_type)
+
+#  undef _FCXX_ATOMIC_NONMEMBER_STORE
+#endif
+
+#undef _FCXX_ATOMIC_NONMEMBER_FETCH
+
+#if _FCXX_STD >= 2020
+template <class _Tp>
+inline void atomic_wait(const volatile atomic<_Tp>* __a, typename atomic<_Tp>::value_type __old) noexcept {
+    __a->wait(__old);
+}
+template <class _Tp>
+_FCXX_ATOMIC_CE void atomic_wait(const atomic<_Tp>* __a, typename atomic<_Tp>::value_type __old) noexcept {
+    __a->wait(__old);
+}
+template <class _Tp>
+inline void atomic_wait_explicit(const volatile atomic<_Tp>* __a, typename atomic<_Tp>::value_type __old,
+                                 memory_order __m) noexcept {
+    __a->wait(__old, __m);
+}
+template <class _Tp>
+_FCXX_ATOMIC_CE void atomic_wait_explicit(const atomic<_Tp>* __a, typename atomic<_Tp>::value_type __old,
+                                          memory_order __m) noexcept {
+    __a->wait(__old, __m);
+}
+template <class _Tp>
+inline void atomic_notify_one(volatile atomic<_Tp>* __a) noexcept {
+    __a->notify_one();
+}
+template <class _Tp>
+_FCXX_ATOMIC_CE void atomic_notify_one(atomic<_Tp>* __a) noexcept {
+    __a->notify_one();
+}
+template <class _Tp>
+inline void atomic_notify_all(volatile atomic<_Tp>* __a) noexcept {
+    __a->notify_all();
+}
+template <class _Tp>
+_FCXX_ATOMIC_CE void atomic_notify_all(atomic<_Tp>* __a) noexcept {
+    __a->notify_all();
+}
+#endif
+
+/* In Annex D from C++20 on, and not freestanding from C++23 on. */
+#if _FCXX_STD <= 2020
+template <class _Tp>
+_FCXX_DEPRECATED_CXX20("atomic_init is deprecated, use atomic_store_explicit with memory_order_relaxed")
+inline void atomic_init(volatile atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp) __d) noexcept {
+    __a->store(__d, memory_order_relaxed);
+}
+template <class _Tp>
+_FCXX_DEPRECATED_CXX20("atomic_init is deprecated, use atomic_store_explicit with memory_order_relaxed")
+inline void atomic_init(atomic<_Tp>* __a, _FCXX_ATOMIC_VALUE(_Tp) __d) noexcept {
+    __a->store(__d, memory_order_relaxed);
+}
+#endif
+
+#undef _FCXX_ATOMIC_VALUE
+
+#pragma GCC diagnostic pop
+
+/* [atomics.alias], type aliases */
+
+typedef atomic<bool> atomic_bool;
+typedef atomic<char> atomic_char;
+typedef atomic<signed char> atomic_schar;
+typedef atomic<unsigned char> atomic_uchar;
+typedef atomic<short> atomic_short;
+typedef atomic<unsigned short> atomic_ushort;
+typedef atomic<int> atomic_int;
+typedef atomic<unsigned int> atomic_uint;
+typedef atomic<long> atomic_long;
+typedef atomic<unsigned long> atomic_ulong;
+typedef atomic<long long> atomic_llong;
+typedef atomic<unsigned long long> atomic_ullong;
+#if _FCXX_STD >= 2020 && _FCXX_HAS_CHAR8_T
+typedef atomic<char8_t> atomic_char8_t;
+#endif
+typedef atomic<char16_t> atomic_char16_t;
+typedef atomic<char32_t> atomic_char32_t;
+typedef atomic<wchar_t> atomic_wchar_t;
+
+/* The types of <cstdint>. The exact-width ones came with C++17, and those
+ * and the pointer-sized ones are only there where <cstdint> has them. */
+#if _FCXX_STD >= 2017
+#  ifdef INT8_MAX
+typedef atomic<int8_t> atomic_int8_t;
+#  endif
+#  ifdef UINT8_MAX
+typedef atomic<uint8_t> atomic_uint8_t;
+#  endif
+#  ifdef INT16_MAX
+typedef atomic<int16_t> atomic_int16_t;
+#  endif
+#  ifdef UINT16_MAX
+typedef atomic<uint16_t> atomic_uint16_t;
+#  endif
+#  ifdef INT32_MAX
+typedef atomic<int32_t> atomic_int32_t;
+#  endif
+#  ifdef UINT32_MAX
+typedef atomic<uint32_t> atomic_uint32_t;
+#  endif
+#  ifdef INT64_MAX
+typedef atomic<int64_t> atomic_int64_t;
+#  endif
+#  ifdef UINT64_MAX
+typedef atomic<uint64_t> atomic_uint64_t;
+#  endif
+#endif
+
+typedef atomic<int_least8_t> atomic_int_least8_t;
+typedef atomic<uint_least8_t> atomic_uint_least8_t;
+typedef atomic<int_least16_t> atomic_int_least16_t;
+typedef atomic<uint_least16_t> atomic_uint_least16_t;
+typedef atomic<int_least32_t> atomic_int_least32_t;
+typedef atomic<uint_least32_t> atomic_uint_least32_t;
+typedef atomic<int_least64_t> atomic_int_least64_t;
+typedef atomic<uint_least64_t> atomic_uint_least64_t;
+
+typedef atomic<int_fast8_t> atomic_int_fast8_t;
+typedef atomic<uint_fast8_t> atomic_uint_fast8_t;
+typedef atomic<int_fast16_t> atomic_int_fast16_t;
+typedef atomic<uint_fast16_t> atomic_uint_fast16_t;
+typedef atomic<int_fast32_t> atomic_int_fast32_t;
+typedef atomic<uint_fast32_t> atomic_uint_fast32_t;
+typedef atomic<int_fast64_t> atomic_int_fast64_t;
+typedef atomic<uint_fast64_t> atomic_uint_fast64_t;
+
+#ifdef INTPTR_MAX
+typedef atomic<intptr_t> atomic_intptr_t;
+#endif
+#ifdef UINTPTR_MAX
+typedef atomic<uintptr_t> atomic_uintptr_t;
+#endif
+typedef atomic<size_t> atomic_size_t;
+typedef atomic<ptrdiff_t> atomic_ptrdiff_t;
+typedef atomic<intmax_t> atomic_intmax_t;
+typedef atomic<uintmax_t> atomic_uintmax_t;
+
+/* Optional in a freestanding implementation in C++20, and hosted from C++23
+ * on. They are the ones of the natural width, when some are lock-free. */
+#if _FCXX_STD == 2020
+#  if ATOMIC_INT_LOCK_FREE == 2
+typedef atomic<signed int> atomic_signed_lock_free;
+typedef atomic<unsigned int> atomic_unsigned_lock_free;
+#  elif ATOMIC_LONG_LOCK_FREE == 2
+typedef atomic<signed long> atomic_signed_lock_free;
+typedef atomic<unsigned long> atomic_unsigned_lock_free;
+#  elif ATOMIC_LLONG_LOCK_FREE == 2
+typedef atomic<signed long long> atomic_signed_lock_free;
+typedef atomic<unsigned long long> atomic_unsigned_lock_free;
+#  elif ATOMIC_SHORT_LOCK_FREE == 2
+typedef atomic<signed short> atomic_signed_lock_free;
+typedef atomic<unsigned short> atomic_unsigned_lock_free;
+#  elif ATOMIC_CHAR_LOCK_FREE == 2
+typedef atomic<signed char> atomic_signed_lock_free;
+typedef atomic<unsigned char> atomic_unsigned_lock_free;
+#  endif
+#endif
+
+/* [atomics.flag] */
+
+inline bool atomic_flag_test_and_set(volatile atomic_flag* __f) noexcept {
+    return __f->test_and_set();
+}
+_FCXX_ATOMIC_CE bool atomic_flag_test_and_set(atomic_flag* __f) noexcept {
+    return __f->test_and_set();
+}
+inline bool atomic_flag_test_and_set_explicit(volatile atomic_flag* __f, memory_order __m) noexcept {
+    return __f->test_and_set(__m);
+}
+_FCXX_ATOMIC_CE bool atomic_flag_test_and_set_explicit(atomic_flag* __f, memory_order __m) noexcept {
+    return __f->test_and_set(__m);
+}
+inline void atomic_flag_clear(volatile atomic_flag* __f) noexcept {
+    __f->clear();
+}
+_FCXX_ATOMIC_CE void atomic_flag_clear(atomic_flag* __f) noexcept {
+    __f->clear();
+}
+inline void atomic_flag_clear_explicit(volatile atomic_flag* __f, memory_order __m) noexcept {
+    __f->clear(__m);
+}
+_FCXX_ATOMIC_CE void atomic_flag_clear_explicit(atomic_flag* __f, memory_order __m) noexcept {
+    __f->clear(__m);
+}
+
+#if _FCXX_STD >= 2020
+inline bool atomic_flag_test(const volatile atomic_flag* __f) noexcept {
+    return __f->test();
+}
+_FCXX_ATOMIC_CE bool atomic_flag_test(const atomic_flag* __f) noexcept {
+    return __f->test();
+}
+inline bool atomic_flag_test_explicit(const volatile atomic_flag* __f, memory_order __m) noexcept {
+    return __f->test(__m);
+}
+_FCXX_ATOMIC_CE bool atomic_flag_test_explicit(const atomic_flag* __f, memory_order __m) noexcept {
+    return __f->test(__m);
+}
+inline void atomic_flag_wait(const volatile atomic_flag* __f, bool __old) noexcept {
+    __f->wait(__old);
+}
+_FCXX_ATOMIC_CE void atomic_flag_wait(const atomic_flag* __f, bool __old) noexcept {
+    __f->wait(__old);
+}
+inline void atomic_flag_wait_explicit(const volatile atomic_flag* __f, bool __old, memory_order __m) noexcept {
+    __f->wait(__old, __m);
+}
+_FCXX_ATOMIC_CE void atomic_flag_wait_explicit(const atomic_flag* __f, bool __old, memory_order __m) noexcept {
+    __f->wait(__old, __m);
+}
+inline void atomic_flag_notify_one(volatile atomic_flag* __f) noexcept {
+    __f->notify_one();
+}
+_FCXX_ATOMIC_CE void atomic_flag_notify_one(atomic_flag* __f) noexcept {
+    __f->notify_one();
+}
+inline void atomic_flag_notify_all(volatile atomic_flag* __f) noexcept {
+    __f->notify_all();
+}
+_FCXX_ATOMIC_CE void atomic_flag_notify_all(atomic_flag* __f) noexcept {
+    __f->notify_all();
+}
+#endif
+
+/* [atomics.fences], fences
+ *
+ * Clang cannot select any fence for the MSP430. Its single core performs
+ * the accesses to memory in the order of the program, and the only other
+ * threads it has are the interrupt handlers, so a barrier to the compiler
+ * is all a fence needs to be there. */
+
+#if defined(__MSP430__) && defined(__clang__)
+#  define _FCXX_ATOMIC_FENCE(fence, order) \
+      if ((order) != __ATOMIC_RELAXED) {     \
+          __asm__ __volatile__("" ::: "memory"); \
+      }
+#else
+#  define _FCXX_ATOMIC_FENCE(fence, order) fence(order);
+#endif
+
+extern "C" {
+
+_FCXX_ATOMIC_CE void atomic_thread_fence(memory_order __m) noexcept {
+#if _FCXX_ATOMIC_CONSTEXPR
+    if (__builtin_is_constant_evaluated()) {
+        return;
+    }
+#endif
+    _FCXX_ATOMIC_FENCE(__atomic_thread_fence, __fcxx_atomic_order(__m))
+}
+
+_FCXX_ATOMIC_CE void atomic_signal_fence(memory_order __m) noexcept {
+#if _FCXX_ATOMIC_CONSTEXPR
+    if (__builtin_is_constant_evaluated()) {
+        return;
+    }
+#endif
+    _FCXX_ATOMIC_FENCE(__atomic_signal_fence, __fcxx_atomic_order(__m))
+}
+
+} /* extern "C" */
+
+#undef _FCXX_ATOMIC_FENCE
+#undef _FCXX_ATOMIC_THROUGH_MEMORY
+#undef _FCXX_ATOMIC_MICROBLAZE
+#undef _FCXX_ATOMIC_OBJECT_BARRIER
+#undef _FCXX_ATOMIC_X87_LOAD
+
+} /* namespace std */
+
+/* The initializers of the code shared with C. ATOMIC_VAR_INIT is in Annex D
+ * from C++20 on, and not freestanding from C++23 on. ATOMIC_FLAG_INIT was
+ * in Annex D in C++20 too, until LWG 3659 took it out again, which is
+ * applied to C++20. The flag is value-initialized, which makes it clear
+ * before C++20 too. */
+#if _FCXX_STD <= 2020
+#  define ATOMIC_VAR_INIT(value) { value }
+#endif
+#define ATOMIC_FLAG_INIT {}
+
+/* Clang can warn about the use of the macro that is deprecated. */
+#if _FCXX_STD == 2020 && _FCXX_CLANG >= 1400
+#  pragma clang deprecated(ATOMIC_VAR_INIT, "ATOMIC_VAR_INIT is deprecated")
+#endif
+
+#undef _FCXX_ATOMIC_CONSTEXPR
+#undef _FCXX_ATOMIC_CE
+#undef _FCXX_ATOMIC_CLEAR_PADDING
+#undef _FCXX_ATOMIC_ALIGNMENT
+#undef _FCXX_ATOMIC_UNPAREN
+#undef _FCXX_ATOMIC_VOLATILE
+#undef _FCXX_ATOMIC_VOLATILE_LOCK_FREE
+#undef _FCXX_ATOMIC_REF_MUTABLE
+
+#if defined(__clang__)
+#  pragma clang diagnostic pop
+#endif
+
+#endif
+
+#endif

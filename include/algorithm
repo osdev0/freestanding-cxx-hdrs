@@ -1,0 +1,53 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_ALGORITHM
+#define __FREESTANDING_CXX_HDRS_ALGORITHM 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2026
+#  error "<algorithm> is not a freestanding header before C++26"
+#endif
+
+#define _FCXX_VERSION_ALGORITHM
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_ALGORITHM
+
+#if _FCXX_STD >= 2026
+
+/* All of the header is freestanding but the algorithms that allocate:
+ * stable_sort, stable_partition and inplace_merge, of both namespaces,
+ * which are left out; the parallel overloads of the others are deleted. */
+#include <initializer_list>
+#include <utility>
+#include <__fcxx/algorithm_impl.h>
+#include <__fcxx/algorithm_minmax.h>
+#include <__fcxx/algorithm_modifying.h>
+#include <__fcxx/algorithm_nonmodifying.h>
+#include <__fcxx/algorithm_sorting.h>
+#include <__fcxx/algorithm_parallel.h>
+#include <__fcxx/algorithm_results.h>
+#include <__fcxx/ranges_algorithm_modifying.h>
+#include <__fcxx/ranges_algorithm_nonmodifying.h>
+#include <__fcxx/ranges_algorithm_sorting.h>
+
+#endif
+
+#endif

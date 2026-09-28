@@ -1,0 +1,177 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_BIT
+#define __FREESTANDING_CXX_HDRS_BIT 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2020
+#  error "<bit> requires C++20 or later"
+#endif
+
+#define _FCXX_VERSION_BIT
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_BIT
+
+#if _FCXX_STD >= 2020
+
+#include <type_traits>
+#include <__fcxx/bit.h>
+
+/* The templates taking only some types are constrained with requires-clauses
+ * where the compiler has concepts, and with SFINAE in the C++2a modes of the
+ * compilers that do not. */
+#if _FCXX_HAS_CONCEPTS
+#  define _FCXX_BIT_TEMPLATE_IF(cond) template <class _Tp> requires(cond)
+#else
+#  define _FCXX_BIT_TEMPLATE_IF(cond) template <class _Tp, __fcxx_enable_if_t<(cond), int> = 0>
+#endif
+
+#define _FCXX_BIT_TEMPLATE_UNSIGNED _FCXX_BIT_TEMPLATE_IF(__fcxx_bit_is_unsigned_integer<_Tp>::value)
+
+namespace std {
+
+/* [bit.cast], bit_cast */
+#if _FCXX_HAS_BUILTIN_BIT_CAST
+#  if _FCXX_HAS_CONCEPTS
+template <class _To, class _From>
+    requires(sizeof(_To) == sizeof(_From) && is_trivially_copyable<_To>::value
+             && is_trivially_copyable<_From>::value)
+#  else
+template <class _To, class _From,
+          __fcxx_enable_if_t<sizeof(_To) == sizeof(_From) && is_trivially_copyable<_To>::value
+                                 && is_trivially_copyable<_From>::value,
+                             int> = 0>
+#  endif
+constexpr _To bit_cast(const _From& __from) noexcept {
+    return __builtin_bit_cast(_To, __from);
+}
+#endif
+
+/* [bit.byteswap], byteswap, for any integral type without padding bits,
+ * which is every one but bool. The bytes of the others are swapped in the
+ * unsigned type of their size. */
+#if _FCXX_STD >= 2023
+_FCXX_BIT_TEMPLATE_IF(is_integral<_Tp>::value)
+constexpr _Tp byteswap(_Tp __value) noexcept {
+    static_assert(!is_same<__fcxx_remove_cv_t<_Tp>, bool>::value, "std::byteswap of a type with padding bits");
+    typedef typename __fcxx_integer_of_size<sizeof(_Tp)>::__unsigned_type _Up;
+    return static_cast<_Tp>(std::__fcxx_byteswap(static_cast<_Up>(__value)));
+}
+#endif
+
+/* [bit.pow.two], integral powers of 2 */
+
+_FCXX_BIT_TEMPLATE_UNSIGNED
+constexpr bool has_single_bit(_Tp __x) noexcept {
+    return std::__fcxx_has_single_bit(__x);
+}
+
+/* Not constexpr, so that bit_ceil with a result that cannot be represented
+ * is not a core constant expression, as the standard requires. It returns 0
+ * then. */
+inline void __fcxx_bit_ceil_not_representable() noexcept {}
+
+_FCXX_BIT_TEMPLATE_UNSIGNED
+constexpr _Tp bit_ceil(_Tp __x) {
+    return __x <= _Tp(1) || std::__fcxx_bit_width(static_cast<_Tp>(__x - 1)) < __fcxx_bit_digits<_Tp>::value
+             ? std::__fcxx_bit_ceil(__x)
+             : (std::__fcxx_bit_ceil_not_representable(), _Tp(0));
+}
+
+_FCXX_BIT_TEMPLATE_UNSIGNED
+constexpr _Tp bit_floor(_Tp __x) noexcept {
+    return std::__fcxx_bit_floor(__x);
+}
+
+/* The width was of the type of the argument in C++20. */
+#if _FCXX_STD >= 2023
+_FCXX_BIT_TEMPLATE_UNSIGNED
+constexpr int bit_width(_Tp __x) noexcept {
+    return std::__fcxx_bit_width(__x);
+}
+#else
+_FCXX_BIT_TEMPLATE_UNSIGNED
+constexpr _Tp bit_width(_Tp __x) noexcept {
+    return static_cast<_Tp>(std::__fcxx_bit_width(__x));
+}
+#endif
+
+/* [bit.rotate], rotating */
+
+_FCXX_BIT_TEMPLATE_UNSIGNED
+_FCXX_NODISCARD constexpr _Tp rotl(_Tp __x, int __s) noexcept {
+    return std::__fcxx_rotl(__x, __s);
+}
+
+_FCXX_BIT_TEMPLATE_UNSIGNED
+_FCXX_NODISCARD constexpr _Tp rotr(_Tp __x, int __s) noexcept {
+    return std::__fcxx_rotr(__x, __s);
+}
+
+/* [bit.count], counting */
+
+_FCXX_BIT_TEMPLATE_UNSIGNED
+constexpr int countl_zero(_Tp __x) noexcept {
+    return std::__fcxx_countl_zero(__x);
+}
+
+_FCXX_BIT_TEMPLATE_UNSIGNED
+constexpr int countl_one(_Tp __x) noexcept {
+    return std::__fcxx_countl_one(__x);
+}
+
+_FCXX_BIT_TEMPLATE_UNSIGNED
+constexpr int countr_zero(_Tp __x) noexcept {
+    return std::__fcxx_countr_zero(__x);
+}
+
+_FCXX_BIT_TEMPLATE_UNSIGNED
+constexpr int countr_one(_Tp __x) noexcept {
+    return std::__fcxx_countr_one(__x);
+}
+
+_FCXX_BIT_TEMPLATE_UNSIGNED
+constexpr int popcount(_Tp __x) noexcept {
+    return std::__fcxx_popcount(__x);
+}
+
+/* [bit.endian], endian. The values are those the compilers use for the byte
+ * orders, and the native order is neither little nor big when the words of
+ * the floating-point types are not in the order of the bytes of the integer
+ * types, as all scalar types then do not have the same order. */
+enum class endian {
+    little = __ORDER_LITTLE_ENDIAN__,
+    big = __ORDER_BIG_ENDIAN__,
+#if defined(__FLOAT_WORD_ORDER__) && __FLOAT_WORD_ORDER__ != __BYTE_ORDER__
+    native = 0
+#else
+    native = __BYTE_ORDER__
+#endif
+};
+
+} /* namespace std */
+
+#undef _FCXX_BIT_TEMPLATE_UNSIGNED
+#undef _FCXX_BIT_TEMPLATE_IF
+
+#endif
+
+#endif

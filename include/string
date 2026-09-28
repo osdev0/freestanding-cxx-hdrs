@@ -1,0 +1,45 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+#ifndef __FREESTANDING_CXX_HDRS_STRING
+#define __FREESTANDING_CXX_HDRS_STRING 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2026
+#  error "<string> is not a freestanding header before C++26"
+#endif
+
+#define _FCXX_VERSION_STRING
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_STRING
+
+#if _FCXX_STD >= 2026
+
+/* Of <string>, only char_traits and its specializations are freestanding;
+ * basic_string, and all that goes with it, is not. The header provides the
+ * range access functions of <iterator> too, and includes the headers its
+ * synopsis includes. */
+#include <compare>
+#include <initializer_list>
+#include <__fcxx/range_access.h>
+#include <__fcxx/char_traits.h>
+
+#endif
+
+#endif

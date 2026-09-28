@@ -1,0 +1,987 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_UTILITY
+#define __FREESTANDING_CXX_HDRS_UTILITY 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2023
+#  error "<utility> is not a freestanding header before C++23"
+#endif
+
+#define _FCXX_VERSION_UTILITY
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_UTILITY
+
+#if _FCXX_STD >= 2023
+
+#include <initializer_list>
+#include <type_traits>
+#include <__fcxx/integer_sequence.h>
+#include <__fcxx/tuple_like.h>
+#include <compare>
+#include <__fcxx/synth_three_way.h>
+#if _FCXX_STD >= 2026
+#  include <__fcxx/ignore.h>
+#  include <__fcxx/monostate.h>
+#endif
+
+namespace std {
+
+/* [utility.exchange], exchange */
+
+template <class _Tp, class _Up = _Tp>
+constexpr _Tp exchange(_Tp& __obj, _Up&& __new_val)
+    noexcept(is_nothrow_move_constructible<_Tp>::value && is_nothrow_assignable<_Tp&, _Up>::value) {
+    _Tp __old_val = std::move(__obj);
+    __obj = std::forward<_Up>(__new_val);
+    return __old_val;
+}
+
+/* [forward], forward/move, of which forward and move are in <type_traits> */
+
+/* The type of forward_like: that of the argument, with the constness of T
+ * added, and the value category of T. */
+template <class _Tp, class _Up>
+struct __fcxx_forward_like {
+    typedef typename remove_reference<_Tp>::type _Tr;
+    typedef typename remove_reference<_Up>::type _Ur;
+    typedef __fcxx_conditional_t<is_const<_Tr>::value, const _Ur, _Ur> _Vp;
+    typedef __fcxx_conditional_t<is_rvalue_reference<_Tp&&>::value, _Vp&&, _Vp&> type;
+};
+
+template <class _Tp, class _Up>
+[[nodiscard]] constexpr auto forward_like(_Up&& __x) noexcept -> typename __fcxx_forward_like<_Tp, _Up>::type {
+    return static_cast<typename __fcxx_forward_like<_Tp, _Up>::type>(__x);
+}
+
+template <class _Tp>
+[[nodiscard]] constexpr
+__fcxx_conditional_t<!is_nothrow_move_constructible<_Tp>::value && is_copy_constructible<_Tp>::value, const _Tp&, _Tp&&>
+move_if_noexcept(_Tp& __x) noexcept {
+    return std::move(__x);
+}
+
+/* [utility.as.const], as_const */
+
+template <class _Tp>
+[[nodiscard]] constexpr typename add_const<_Tp>::type& as_const(_Tp& __t) noexcept {
+    return __t;
+}
+
+template <class _Tp>
+void as_const(const _Tp&&) = delete;
+
+/* [utility.intcmp], integer comparison functions */
+
+/* The signed and unsigned integer types, which are the integral types other
+ * than bool and the character types. */
+template <class _Tp>
+struct __fcxx_is_cmp_integer
+    : __fcxx_bool_constant<is_integral<_Tp>::value && !is_same<_Tp, bool>::value && !is_same<_Tp, char>::value
+                           && !is_same<_Tp, wchar_t>::value
+#if _FCXX_HAS_CHAR8_T
+                           && !is_same<_Tp, char8_t>::value
+#endif
+                           && !is_same<_Tp, char16_t>::value && !is_same<_Tp, char32_t>::value> {};
+
+template <class _Tp, class _Up>
+[[nodiscard]] constexpr bool cmp_equal(_Tp __t, _Up __u) noexcept {
+    static_assert(__fcxx_is_cmp_integer<_Tp>::value && __fcxx_is_cmp_integer<_Up>::value,
+                  "std::cmp_equal takes signed and unsigned integers only");
+    if constexpr (is_signed<_Tp>::value == is_signed<_Up>::value) {
+        return __t == __u;
+    } else if constexpr (is_signed<_Tp>::value) {
+        return __t < 0 ? false : static_cast<typename make_unsigned<_Tp>::type>(__t) == __u;
+    } else {
+        return __u < 0 ? false : __t == static_cast<typename make_unsigned<_Up>::type>(__u);
+    }
+}
+
+template <class _Tp, class _Up>
+[[nodiscard]] constexpr bool cmp_not_equal(_Tp __t, _Up __u) noexcept {
+    return !std::cmp_equal(__t, __u);
+}
+
+template <class _Tp, class _Up>
+[[nodiscard]] constexpr bool cmp_less(_Tp __t, _Up __u) noexcept {
+    static_assert(__fcxx_is_cmp_integer<_Tp>::value && __fcxx_is_cmp_integer<_Up>::value,
+                  "std::cmp_less takes signed and unsigned integers only");
+    if constexpr (is_signed<_Tp>::value == is_signed<_Up>::value) {
+        return __t < __u;
+    } else if constexpr (is_signed<_Tp>::value) {
+        return __t < 0 ? true : static_cast<typename make_unsigned<_Tp>::type>(__t) < __u;
+    } else {
+        return __u < 0 ? false : __t < static_cast<typename make_unsigned<_Up>::type>(__u);
+    }
+}
+
+template <class _Tp, class _Up>
+[[nodiscard]] constexpr bool cmp_greater(_Tp __t, _Up __u) noexcept {
+    return std::cmp_less(__u, __t);
+}
+
+template <class _Tp, class _Up>
+[[nodiscard]] constexpr bool cmp_less_equal(_Tp __t, _Up __u) noexcept {
+    return !std::cmp_less(__u, __t);
+}
+
+template <class _Tp, class _Up>
+[[nodiscard]] constexpr bool cmp_greater_equal(_Tp __t, _Up __u) noexcept {
+    return !std::cmp_less(__t, __u);
+}
+
+template <class _Rp, class _Tp>
+[[nodiscard]] constexpr bool in_range(_Tp __t) noexcept {
+    static_assert(__fcxx_is_cmp_integer<_Rp>::value && __fcxx_is_cmp_integer<_Tp>::value,
+                  "std::in_range takes signed and unsigned integers only");
+    typedef typename make_unsigned<_Rp>::type _Ur;
+    constexpr _Rp __max = is_signed<_Rp>::value ? static_cast<_Rp>(static_cast<_Ur>(-1) >> 1) : static_cast<_Rp>(-1);
+    constexpr _Rp __min = is_signed<_Rp>::value ? static_cast<_Rp>(-__max - 1) : static_cast<_Rp>(0);
+    return std::cmp_greater_equal(__t, __min) && std::cmp_less_equal(__t, __max);
+}
+
+/* [utility.underlying], to_underlying */
+
+template <class _Tp>
+[[nodiscard]] constexpr typename underlying_type<_Tp>::type to_underlying(_Tp __value) noexcept {
+    return static_cast<typename underlying_type<_Tp>::type>(__value);
+}
+
+/* [utility.undefined], undefined behavior */
+
+[[noreturn]] inline void unreachable() {
+    _FCXX_UNREACHABLE();
+}
+
+#if _FCXX_STD >= 2026
+/* Nothing may be moved across the checkpoint, which is what the compiler
+ * does not see through, or what its builtin marks. */
+inline void observable_checkpoint() noexcept {
+#  if _FCXX_HAS_BUILTIN(__builtin_observable_checkpoint)
+    __builtin_observable_checkpoint();
+#  else
+    __asm__ __volatile__("" ::: "memory");
+#  endif
+}
+#endif
+
+/* [const.wrap.class], class template constant_wrapper */
+
+#if _FCXX_HAS_CONSTANT_WRAPPER
+template <class _Tp>
+struct __fcxx_cw_fixed_value {
+    using type = _Tp;
+
+    constexpr __fcxx_cw_fixed_value(type __v) noexcept : __data(__v) {}
+
+    _Tp __data;
+};
+
+template <class _Tp, size_t _Extent>
+struct __fcxx_cw_fixed_value<_Tp[_Extent]> {
+    using type = _Tp[_Extent];
+
+    constexpr __fcxx_cw_fixed_value(_Tp (&__arr)[_Extent]) noexcept
+        : __fcxx_cw_fixed_value(__arr, make_index_sequence<_Extent>()) {}
+
+    _Tp __data[_Extent];
+
+private:
+    template <size_t... _Ip>
+    constexpr __fcxx_cw_fixed_value(_Tp (&__arr)[_Extent], index_sequence<_Ip...>) noexcept
+        : __data{__arr[_Ip]...} {}
+};
+
+template <class _Tp, size_t _Extent>
+__fcxx_cw_fixed_value(_Tp (&)[_Extent]) -> __fcxx_cw_fixed_value<_Tp[_Extent]>;
+
+template <__fcxx_cw_fixed_value _Xp, class = typename decltype(_Xp)::type>
+struct constant_wrapper;
+
+/* constant_wrapper<X>, as the library names it.
+ * Workaround: GCC 14 to 16, all targets: where X is dependent, GCC computes
+ * the default of the second template argument from X before converting X to
+ * the type of the parameter, and so fails (on typename int::type), so the
+ * library gives that argument itself there. */
+#  if _FCXX_GCC
+template <__fcxx_cw_fixed_value _Xp>
+using __fcxx_cw = constant_wrapper<_Xp, typename decltype(_Xp)::type>;
+#  else
+template <__fcxx_cw_fixed_value _Xp>
+using __fcxx_cw = constant_wrapper<_Xp>;
+#  endif
+
+template <class _Tp>
+concept __fcxx_constexpr_param = requires { typename __fcxx_cw<_Tp::value>; };
+
+struct __fcxx_cw_operators {
+    /* unary operators */
+    template <__fcxx_constexpr_param _Tp>
+    friend constexpr auto operator+(_Tp) noexcept -> __fcxx_cw<(+_Tp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp>
+    friend constexpr auto operator-(_Tp) noexcept -> __fcxx_cw<(-_Tp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp>
+    friend constexpr auto operator~(_Tp) noexcept -> __fcxx_cw<(~_Tp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp>
+    friend constexpr auto operator!(_Tp) noexcept -> __fcxx_cw<(!_Tp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp>
+    friend constexpr auto operator&(_Tp) noexcept -> __fcxx_cw<(&_Tp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp>
+    friend constexpr auto operator*(_Tp) noexcept -> __fcxx_cw<(*_Tp::value)> {
+        return {};
+    }
+
+    /* binary operators */
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator+(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value + _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator-(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value - _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator*(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value * _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator/(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value / _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator%(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value % _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator<<(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value << _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator>>(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value >> _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator&(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value & _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator|(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value | _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator^(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value ^ _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+        requires (!is_constructible<bool, decltype(_Lp::value)>::value
+                  || !is_constructible<bool, decltype(_Rp::value)>::value)
+    friend constexpr auto operator&&(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value && _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+        requires (!is_constructible<bool, decltype(_Lp::value)>::value
+                  || !is_constructible<bool, decltype(_Rp::value)>::value)
+    friend constexpr auto operator||(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value || _Rp::value)> {
+        return {};
+    }
+
+    /* comparisons */
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator<=>(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value <=> _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator<(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value < _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator<=(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value <= _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator==(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value == _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator!=(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value != _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator>(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value > _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator>=(_Lp, _Rp) noexcept -> __fcxx_cw<(_Lp::value >= _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator,(_Lp, _Rp) noexcept = delete;
+
+    template <__fcxx_constexpr_param _Lp, __fcxx_constexpr_param _Rp>
+    friend constexpr auto operator->*(_Lp, _Rp) noexcept -> __fcxx_cw<_Lp::value->*(_Rp::value)> {
+        return {};
+    }
+
+    /* pseudo-mutators */
+    template <__fcxx_constexpr_param _Tp>
+    constexpr auto operator++(this _Tp) noexcept -> __fcxx_cw<(++_Tp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp>
+    constexpr auto operator++(this _Tp, int) noexcept -> __fcxx_cw<(_Tp::value++)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp>
+    constexpr auto operator--(this _Tp) noexcept -> __fcxx_cw<(--_Tp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp>
+    constexpr auto operator--(this _Tp, int) noexcept -> __fcxx_cw<(_Tp::value--)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp, __fcxx_constexpr_param _Rp>
+    constexpr auto operator+=(this _Tp, _Rp) noexcept -> __fcxx_cw<(_Tp::value += _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp, __fcxx_constexpr_param _Rp>
+    constexpr auto operator-=(this _Tp, _Rp) noexcept -> __fcxx_cw<(_Tp::value -= _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp, __fcxx_constexpr_param _Rp>
+    constexpr auto operator*=(this _Tp, _Rp) noexcept -> __fcxx_cw<(_Tp::value *= _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp, __fcxx_constexpr_param _Rp>
+    constexpr auto operator/=(this _Tp, _Rp) noexcept -> __fcxx_cw<(_Tp::value /= _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp, __fcxx_constexpr_param _Rp>
+    constexpr auto operator%=(this _Tp, _Rp) noexcept -> __fcxx_cw<(_Tp::value %= _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp, __fcxx_constexpr_param _Rp>
+    constexpr auto operator&=(this _Tp, _Rp) noexcept -> __fcxx_cw<(_Tp::value &= _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp, __fcxx_constexpr_param _Rp>
+    constexpr auto operator|=(this _Tp, _Rp) noexcept -> __fcxx_cw<(_Tp::value |= _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp, __fcxx_constexpr_param _Rp>
+    constexpr auto operator^=(this _Tp, _Rp) noexcept -> __fcxx_cw<(_Tp::value ^= _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp, __fcxx_constexpr_param _Rp>
+    constexpr auto operator<<=(this _Tp, _Rp) noexcept -> __fcxx_cw<(_Tp::value <<= _Rp::value)> {
+        return {};
+    }
+
+    template <__fcxx_constexpr_param _Tp, __fcxx_constexpr_param _Rp>
+    constexpr auto operator>>=(this _Tp, _Rp) noexcept -> __fcxx_cw<(_Tp::value >>= _Rp::value)> {
+        return {};
+    }
+};
+
+/* What calling the value of a constant_wrapper, or subscripting it, gives:
+ * a constant_wrapper of the result when all of the arguments are
+ * constant_wrappers and the result can be one, and the result otherwise. */
+template <class _Cw, class... _Args>
+concept __fcxx_cw_constant_call = (__fcxx_constexpr_param<__fcxx_remove_cvref_t<_Args> > && ...)
+    && requires { typename __fcxx_cw<std::__fcxx_invoke(_Cw::value, __fcxx_remove_cvref_t<_Args>::value...)>; };
+
+template <class _Cw, class... _Args>
+concept __fcxx_cw_constant_subscript = (__fcxx_constexpr_param<__fcxx_remove_cvref_t<_Args> > && ...)
+    && requires { typename __fcxx_cw<_Cw::value[__fcxx_remove_cvref_t<_Args>::value...]>; };
+
+template <__fcxx_cw_fixed_value _Xp, class>
+struct constant_wrapper : __fcxx_cw_operators {
+    static constexpr const auto& value = _Xp.__data;
+    using type = constant_wrapper;
+    using value_type = typename decltype(_Xp)::type;
+
+    template <__fcxx_constexpr_param _Rp>
+    constexpr auto operator=(_Rp) const noexcept -> __fcxx_cw<(value = _Rp::value)> {
+        return {};
+    }
+
+    constexpr operator decltype(value)() const noexcept {
+        return value;
+    }
+
+    template <class... _Args>
+        requires (__fcxx_cw_constant_call<constant_wrapper, _Args...>
+                  || requires(_Args&&... __args) { std::__fcxx_invoke(value, std::forward<_Args>(__args)...); })
+    static constexpr decltype(auto) operator()(_Args&&... __args) noexcept(__call_noexcept<_Args...>()) {
+        if constexpr (__fcxx_cw_constant_call<constant_wrapper, _Args...>) {
+            return __fcxx_cw<std::__fcxx_invoke(value, __fcxx_remove_cvref_t<_Args>::value...)>{};
+        } else {
+            return std::__fcxx_invoke(value, std::forward<_Args>(__args)...);
+        }
+    }
+
+    template <class... _Args>
+        requires (__fcxx_cw_constant_subscript<constant_wrapper, _Args...>
+                  || requires(_Args&&... __args) { value[std::forward<_Args>(__args)...]; })
+    static constexpr decltype(auto) operator[](_Args&&... __args) noexcept(__subscript_noexcept<_Args...>()) {
+        if constexpr (__fcxx_cw_constant_subscript<constant_wrapper, _Args...>) {
+            return __fcxx_cw<value[__fcxx_remove_cvref_t<_Args>::value...]>{};
+        } else {
+            return value[std::forward<_Args>(__args)...];
+        }
+    }
+
+private:
+    template <class... _Args>
+    static constexpr bool __call_noexcept() {
+        if constexpr (__fcxx_cw_constant_call<constant_wrapper, _Args...>) {
+            return true;
+        } else {
+            return noexcept(std::__fcxx_invoke(value, std::declval<_Args>()...));
+        }
+    }
+
+    template <class... _Args>
+    static constexpr bool __subscript_noexcept() {
+        if constexpr (__fcxx_cw_constant_subscript<constant_wrapper, _Args...>) {
+            return true;
+        } else {
+            return noexcept(value[std::declval<_Args>()...]);
+        }
+    }
+};
+
+template <__fcxx_cw_fixed_value _Xp>
+inline constexpr auto cw = constant_wrapper<_Xp>{};
+#endif
+
+/* [intseq.binding], structured binding support for integer_sequence, which
+ * is in <__fcxx/integer_sequence.h> */
+
+#if _FCXX_STD >= 2026
+template <class _Tp, _Tp... _Values>
+struct tuple_size<integer_sequence<_Tp, _Values...> > : integral_constant<size_t, sizeof...(_Values)> {};
+
+template <size_t _Ip, class _Tp, _Tp... _Values>
+struct tuple_element<_Ip, integer_sequence<_Tp, _Values...> > {
+    static_assert(_Ip < sizeof...(_Values), "std::tuple_element index out of range for std::integer_sequence");
+    using type = _Tp;
+};
+
+template <size_t _Ip, class _Tp, _Tp... _Values>
+struct tuple_element<_Ip, const integer_sequence<_Tp, _Values...> > {
+    static_assert(_Ip < sizeof...(_Values), "std::tuple_element index out of range for std::integer_sequence");
+    using type = _Tp;
+};
+
+template <size_t _Ip, class _Tp, _Tp... _Values>
+constexpr _Tp get(integer_sequence<_Tp, _Values...>) noexcept {
+    static_assert(_Ip < sizeof...(_Values), "std::get index out of range for std::integer_sequence");
+#  if _FCXX_HAS_PACK_INDEXING
+    return _Values...[_Ip];
+#  else
+    constexpr _Tp __values[] = {_Values..., _Tp()};
+    return __values[_Ip];
+#  endif
+}
+#endif
+
+/* [pairs.pair], class template pair */
+
+struct piecewise_construct_t {
+    explicit piecewise_construct_t() = default;
+};
+
+inline constexpr piecewise_construct_t piecewise_construct = piecewise_construct_t();
+
+template <class... _Types>
+class tuple;
+
+/* The constraints of the constructors of pair from two values, whether
+ * they are explicit, and whether they are deleted for binding a reference
+ * member to a temporary. */
+template <class _T1, class _T2, class _A1, class _A2>
+concept __fcxx_pair_constructible = is_constructible<_T1, _A1>::value && is_constructible<_T2, _A2>::value;
+
+template <class _T1, class _T2, class _A1, class _A2>
+inline constexpr bool __fcxx_pair_implicit = is_convertible<_A1, _T1>::value && is_convertible<_A2, _T2>::value;
+
+template <class _T1, class _T2, class _A1, class _A2>
+inline constexpr bool __fcxx_pair_dangles =
+#if _FCXX_HAS_DANGLING_CHECK
+    __reference_constructs_from_temporary(_T1, _A1) || __reference_constructs_from_temporary(_T2, _A2);
+#else
+    false;
+#endif
+
+template <class _T1, class _T2, class _Pp>
+concept __fcxx_pair_like_constructible = __fcxx_pair_like<_Pp> && !__fcxx_is_subrange<__fcxx_remove_cvref_t<_Pp>>::value
+    && __fcxx_pair_constructible<_T1, _T2, __fcxx_get_t<0, _Pp>, __fcxx_get_t<1, _Pp>>;
+
+/* Whether the constructor from a pair-like type is explicit, which only
+ * looks at the elements of pair-like types, as the explicit specifier can
+ * be substituted into before the constraints are checked. */
+template <class _T1, class _T2, class _Pp, bool = __fcxx_pair_like<_Pp> >
+struct __fcxx_pair_like_implicit : false_type {};
+
+template <class _T1, class _T2, class _Pp>
+struct __fcxx_pair_like_implicit<_T1, _T2, _Pp, true>
+    : __fcxx_bool_constant<__fcxx_pair_implicit<_T1, _T2, __fcxx_get_t<0, _Pp>, __fcxx_get_t<1, _Pp> > > {};
+
+/* The constraints of the assignments of pair from a pair-like type, but
+ * that of the second element: the pair, and the type to assign the first
+ * element to. */
+template <class _Pair, class _First, class _Pp>
+concept __fcxx_pair_like_assignable = __fcxx_pair_like<_Pp> && !is_same<__fcxx_remove_cvref_t<_Pp>, _Pair>::value
+    && !__fcxx_is_subrange<__fcxx_remove_cvref_t<_Pp> >::value && is_assignable<_First, __fcxx_get_t<0, _Pp> >::value;
+
+/* The default template arguments of the constructor from two values, which
+ * C++23 adds. */
+
+template <class _T1, class _T2>
+struct pair {
+    using first_type = _T1;
+    using second_type = _T2;
+
+    _T1 first;
+    _T2 second;
+
+    pair(const pair&) = default;
+    pair(pair&&) = default;
+
+    constexpr explicit(!(__fcxx_is_implicitly_default_constructible<_T1>::value
+                         && __fcxx_is_implicitly_default_constructible<_T2>::value))
+    pair() requires (is_default_constructible<_T1>::value && is_default_constructible<_T2>::value)
+        : first(), second() {}
+
+    constexpr explicit(!__fcxx_pair_implicit<_T1, _T2, const _T1&, const _T2&>) pair(const _T1& __x, const _T2& __y)
+        requires(is_copy_constructible<_T1>::value && is_copy_constructible<_T2>::value)
+        : first(__x), second(__y) {}
+
+    template <class _U1 = _T1, class _U2 = _T2>
+        requires (__fcxx_pair_constructible<_T1, _T2, _U1, _U2> && !__fcxx_pair_dangles<_T1, _T2, _U1&&, _U2&&>)
+    constexpr explicit(!__fcxx_pair_implicit<_T1, _T2, _U1, _U2>) pair(_U1&& __x, _U2&& __y)
+        : first(std::forward<_U1>(__x)), second(std::forward<_U2>(__y)) {}
+
+    template <class _U1, class _U2>
+        requires (__fcxx_pair_constructible<_T1, _T2, _U1&, _U2&> && !__fcxx_pair_dangles<_T1, _T2, _U1&, _U2&>)
+    constexpr explicit(!__fcxx_pair_implicit<_T1, _T2, _U1&, _U2&>) pair(pair<_U1, _U2>& __p)
+        : first(__p.first), second(__p.second) {}
+
+    template <class _U1, class _U2>
+        requires (__fcxx_pair_constructible<_T1, _T2, const _U1&, const _U2&>
+                  && !__fcxx_pair_dangles<_T1, _T2, const _U1&, const _U2&>)
+    constexpr explicit(!__fcxx_pair_implicit<_T1, _T2, const _U1&, const _U2&>) pair(const pair<_U1, _U2>& __p)
+        : first(__p.first), second(__p.second) {}
+
+    template <class _U1, class _U2>
+        requires (__fcxx_pair_constructible<_T1, _T2, _U1, _U2> && !__fcxx_pair_dangles<_T1, _T2, _U1&&, _U2&&>)
+    constexpr explicit(!__fcxx_pair_implicit<_T1, _T2, _U1, _U2>) pair(pair<_U1, _U2>&& __p)
+        : first(std::forward<_U1>(__p.first)), second(std::forward<_U2>(__p.second)) {}
+
+    template <class _U1, class _U2>
+        requires (__fcxx_pair_constructible<_T1, _T2, const _U1, const _U2>
+                  && !__fcxx_pair_dangles<_T1, _T2, const _U1&&, const _U2&&>)
+    constexpr explicit(!__fcxx_pair_implicit<_T1, _T2, const _U1, const _U2>) pair(const pair<_U1, _U2>&& __p)
+        : first(static_cast<const _U1&&>(__p.first)), second(static_cast<const _U2&&>(__p.second)) {}
+
+    template <class _Pp>
+        requires (__fcxx_pair_like_constructible<_T1, _T2, _Pp>
+                  && !__fcxx_pair_dangles<_T1, _T2, __fcxx_get_t<0, _Pp>, __fcxx_get_t<1, _Pp> >)
+    constexpr explicit(!__fcxx_pair_like_implicit<_T1, _T2, _Pp>::value) pair(_Pp&& __p)
+        : first(get<0>(std::forward<_Pp>(__p))), second(get<1>(std::forward<_Pp>(__p))) {}
+
+#if _FCXX_HAS_DANGLING_CHECK
+    template <class _U1 = _T1, class _U2 = _T2>
+        requires (__fcxx_pair_constructible<_T1, _T2, _U1, _U2> && __fcxx_pair_dangles<_T1, _T2, _U1&&, _U2&&>)
+    constexpr explicit(!__fcxx_pair_implicit<_T1, _T2, _U1, _U2>) pair(_U1&&, _U2&&) = delete;
+
+    template <class _U1, class _U2>
+        requires (__fcxx_pair_constructible<_T1, _T2, _U1&, _U2&> && __fcxx_pair_dangles<_T1, _T2, _U1&, _U2&>)
+    constexpr explicit(!__fcxx_pair_implicit<_T1, _T2, _U1&, _U2&>) pair(pair<_U1, _U2>&) = delete;
+
+    template <class _U1, class _U2>
+        requires (__fcxx_pair_constructible<_T1, _T2, const _U1&, const _U2&>
+                  && __fcxx_pair_dangles<_T1, _T2, const _U1&, const _U2&>)
+    constexpr explicit(!__fcxx_pair_implicit<_T1, _T2, const _U1&, const _U2&>) pair(const pair<_U1, _U2>&) = delete;
+
+    template <class _U1, class _U2>
+        requires (__fcxx_pair_constructible<_T1, _T2, _U1, _U2> && __fcxx_pair_dangles<_T1, _T2, _U1&&, _U2&&>)
+    constexpr explicit(!__fcxx_pair_implicit<_T1, _T2, _U1, _U2>) pair(pair<_U1, _U2>&&) = delete;
+
+    template <class _U1, class _U2>
+        requires (__fcxx_pair_constructible<_T1, _T2, const _U1, const _U2>
+                  && __fcxx_pair_dangles<_T1, _T2, const _U1&&, const _U2&&>)
+    constexpr explicit(!__fcxx_pair_implicit<_T1, _T2, const _U1, const _U2>) pair(const pair<_U1, _U2>&&) = delete;
+
+    template <class _Pp>
+        requires (__fcxx_pair_like_constructible<_T1, _T2, _Pp>
+                  && __fcxx_pair_dangles<_T1, _T2, __fcxx_get_t<0, _Pp>, __fcxx_get_t<1, _Pp> >)
+    constexpr explicit(!__fcxx_pair_like_implicit<_T1, _T2, _Pp>::value)
+    pair(_Pp&&) = delete;
+#endif
+
+    template <class... _Args1, class... _Args2>
+    constexpr pair(piecewise_construct_t, tuple<_Args1...> __first_args, tuple<_Args2...> __second_args)
+        : pair(__first_args, __second_args, index_sequence_for<_Args1...>(), index_sequence_for<_Args2...>()) {}
+
+    /* Not throwing where the assignments of the elements do not, as the
+     * library may add. */
+    constexpr pair& operator=(__fcxx_conditional_t<is_copy_assignable<_T1>::value
+                                                               && is_copy_assignable<_T2>::value,
+                                                           const pair&, const __fcxx_nonesuch&> __p)
+        noexcept(is_nothrow_copy_assignable<_T1>::value && is_nothrow_copy_assignable<_T2>::value) {
+        first = __p.first;
+        second = __p.second;
+        return *this;
+    }
+
+    constexpr const pair& operator=(const pair& __p) const
+        requires (is_copy_assignable<const _T1>::value && is_copy_assignable<const _T2>::value) {
+        first = __p.first;
+        second = __p.second;
+        return *this;
+    }
+
+    template <class _U1, class _U2>
+        requires (is_assignable<_T1&, const _U1&>::value && is_assignable<_T2&, const _U2&>::value)
+    constexpr pair& operator=(const pair<_U1, _U2>& __p) {
+        first = __p.first;
+        second = __p.second;
+        return *this;
+    }
+
+    template <class _U1, class _U2>
+        requires (is_assignable<const _T1&, const _U1&>::value && is_assignable<const _T2&, const _U2&>::value)
+    constexpr const pair& operator=(const pair<_U1, _U2>& __p) const {
+        first = __p.first;
+        second = __p.second;
+        return *this;
+    }
+
+    constexpr pair& operator=(__fcxx_conditional_t<is_move_assignable<_T1>::value
+                                                               && is_move_assignable<_T2>::value,
+                                                           pair&&, __fcxx_nonesuch&&> __p)
+        noexcept(is_nothrow_move_assignable<_T1>::value && is_nothrow_move_assignable<_T2>::value) {
+        first = std::forward<_T1>(__p.first);
+        second = std::forward<_T2>(__p.second);
+        return *this;
+    }
+
+    constexpr const pair& operator=(pair&& __p) const
+        requires (is_assignable<const _T1&, _T1>::value && is_assignable<const _T2&, _T2>::value) {
+        first = std::forward<_T1>(__p.first);
+        second = std::forward<_T2>(__p.second);
+        return *this;
+    }
+
+    template <class _U1, class _U2>
+        requires (is_assignable<_T1&, _U1>::value && is_assignable<_T2&, _U2>::value)
+    constexpr pair& operator=(pair<_U1, _U2>&& __p) {
+        first = std::forward<_U1>(__p.first);
+        second = std::forward<_U2>(__p.second);
+        return *this;
+    }
+
+    template <class _U1, class _U2>
+        requires (is_assignable<const _T1&, _U1>::value && is_assignable<const _T2&, _U2>::value)
+    constexpr const pair& operator=(pair<_U1, _U2>&& __p) const {
+        first = std::forward<_U1>(__p.first);
+        second = std::forward<_U2>(__p.second);
+        return *this;
+    }
+
+    template <class _Pp>
+        requires (__fcxx_pair_like_assignable<pair, _T1&, _Pp> && is_assignable<_T2&, __fcxx_get_t<1, _Pp> >::value)
+    constexpr pair& operator=(_Pp&& __p) {
+        first = get<0>(std::forward<_Pp>(__p));
+        second = get<1>(std::forward<_Pp>(__p));
+        return *this;
+    }
+
+    template <class _Pp>
+        requires (__fcxx_pair_like_assignable<pair, const _T1&, _Pp>
+                  && is_assignable<const _T2&, __fcxx_get_t<1, _Pp> >::value)
+    constexpr const pair& operator=(_Pp&& __p) const {
+        first = get<0>(std::forward<_Pp>(__p));
+        second = get<1>(std::forward<_Pp>(__p));
+        return *this;
+    }
+
+    constexpr void swap(pair& __p)
+        noexcept(__fcxx_is_nothrow_swappable<_T1>::value && __fcxx_is_nothrow_swappable<_T2>::value) {
+        using std::swap;
+        swap(first, __p.first);
+        swap(second, __p.second);
+    }
+
+    constexpr void swap(const pair& __p) const
+        noexcept(__fcxx_is_nothrow_swappable<const _T1>::value && __fcxx_is_nothrow_swappable<const _T2>::value) {
+        using std::swap;
+        swap(first, __p.first);
+        swap(second, __p.second);
+    }
+
+private:
+    /* Piecewise construction, from the elements of the tuples, which tuple
+     * gives pair through its __fcxx_get member. */
+    template <class... _Args1, class... _Args2, size_t... _I1, size_t... _I2>
+    constexpr pair(tuple<_Args1...>& __first_args, tuple<_Args2...>& __second_args, index_sequence<_I1...>,
+                           index_sequence<_I2...>)
+        : first(std::forward<_Args1>(__first_args.template __fcxx_get<_I1>())...),
+          second(std::forward<_Args2>(__second_args.template __fcxx_get<_I2>())...) {}
+};
+
+template <class _T1, class _T2>
+pair(_T1, _T2) -> pair<_T1, _T2>;
+
+template <class _T1, class _T2, class _U1, class _U2, template <class> class _TQual, template <class> class _UQual>
+    requires requires {
+        typename pair<common_reference_t<_TQual<_T1>, _UQual<_U1> >, common_reference_t<_TQual<_T2>, _UQual<_U2> > >;
+    }
+struct basic_common_reference<pair<_T1, _T2>, pair<_U1, _U2>, _TQual, _UQual> {
+    using type = pair<common_reference_t<_TQual<_T1>, _UQual<_U1> >, common_reference_t<_TQual<_T2>, _UQual<_U2> > >;
+};
+
+template <class _T1, class _T2, class _U1, class _U2>
+    requires requires { typename pair<common_type_t<_T1, _U1>, common_type_t<_T2, _U2> >; }
+struct common_type<pair<_T1, _T2>, pair<_U1, _U2> > {
+    using type = pair<common_type_t<_T1, _U1>, common_type_t<_T2, _U2> >;
+};
+
+template <class _T1, class _T2>
+struct __fcxx_is_tuple_like_impl<pair<_T1, _T2> > : true_type {};
+
+/* [pairs.spec], pair specialized algorithms */
+
+template <class _T1, class _T2, class _U1, class _U2>
+#if _FCXX_STD >= 2026
+    requires requires(const pair<_T1, _T2>& __x, const pair<_U1, _U2>& __y) {
+        { __x.first == __y.first } -> __boolean_testable;
+        { __x.second == __y.second } -> __boolean_testable;
+    }
+#endif
+constexpr bool operator==(const pair<_T1, _T2>& __x, const pair<_U1, _U2>& __y) {
+    return __x.first == __y.first && __x.second == __y.second;
+}
+
+template <class _T1, class _T2, class _U1, class _U2>
+constexpr common_comparison_category_t<__fcxx_synth_three_way_result<_T1, _U1>,
+                                       __fcxx_synth_three_way_result<_T2, _U2> >
+operator<=>(const pair<_T1, _T2>& __x, const pair<_U1, _U2>& __y) {
+    if (auto __c = __fcxx_synth_three_way(__x.first, __y.first); __c != 0) {
+        return __c;
+    }
+    return __fcxx_synth_three_way(__x.second, __y.second);
+}
+
+template <class _T1, class _T2>
+constexpr __fcxx_enable_if_t<__fcxx_and<__fcxx_is_swappable<_T1>, __fcxx_is_swappable<_T2> >::value>
+swap(pair<_T1, _T2>& __x, pair<_T1, _T2>& __y) noexcept(noexcept(__x.swap(__y))) {
+    __x.swap(__y);
+}
+
+template <class _T1, class _T2>
+    requires (__fcxx_is_swappable<const _T1>::value && __fcxx_is_swappable<const _T2>::value)
+constexpr void swap(const pair<_T1, _T2>& __x, const pair<_T1, _T2>& __y) noexcept(noexcept(__x.swap(__y))) {
+    __x.swap(__y);
+}
+
+template <class _T1, class _T2>
+constexpr pair<__fcxx_unwrap_ref_decay_t<_T1>, __fcxx_unwrap_ref_decay_t<_T2> > make_pair(_T1&& __x,
+                                                                                                     _T2&& __y) {
+    return pair<__fcxx_unwrap_ref_decay_t<_T1>, __fcxx_unwrap_ref_decay_t<_T2> >(std::forward<_T1>(__x),
+                                                                                std::forward<_T2>(__y));
+}
+
+/* [pair.astuple], tuple-like access to pair */
+
+template <class _T1, class _T2>
+struct tuple_size<pair<_T1, _T2> > : integral_constant<size_t, 2> {};
+
+template <size_t _Ip, class _T1, class _T2>
+struct tuple_element<_Ip, pair<_T1, _T2> > {
+    static_assert(_Ip < 2, "std::tuple_element index out of range for std::pair");
+    typedef __fcxx_conditional_t<_Ip == 0, _T1, _T2> type;
+};
+
+template <size_t _Ip>
+struct __fcxx_pair_get;
+
+template <>
+struct __fcxx_pair_get<0> {
+    template <class _T1, class _T2>
+    static constexpr _T1& __get(pair<_T1, _T2>& __p) noexcept {
+        return __p.first;
+    }
+
+    template <class _T1, class _T2>
+    static constexpr const _T1& __get(const pair<_T1, _T2>& __p) noexcept {
+        return __p.first;
+    }
+};
+
+template <>
+struct __fcxx_pair_get<1> {
+    template <class _T1, class _T2>
+    static constexpr _T2& __get(pair<_T1, _T2>& __p) noexcept {
+        return __p.second;
+    }
+
+    template <class _T1, class _T2>
+    static constexpr const _T2& __get(const pair<_T1, _T2>& __p) noexcept {
+        return __p.second;
+    }
+};
+
+template <size_t _Ip, class _T1, class _T2>
+constexpr typename tuple_element<_Ip, pair<_T1, _T2> >::type& get(pair<_T1, _T2>& __p) noexcept {
+    return __fcxx_pair_get<_Ip>::__get(__p);
+}
+
+template <size_t _Ip, class _T1, class _T2>
+constexpr typename tuple_element<_Ip, pair<_T1, _T2> >::type&& get(pair<_T1, _T2>&& __p) noexcept {
+    return static_cast<typename tuple_element<_Ip, pair<_T1, _T2> >::type&&>(__fcxx_pair_get<_Ip>::__get(__p));
+}
+
+template <size_t _Ip, class _T1, class _T2>
+constexpr const typename tuple_element<_Ip, pair<_T1, _T2> >::type& get(const pair<_T1, _T2>& __p) noexcept {
+    return __fcxx_pair_get<_Ip>::__get(__p);
+}
+
+template <size_t _Ip, class _T1, class _T2>
+constexpr const typename tuple_element<_Ip, pair<_T1, _T2> >::type&& get(const pair<_T1, _T2>&& __p) noexcept {
+    return static_cast<const typename tuple_element<_Ip, pair<_T1, _T2> >::type&&>(__fcxx_pair_get<_Ip>::__get(__p));
+}
+
+template <class _Tp, class _Up>
+constexpr _Tp& get(pair<_Tp, _Up>& __p) noexcept {
+    return __p.first;
+}
+
+template <class _Tp, class _Up>
+constexpr const _Tp& get(const pair<_Tp, _Up>& __p) noexcept {
+    return __p.first;
+}
+
+template <class _Tp, class _Up>
+constexpr _Tp&& get(pair<_Tp, _Up>&& __p) noexcept {
+    return static_cast<_Tp&&>(__p.first);
+}
+
+template <class _Tp, class _Up>
+constexpr const _Tp&& get(const pair<_Tp, _Up>&& __p) noexcept {
+    return static_cast<const _Tp&&>(__p.first);
+}
+
+template <class _Tp, class _Up>
+constexpr _Tp& get(pair<_Up, _Tp>& __p) noexcept {
+    return __p.second;
+}
+
+template <class _Tp, class _Up>
+constexpr const _Tp& get(const pair<_Up, _Tp>& __p) noexcept {
+    return __p.second;
+}
+
+template <class _Tp, class _Up>
+constexpr _Tp&& get(pair<_Up, _Tp>&& __p) noexcept {
+    return static_cast<_Tp&&>(__p.second);
+}
+
+template <class _Tp, class _Up>
+constexpr const _Tp&& get(const pair<_Up, _Tp>&& __p) noexcept {
+    return static_cast<const _Tp&&>(__p.second);
+}
+
+/* in-place construction */
+
+struct in_place_t {
+    explicit in_place_t() = default;
+};
+
+inline constexpr in_place_t in_place{};
+
+template <class _Tp>
+struct in_place_type_t {
+    explicit in_place_type_t() = default;
+};
+
+template <size_t _Ip>
+struct in_place_index_t {
+    explicit in_place_index_t() = default;
+};
+
+template <class _Tp>
+inline constexpr in_place_type_t<_Tp> in_place_type{};
+
+template <size_t _Ip>
+inline constexpr in_place_index_t<_Ip> in_place_index{};
+
+} /* namespace std */
+
+#endif
+
+#endif

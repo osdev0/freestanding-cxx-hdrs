@@ -1,0 +1,1166 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_TUPLE
+#define __FREESTANDING_CXX_HDRS_TUPLE 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2023
+#  error "<tuple> is not a freestanding header before C++23"
+#endif
+
+#define _FCXX_VERSION_TUPLE
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_TUPLE
+
+#if _FCXX_STD >= 2023
+
+#include <type_traits>
+#include <utility>
+#include <__fcxx/ignore.h>
+#include <__fcxx/integer_sequence.h>
+#include <__fcxx/pack.h>
+#include <__fcxx/tuple_like.h>
+#include <__fcxx/uses_allocator.h>
+#include <compare>
+#include <__fcxx/synth_three_way.h>
+
+namespace std {
+
+template <class _Tp, class _Up>
+struct __fcxx_constructible_pred : is_constructible<_Tp, _Up> {};
+
+template <class _Tp, class _Up>
+struct __fcxx_convertible_pred : is_convertible<_Up, _Tp> {};
+
+template <class _Tp, class _Up>
+struct __fcxx_nothrow_constructible_pred : is_nothrow_constructible<_Tp, _Up> {};
+
+template <class _Tp, class _Up>
+struct __fcxx_assignable_pred : is_assignable<_Tp&, _Up> {};
+
+template <class _Tp, class _Up>
+struct __fcxx_const_assignable_pred : is_assignable<const _Tp&, _Up> {};
+
+#if _FCXX_HAS_DANGLING_CHECK
+template <class _Tp, class _Up>
+struct __fcxx_no_dangling_pred : __fcxx_bool_constant<!__reference_constructs_from_temporary(_Tp, _Up)> {};
+#endif
+
+/* The additional constraint of the constructors of a tuple of one element
+ * from another tuple, which keeps them from competing with the copy and move
+ * constructors, and with those from the element. */
+template <class _Src, class _TList, class _UList>
+struct __fcxx_tuple_conv_single : true_type {};
+
+template <class _Src, class _Tp, class _Up>
+struct __fcxx_tuple_conv_single<_Src, __fcxx_type_list<_Tp>, __fcxx_type_list<_Up> >
+    : __fcxx_and<__fcxx_not<is_same<_Tp, _Up> >, __fcxx_not<is_convertible<_Src, _Tp> >,
+                 __fcxx_not<is_constructible<_Tp, _Src> > > {};
+
+/* The disambiguating constraint of the constructor from the elements, for
+ * tuples of one element, and of two and three elements, which the
+ * constructors taking an allocator could be mistaken for. */
+template <class _Tuple, class _TList, class _UList>
+struct __fcxx_tuple_disambiguate : true_type {};
+
+template <class _Tuple, class _T0, class _U0>
+struct __fcxx_tuple_disambiguate<_Tuple, __fcxx_type_list<_T0>, __fcxx_type_list<_U0> >
+    : __fcxx_not<is_same<__fcxx_remove_cvref_t<_U0>, _Tuple> > {};
+
+template <class _Tuple, class _T0, class _T1, class _U0, class _U1>
+struct __fcxx_tuple_disambiguate<_Tuple, __fcxx_type_list<_T0, _T1>, __fcxx_type_list<_U0, _U1> >
+    : __fcxx_bool_constant<!is_same<__fcxx_remove_cvref_t<_U0>, allocator_arg_t>::value
+                           || is_same<__fcxx_remove_cvref_t<_T0>, allocator_arg_t>::value> {};
+
+template <class _Tuple, class _T0, class _T1, class _T2, class _U0, class _U1, class _U2>
+struct __fcxx_tuple_disambiguate<_Tuple, __fcxx_type_list<_T0, _T1, _T2>, __fcxx_type_list<_U0, _U1, _U2> >
+    : __fcxx_bool_constant<!is_same<__fcxx_remove_cvref_t<_U0>, allocator_arg_t>::value
+                           || is_same<__fcxx_remove_cvref_t<_T0>, allocator_arg_t>::value> {};
+
+template <class _Tuple, class _TList, class _UList>
+struct __fcxx_tuple_forwarding
+    : __fcxx_and<__fcxx_same_size<_TList, _UList>, __fcxx_tuple_disambiguate<_Tuple, _TList, _UList>,
+                 __fcxx_zip_all<__fcxx_constructible_pred, _TList, _UList> > {};
+
+template <class _Tp>
+struct __fcxx_is_tuple_spec : false_type {};
+
+template <class... _Types>
+struct __fcxx_is_tuple_spec<tuple<_Types...> > : true_type {};
+
+/* The elements of tuples, which empty classes are the bases of, taking no
+ * space, but for final classes and tuples. */
+template <class _Tp>
+struct __fcxx_tuple_ebo : __fcxx_bool_constant<__is_class(_Tp) && __is_empty(_Tp) && !__is_final(_Tp)
+                                               && !__fcxx_is_tuple_spec<_Tp>::value> {};
+
+struct __fcxx_tuple_elem_tag {};
+struct __fcxx_tuple_from_tag {};
+struct __fcxx_tuple_alloc_tag {};
+
+/* get of a tuple-like type, found by argument-dependent lookup, which the
+ * members of the classes below cannot do themselves, as the members of the
+ * element types they derive from would hide it. */
+template <size_t _Ip, class _Tp>
+constexpr auto __fcxx_adl_get(_Tp&& __t) noexcept -> decltype(get<_Ip>(std::forward<_Tp>(__t))) {
+    return get<_Ip>(std::forward<_Tp>(__t));
+}
+
+template <class _Tp, class _Up>
+constexpr void __fcxx_adl_swap(_Tp& __a, _Up& __b) noexcept(noexcept(swap(__a, __b))) {
+    swap(__a, __b);
+}
+
+template <size_t _Ip, class _Tp, bool = __fcxx_tuple_ebo<_Tp>::value>
+class __fcxx_tuple_leaf {
+public:
+    constexpr __fcxx_tuple_leaf() : __value() {}
+
+    template <class _Up>
+    constexpr __fcxx_tuple_leaf(__fcxx_tuple_elem_tag, _Up&& __u) : __value(std::forward<_Up>(__u)) {}
+
+    template <class _Alloc, class... _Args>
+    constexpr __fcxx_tuple_leaf(__fcxx_tuple_alloc_tag, const _Alloc& __a, _Args&&... __args)
+        : __value(std::make_obj_using_allocator<_Tp>(__a, std::forward<_Args>(__args)...)) {}
+
+    __fcxx_tuple_leaf(const __fcxx_tuple_leaf&) = default;
+    __fcxx_tuple_leaf(__fcxx_tuple_leaf&&) = default;
+
+    constexpr _Tp& __get() noexcept {
+        return __value;
+    }
+
+    constexpr const _Tp& __get() const noexcept {
+        return __value;
+    }
+
+private:
+
+    _Tp __value;
+};
+
+template <size_t _Ip, class _Tp>
+class __fcxx_tuple_leaf<_Ip, _Tp, true> : private _Tp {
+public:
+    constexpr __fcxx_tuple_leaf() : _Tp() {}
+
+    template <class _Up>
+    constexpr __fcxx_tuple_leaf(__fcxx_tuple_elem_tag, _Up&& __u) : _Tp(std::forward<_Up>(__u)) {}
+
+    template <class _Alloc, class... _Args>
+    constexpr __fcxx_tuple_leaf(__fcxx_tuple_alloc_tag, const _Alloc& __a, _Args&&... __args)
+        : _Tp(std::make_obj_using_allocator<_Tp>(__a, std::forward<_Args>(__args)...)) {}
+
+    __fcxx_tuple_leaf(const __fcxx_tuple_leaf&) = default;
+    __fcxx_tuple_leaf(__fcxx_tuple_leaf&&) = default;
+
+    constexpr _Tp& __get() noexcept {
+        return *this;
+    }
+
+    constexpr const _Tp& __get() const noexcept {
+        return *this;
+    }
+
+private:
+};
+
+/* All of the elements of a tuple, with what the tuple does to all of them
+ * at once. */
+template <class _Seq, class... _Types>
+class __fcxx_tuple_impl;
+
+template <size_t... _Is, class... _Types>
+class __fcxx_tuple_impl<index_sequence<_Is...>, _Types...> : public __fcxx_tuple_leaf<_Is, _Types>... {
+public:
+    constexpr __fcxx_tuple_impl() : __fcxx_tuple_leaf<_Is, _Types>()... {}
+
+    template <class... _Up>
+    constexpr __fcxx_tuple_impl(__fcxx_tuple_elem_tag __tag, _Up&&... __u)
+        : __fcxx_tuple_leaf<_Is, _Types>(__tag, std::forward<_Up>(__u))... {}
+
+    template <class _Tuple>
+    constexpr __fcxx_tuple_impl(__fcxx_tuple_from_tag, _Tuple&& __t)
+        : __fcxx_tuple_leaf<_Is, _Types>(__fcxx_tuple_elem_tag(),
+                                         std::__fcxx_adl_get<_Is>(std::forward<_Tuple>(__t)))... {}
+
+    template <class _Alloc>
+    constexpr __fcxx_tuple_impl(__fcxx_tuple_alloc_tag __tag, const _Alloc& __a)
+        : __fcxx_tuple_leaf<_Is, _Types>(__tag, __a)... {}
+
+    template <class _Alloc, class... _Up>
+    constexpr __fcxx_tuple_impl(__fcxx_tuple_alloc_tag __tag, const _Alloc& __a, __fcxx_tuple_elem_tag,
+                                        _Up&&... __u)
+        : __fcxx_tuple_leaf<_Is, _Types>(__tag, __a, std::forward<_Up>(__u))... {}
+
+    template <class _Alloc, class _Tuple>
+    constexpr __fcxx_tuple_impl(__fcxx_tuple_alloc_tag __tag, const _Alloc& __a, __fcxx_tuple_from_tag,
+                                        _Tuple&& __t)
+        : __fcxx_tuple_leaf<_Is, _Types>(__tag, __a, std::__fcxx_adl_get<_Is>(std::forward<_Tuple>(__t)))... {}
+
+    __fcxx_tuple_impl(const __fcxx_tuple_impl&) = default;
+    __fcxx_tuple_impl(__fcxx_tuple_impl&&) = default;
+
+    /* Assigning the elements of a tuple-like object to those of this one,
+     * in order. */
+    template <class _Tuple>
+    constexpr void __assign(_Tuple&& __t) {
+        int __in_order[] = {0, ((void)(__fcxx_tuple_leaf<_Is, _Types>::__get()
+                                       = std::__fcxx_adl_get<_Is>(std::forward<_Tuple>(__t))), 0)...};
+        (void)__in_order;
+    }
+
+    template <class _Tuple>
+    constexpr void __assign_const(_Tuple&& __t) const {
+        int __in_order[] = {0, ((void)(__fcxx_tuple_leaf<_Is, _Types>::__get()
+                                       = std::__fcxx_adl_get<_Is>(std::forward<_Tuple>(__t))), 0)...};
+        (void)__in_order;
+    }
+
+    constexpr void __swap(__fcxx_tuple_impl& __other) {
+        int __in_order[] = {0,
+                            ((void)std::__fcxx_adl_swap(__fcxx_tuple_leaf<_Is, _Types>::__get(),
+                                                        static_cast<__fcxx_tuple_leaf<_Is, _Types>&>(__other).__get()),
+                             0)...};
+        (void)__in_order;
+    }
+
+    constexpr void __swap_const(const __fcxx_tuple_impl& __other) const {
+        int __in_order[] = {0, ((void)std::__fcxx_adl_swap(
+                                    __fcxx_tuple_leaf<_Is, _Types>::__get(),
+                                    static_cast<const __fcxx_tuple_leaf<_Is, _Types>&>(__other).__get()),
+                                0)...};
+        (void)__in_order;
+    }
+};
+
+/* [tuple.helper], tuple helper classes */
+
+template <class... _Types>
+struct tuple_size<tuple<_Types...> > : integral_constant<size_t, sizeof...(_Types)> {};
+
+template <size_t _Ip, class... _Types>
+struct tuple_element<_Ip, tuple<_Types...> > {
+    static_assert(_Ip < sizeof...(_Types), "std::tuple_element index out of range for std::tuple");
+    typedef __fcxx_type_at_t<_Ip, _Types...> type;
+};
+
+template <class... _Types>
+struct __fcxx_is_tuple_like_impl<tuple<_Types...> > : true_type {};
+
+/* The comparisons of the elements of tuples and tuple-like objects. */
+
+template <size_t _Ip, size_t _Np>
+struct __fcxx_tuple_compare {
+    template <class _Tp, class _Up>
+    static constexpr bool __eq(const _Tp& __t, const _Up& __u) {
+        return bool(std::__fcxx_adl_get<_Ip>(__t) == std::__fcxx_adl_get<_Ip>(__u))
+            && __fcxx_tuple_compare<_Ip + 1, _Np>::__eq(__t, __u);
+    }
+
+    template <class _Tp, class _Up>
+    static constexpr bool __lt(const _Tp& __t, const _Up& __u) {
+        return bool(std::__fcxx_adl_get<_Ip>(__t) < std::__fcxx_adl_get<_Ip>(__u))
+            || (!bool(std::__fcxx_adl_get<_Ip>(__u) < std::__fcxx_adl_get<_Ip>(__t))
+                && __fcxx_tuple_compare<_Ip + 1, _Np>::__lt(__t, __u));
+    }
+};
+
+template <size_t _Np>
+struct __fcxx_tuple_compare<_Np, _Np> {
+    template <class _Tp, class _Up>
+    static constexpr bool __eq(const _Tp&, const _Up&) {
+        return true;
+    }
+
+    template <class _Tp, class _Up>
+    static constexpr bool __lt(const _Tp&, const _Up&) {
+        return false;
+    }
+};
+
+/* The element-wise equality of a tuple and a tuple-like object of the same
+ * size, and their three-way comparison. */
+template <class _Tp, class _Up, class _Seq = make_index_sequence<tuple_size<_Tp>::value> >
+struct __fcxx_tuple_eq_check : false_type {};
+
+template <size_t _Ip, class _Tp, class _Up>
+concept __fcxx_tuple_elem_eq = requires(const _Tp& __t, const _Up& __u) {
+    { std::__fcxx_adl_get<_Ip>(__t) == std::__fcxx_adl_get<_Ip>(__u) } -> __boolean_testable;
+};
+
+template <class _Tp, class _Up, size_t... _Is>
+    requires (tuple_size<_Tp>::value == tuple_size<_Up>::value)
+struct __fcxx_tuple_eq_check<_Tp, _Up, index_sequence<_Is...> >
+    : __fcxx_bool_constant<(__fcxx_tuple_elem_eq<_Is, _Tp, _Up> && ...)> {};
+
+template <class _Tp, class _Up, class _Seq = make_index_sequence<tuple_size<_Tp>::value> >
+struct __fcxx_tuple_three_way_result {};
+
+template <class _Tp, class _Up, size_t... _Is>
+    requires (tuple_size<_Tp>::value == tuple_size<_Up>::value)
+          && requires {
+                 typename common_comparison_category_t<__fcxx_synth_three_way_result<
+                     typename tuple_element<_Is, _Tp>::type, typename tuple_element<_Is, _Up>::type>...>;
+             }
+struct __fcxx_tuple_three_way_result<_Tp, _Up, index_sequence<_Is...> > {
+    using type = common_comparison_category_t<__fcxx_synth_three_way_result<typename tuple_element<_Is, _Tp>::type,
+                                                                            typename tuple_element<_Is, _Up>::type>...>;
+};
+
+template <class _Result, size_t _Ip, size_t _Np, class _Tp, class _Up>
+constexpr _Result __fcxx_tuple_three_way(const _Tp& __t, const _Up& __u) {
+    if constexpr (_Ip == _Np) {
+        return strong_ordering::equal;
+    } else {
+        if (auto __c = __fcxx_synth_three_way(std::__fcxx_adl_get<_Ip>(__t), std::__fcxx_adl_get<_Ip>(__u)); __c != 0) {
+            return __c;
+        }
+        return std::__fcxx_tuple_three_way<_Result, _Ip + 1, _Np>(__t, __u);
+    }
+}
+
+/* The comparisons of tuples with the other tuple-like types. */
+template <class _Tuple, class _UTuple>
+concept __fcxx_tuple_comparable_with = __fcxx_tuple_like<_UTuple> && !__fcxx_is_tuple_spec<_UTuple>::value
+#if _FCXX_STD >= 2026
+    && __fcxx_tuple_eq_check<_Tuple, _UTuple>::value
+#endif
+    ;
+
+/* [tuple.tuple], class template tuple */
+
+template <class _TList, class _UList>
+concept __fcxx_tuple_constructible = __fcxx_zip_all<__fcxx_constructible_pred, _TList, _UList>::value;
+
+template <class _TList, class _UList>
+inline constexpr bool __fcxx_tuple_convertible = __fcxx_zip_all<__fcxx_convertible_pred, _TList, _UList>::value;
+
+template <class _TList, class _UList>
+inline constexpr bool __fcxx_tuple_nothrow = __fcxx_zip_all<__fcxx_nothrow_constructible_pred, _TList, _UList>::value;
+
+template <class _TList, class _UList>
+inline constexpr bool __fcxx_tuple_dangles =
+#if _FCXX_HAS_DANGLING_CHECK
+    !__fcxx_zip_all<__fcxx_no_dangling_pred, _TList, _UList>::value;
+#else
+    false;
+#endif
+
+/* The types of the elements of a tuple-like type, as get gives them. */
+template <class _UTuple, class _Seq = make_index_sequence<tuple_size<__fcxx_remove_cvref_t<_UTuple> >::value> >
+struct __fcxx_tuple_get_types;
+
+template <class _UTuple, size_t... _Is>
+struct __fcxx_tuple_get_types<_UTuple, index_sequence<_Is...> > {
+    typedef __fcxx_type_list<__fcxx_get_t<_Is, _UTuple>...> type;
+};
+
+template <class _UTuple, class _Tuple, class _TList>
+concept __fcxx_tuple_like_other = __fcxx_tuple_like<_UTuple> && !is_same<__fcxx_remove_cvref_t<_UTuple>, _Tuple>::value
+    && !__fcxx_is_subrange<__fcxx_remove_cvref_t<_UTuple> >::value
+    && tuple_size<__fcxx_remove_cvref_t<_UTuple> >::value == __fcxx_list_size<_TList>::value;
+
+/* Whether the constructors from a tuple-like type are explicit, which only
+ * looks at the elements of tuple-like types, as the explicit specifier can
+ * be substituted into before the constraints are checked. */
+template <class _TList, class _UTuple, bool = __fcxx_tuple_like<_UTuple> >
+struct __fcxx_tuple_like_implicit : false_type {};
+
+template <class _TList, class _UTuple>
+struct __fcxx_tuple_like_implicit<_TList, _UTuple, true>
+    : __fcxx_bool_constant<__fcxx_tuple_convertible<_TList, typename __fcxx_tuple_get_types<_UTuple>::type> > {};
+
+template <class _UTuple, class... _Types>
+struct __fcxx_tuple_like_single : true_type {};
+
+template <class _UTuple, class _Tp>
+struct __fcxx_tuple_like_single<_UTuple, _Tp>
+    : __fcxx_and<__fcxx_not<is_convertible<_UTuple, _Tp> >, __fcxx_not<is_constructible<_Tp, _UTuple> > > {};
+
+template <class... _Types>
+class tuple : private __fcxx_tuple_impl<index_sequence_for<_Types...>, _Types...> {
+    typedef __fcxx_tuple_impl<index_sequence_for<_Types...>, _Types...> _Base;
+    typedef __fcxx_type_list<_Types...> _TList;
+
+    template <class _UTuple>
+    using _GetTypes = typename __fcxx_tuple_get_types<_UTuple>::type;
+
+public:
+    /* [tuple.cnstr], tuple construction */
+    constexpr explicit(!__fcxx_and<__fcxx_is_implicitly_default_constructible<_Types>...>::value)
+    tuple() requires (__fcxx_and<is_default_constructible<_Types>...>::value) : _Base() {}
+
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<const _Types&...> >)
+    tuple(const _Types&... __args) noexcept(__fcxx_and<is_nothrow_copy_constructible<_Types>...>::value)
+        requires (__fcxx_and<is_copy_constructible<_Types>...>::value)
+        : _Base(__fcxx_tuple_elem_tag(), __args...) {}
+
+    template <class... _UTypes>
+        requires (__fcxx_tuple_forwarding<tuple, _TList, __fcxx_type_list<_UTypes...> >::value
+                  && !__fcxx_tuple_dangles<_TList, __fcxx_type_list<_UTypes&&...> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<_UTypes...> >)
+    tuple(_UTypes&&... __u) noexcept(__fcxx_tuple_nothrow<_TList, __fcxx_type_list<_UTypes...> >)
+        : _Base(__fcxx_tuple_elem_tag(), std::forward<_UTypes>(__u)...) {}
+
+    tuple(const tuple&) = default;
+    tuple(tuple&&) = default;
+
+    template <class... _UTypes>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<_UTypes&...> >
+                  && __fcxx_tuple_conv_single<tuple<_UTypes...>&, _TList, __fcxx_type_list<_UTypes...> >::value
+                  && !__fcxx_tuple_dangles<_TList, __fcxx_type_list<_UTypes&...> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<_UTypes&...> >)
+    tuple(tuple<_UTypes...>& __u) : _Base(__fcxx_tuple_from_tag(), __u) {}
+
+    template <class... _UTypes>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<const _UTypes&...> >
+                  && __fcxx_tuple_conv_single<const tuple<_UTypes...>&, _TList, __fcxx_type_list<_UTypes...> >::value
+                  && !__fcxx_tuple_dangles<_TList, __fcxx_type_list<const _UTypes&...> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<const _UTypes&...> >)
+    tuple(const tuple<_UTypes...>& __u) : _Base(__fcxx_tuple_from_tag(), __u) {}
+
+    template <class... _UTypes>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<_UTypes&&...> >
+                  && __fcxx_tuple_conv_single<tuple<_UTypes...>&&, _TList, __fcxx_type_list<_UTypes...> >::value
+                  && !__fcxx_tuple_dangles<_TList, __fcxx_type_list<_UTypes&&...> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<_UTypes&&...> >)
+    tuple(tuple<_UTypes...>&& __u) : _Base(__fcxx_tuple_from_tag(), std::move(__u)) {}
+
+    template <class... _UTypes>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<const _UTypes&&...> >
+                  && __fcxx_tuple_conv_single<const tuple<_UTypes...>&&, _TList, __fcxx_type_list<_UTypes...> >::value
+                  && !__fcxx_tuple_dangles<_TList, __fcxx_type_list<const _UTypes&&...> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<const _UTypes&&...> >)
+    tuple(const tuple<_UTypes...>&& __u) : _Base(__fcxx_tuple_from_tag(), std::move(__u)) {}
+
+    template <class _U1, class _U2>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<_U1&, _U2&> >
+                  && !__fcxx_tuple_dangles<_TList, __fcxx_type_list<_U1&, _U2&> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<_U1&, _U2&> >)
+    tuple(pair<_U1, _U2>& __p) : _Base(__fcxx_tuple_from_tag(), __p) {}
+
+    template <class _U1, class _U2>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<const _U1&, const _U2&> >
+                  && !__fcxx_tuple_dangles<_TList, __fcxx_type_list<const _U1&, const _U2&> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<const _U1&, const _U2&> >)
+    tuple(const pair<_U1, _U2>& __p) : _Base(__fcxx_tuple_from_tag(), __p) {}
+
+    template <class _U1, class _U2>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<_U1&&, _U2&&> >
+                  && !__fcxx_tuple_dangles<_TList, __fcxx_type_list<_U1&&, _U2&&> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<_U1&&, _U2&&> >)
+    tuple(pair<_U1, _U2>&& __p) : _Base(__fcxx_tuple_from_tag(), std::move(__p)) {}
+
+    template <class _U1, class _U2>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<const _U1&&, const _U2&&> >
+                  && !__fcxx_tuple_dangles<_TList, __fcxx_type_list<const _U1&&, const _U2&&> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<const _U1&&, const _U2&&> >)
+    tuple(const pair<_U1, _U2>&& __p) : _Base(__fcxx_tuple_from_tag(), std::move(__p)) {}
+
+    template <class _UTuple>
+        requires(__fcxx_tuple_like_other<_UTuple, tuple, _TList>
+                 && __fcxx_tuple_constructible<_TList, _GetTypes<_UTuple>>
+                 && __fcxx_tuple_like_single<_UTuple, _Types...>::value
+#if _FCXX_STD >= 2026
+                 && !__fcxx_tuple_dangles<_TList, _GetTypes<_UTuple>>
+#endif
+                 )
+    constexpr explicit(!__fcxx_tuple_like_implicit<_TList, _UTuple>::value) tuple(_UTuple&& __u)
+        : _Base(__fcxx_tuple_from_tag(), std::forward<_UTuple>(__u)) {
+    }
+
+#    if _FCXX_HAS_DANGLING_CHECK
+    template <class... _UTypes>
+        requires (__fcxx_tuple_forwarding<tuple, _TList, __fcxx_type_list<_UTypes...> >::value
+                  && __fcxx_tuple_dangles<_TList, __fcxx_type_list<_UTypes&&...> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<_UTypes...> >) tuple(_UTypes&&...) = delete;
+
+    template <class... _UTypes>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<_UTypes&...> >
+                  && __fcxx_tuple_conv_single<tuple<_UTypes...>&, _TList, __fcxx_type_list<_UTypes...> >::value
+                  && __fcxx_tuple_dangles<_TList, __fcxx_type_list<_UTypes&...> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<_UTypes&...> >)
+    tuple(tuple<_UTypes...>&) = delete;
+
+    template <class... _UTypes>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<const _UTypes&...> >
+                  && __fcxx_tuple_conv_single<const tuple<_UTypes...>&, _TList, __fcxx_type_list<_UTypes...> >::value
+                  && __fcxx_tuple_dangles<_TList, __fcxx_type_list<const _UTypes&...> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<const _UTypes&...> >)
+    tuple(const tuple<_UTypes...>&) = delete;
+
+    template <class... _UTypes>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<_UTypes&&...> >
+                  && __fcxx_tuple_conv_single<tuple<_UTypes...>&&, _TList, __fcxx_type_list<_UTypes...> >::value
+                  && __fcxx_tuple_dangles<_TList, __fcxx_type_list<_UTypes&&...> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<_UTypes&&...> >)
+    tuple(tuple<_UTypes...>&&) = delete;
+
+    template <class... _UTypes>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<const _UTypes&&...> >
+                  && __fcxx_tuple_conv_single<const tuple<_UTypes...>&&, _TList, __fcxx_type_list<_UTypes...> >::value
+                  && __fcxx_tuple_dangles<_TList, __fcxx_type_list<const _UTypes&&...> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<const _UTypes&&...> >)
+    tuple(const tuple<_UTypes...>&&) = delete;
+
+    template <class _U1, class _U2>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<_U1&, _U2&> >
+                  && __fcxx_tuple_dangles<_TList, __fcxx_type_list<_U1&, _U2&> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<_U1&, _U2&> >)
+    tuple(pair<_U1, _U2>&) = delete;
+
+    template <class _U1, class _U2>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<const _U1&, const _U2&> >
+                  && __fcxx_tuple_dangles<_TList, __fcxx_type_list<const _U1&, const _U2&> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<const _U1&, const _U2&> >)
+    tuple(const pair<_U1, _U2>&) = delete;
+
+    template <class _U1, class _U2>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<_U1&&, _U2&&> >
+                  && __fcxx_tuple_dangles<_TList, __fcxx_type_list<_U1&&, _U2&&> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<_U1&&, _U2&&> >)
+    tuple(pair<_U1, _U2>&&) = delete;
+
+    template <class _U1, class _U2>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<const _U1&&, const _U2&&> >
+                  && __fcxx_tuple_dangles<_TList, __fcxx_type_list<const _U1&&, const _U2&&> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<const _U1&&, const _U2&&> >)
+    tuple(const pair<_U1, _U2>&&) = delete;
+
+#  if _FCXX_STD >= 2026
+    template <class _UTuple>
+        requires(__fcxx_tuple_like_other<_UTuple, tuple, _TList>
+                 && __fcxx_tuple_constructible<_TList, _GetTypes<_UTuple>>
+                 && __fcxx_tuple_like_single<_UTuple, _Types...>::value
+                 && __fcxx_tuple_dangles<_TList, _GetTypes<_UTuple>>)
+    constexpr explicit(!__fcxx_tuple_like_implicit<_TList, _UTuple>::value) tuple(_UTuple&&) = delete;
+#      endif
+#    endif
+
+    /* allocator-extended constructors */
+    template <class _Alloc>
+        requires (__fcxx_and<is_default_constructible<_Types>...>::value)
+    constexpr explicit(!__fcxx_and<__fcxx_is_implicitly_default_constructible<_Types>...>::value)
+    tuple(allocator_arg_t, const _Alloc& __a) : _Base(__fcxx_tuple_alloc_tag(), __a) {}
+
+    template <class _Alloc>
+        requires (__fcxx_and<is_copy_constructible<_Types>...>::value)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<const _Types&...> >)
+    tuple(allocator_arg_t, const _Alloc& __a, const _Types&... __args)
+        : _Base(__fcxx_tuple_alloc_tag(), __a, __fcxx_tuple_elem_tag(), __args...) {}
+
+    template <class _Alloc, class... _UTypes>
+        requires (__fcxx_tuple_forwarding<tuple, _TList, __fcxx_type_list<_UTypes...> >::value)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<_UTypes...> >)
+    tuple(allocator_arg_t, const _Alloc& __a, _UTypes&&... __u)
+        : _Base(__fcxx_tuple_alloc_tag(), __a, __fcxx_tuple_elem_tag(), std::forward<_UTypes>(__u)...) {}
+
+    template <class _Alloc>
+    constexpr tuple(allocator_arg_t, const _Alloc& __a, const tuple& __u)
+        : _Base(__fcxx_tuple_alloc_tag(), __a, __fcxx_tuple_from_tag(), __u) {}
+
+    template <class _Alloc>
+        requires (__fcxx_and<is_move_constructible<_Types>...>::value)
+    constexpr tuple(allocator_arg_t, const _Alloc& __a, tuple&& __u)
+        : _Base(__fcxx_tuple_alloc_tag(), __a, __fcxx_tuple_from_tag(), std::move(__u)) {}
+
+    template <class _Alloc, class... _UTypes>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<_UTypes&...> >
+                  && __fcxx_tuple_conv_single<tuple<_UTypes...>&, _TList, __fcxx_type_list<_UTypes...> >::value)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<_UTypes&...> >)
+    tuple(allocator_arg_t, const _Alloc& __a, tuple<_UTypes...>& __u)
+        : _Base(__fcxx_tuple_alloc_tag(), __a, __fcxx_tuple_from_tag(), __u) {}
+
+    template <class _Alloc, class... _UTypes>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<const _UTypes&...> >
+                  && __fcxx_tuple_conv_single<const tuple<_UTypes...>&, _TList, __fcxx_type_list<_UTypes...> >::value)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<const _UTypes&...> >)
+    tuple(allocator_arg_t, const _Alloc& __a, const tuple<_UTypes...>& __u)
+        : _Base(__fcxx_tuple_alloc_tag(), __a, __fcxx_tuple_from_tag(), __u) {}
+
+    template <class _Alloc, class... _UTypes>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<_UTypes&&...> >
+                  && __fcxx_tuple_conv_single<tuple<_UTypes...>&&, _TList, __fcxx_type_list<_UTypes...> >::value)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<_UTypes&&...> >)
+    tuple(allocator_arg_t, const _Alloc& __a, tuple<_UTypes...>&& __u)
+        : _Base(__fcxx_tuple_alloc_tag(), __a, __fcxx_tuple_from_tag(), std::move(__u)) {}
+
+    template <class _Alloc, class... _UTypes>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<const _UTypes&&...> >
+                  && __fcxx_tuple_conv_single<const tuple<_UTypes...>&&, _TList, __fcxx_type_list<_UTypes...> >::value)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<const _UTypes&&...> >)
+    tuple(allocator_arg_t, const _Alloc& __a, const tuple<_UTypes...>&& __u)
+        : _Base(__fcxx_tuple_alloc_tag(), __a, __fcxx_tuple_from_tag(), std::move(__u)) {}
+
+    template <class _Alloc, class _U1, class _U2>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<_U1&, _U2&> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<_U1&, _U2&> >)
+    tuple(allocator_arg_t, const _Alloc& __a, pair<_U1, _U2>& __p)
+        : _Base(__fcxx_tuple_alloc_tag(), __a, __fcxx_tuple_from_tag(), __p) {}
+
+    template <class _Alloc, class _U1, class _U2>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<const _U1&, const _U2&> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<const _U1&, const _U2&> >)
+    tuple(allocator_arg_t, const _Alloc& __a, const pair<_U1, _U2>& __p)
+        : _Base(__fcxx_tuple_alloc_tag(), __a, __fcxx_tuple_from_tag(), __p) {}
+
+    template <class _Alloc, class _U1, class _U2>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<_U1&&, _U2&&> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<_U1&&, _U2&&> >)
+    tuple(allocator_arg_t, const _Alloc& __a, pair<_U1, _U2>&& __p)
+        : _Base(__fcxx_tuple_alloc_tag(), __a, __fcxx_tuple_from_tag(), std::move(__p)) {}
+
+    template <class _Alloc, class _U1, class _U2>
+        requires (__fcxx_tuple_constructible<_TList, __fcxx_type_list<const _U1&&, const _U2&&> >)
+    constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<const _U1&&, const _U2&&> >)
+    tuple(allocator_arg_t, const _Alloc& __a, const pair<_U1, _U2>&& __p)
+        : _Base(__fcxx_tuple_alloc_tag(), __a, __fcxx_tuple_from_tag(), std::move(__p)) {}
+
+    template <class _Alloc, class _UTuple>
+        requires(__fcxx_tuple_like_other<_UTuple, tuple, _TList>
+                 && __fcxx_tuple_constructible<_TList, _GetTypes<_UTuple>>
+                 && __fcxx_tuple_like_single<_UTuple, _Types...>::value)
+    constexpr explicit(!__fcxx_tuple_like_implicit<_TList, _UTuple>::value)
+        tuple(allocator_arg_t, const _Alloc& __a, _UTuple&& __u)
+        : _Base(__fcxx_tuple_alloc_tag(), __a, __fcxx_tuple_from_tag(), std::forward<_UTuple>(__u)) {}
+
+    /* [tuple.assign], tuple assignment */
+
+    /* Not throwing where the assignments of the elements do not, as the
+     * library may add. */
+    constexpr tuple& operator=(__fcxx_conditional_t<__fcxx_and<is_copy_assignable<_Types>...>::value, const tuple&,
+                                                    const __fcxx_nonesuch&> __u)
+        noexcept(__fcxx_and<is_nothrow_copy_assignable<_Types>...>::value) {
+        _Base::__assign(__u);
+        return *this;
+    }
+
+    constexpr const tuple& operator=(const tuple& __u) const
+        requires (__fcxx_and<is_copy_assignable<const _Types>...>::value) {
+        _Base::__assign_const(__u);
+        return *this;
+    }
+
+    constexpr tuple& operator=(__fcxx_conditional_t<__fcxx_and<is_move_assignable<_Types>...>::value, tuple&&,
+                                                    __fcxx_nonesuch&&> __u)
+        noexcept(__fcxx_and<is_nothrow_move_assignable<_Types>...>::value) {
+        _Base::__assign(std::move(__u));
+        return *this;
+    }
+
+    constexpr const tuple& operator=(tuple&& __u) const
+        requires (__fcxx_and<is_assignable<const _Types&, _Types>...>::value) {
+        _Base::__assign_const(std::move(__u));
+        return *this;
+    }
+
+    template <class... _UTypes>
+        requires (__fcxx_zip_all<__fcxx_assignable_pred, _TList, __fcxx_type_list<const _UTypes&...> >::value)
+    constexpr tuple& operator=(const tuple<_UTypes...>& __u) {
+        _Base::__assign(__u);
+        return *this;
+    }
+
+    template <class... _UTypes>
+        requires (__fcxx_zip_all<__fcxx_const_assignable_pred, _TList, __fcxx_type_list<const _UTypes&...> >::value)
+    constexpr const tuple& operator=(const tuple<_UTypes...>& __u) const {
+        _Base::__assign_const(__u);
+        return *this;
+    }
+
+    template <class... _UTypes>
+        requires (__fcxx_zip_all<__fcxx_assignable_pred, _TList, __fcxx_type_list<_UTypes...> >::value)
+    constexpr tuple& operator=(tuple<_UTypes...>&& __u) {
+        _Base::__assign(std::move(__u));
+        return *this;
+    }
+
+    template <class... _UTypes>
+        requires (__fcxx_zip_all<__fcxx_const_assignable_pred, _TList, __fcxx_type_list<_UTypes...> >::value)
+    constexpr const tuple& operator=(tuple<_UTypes...>&& __u) const {
+        _Base::__assign_const(std::move(__u));
+        return *this;
+    }
+
+    template <class _U1, class _U2>
+        requires (__fcxx_zip_all<__fcxx_assignable_pred, _TList, __fcxx_type_list<const _U1&, const _U2&> >::value)
+    constexpr tuple& operator=(const pair<_U1, _U2>& __p) {
+        _Base::__assign(__p);
+        return *this;
+    }
+
+    template <class _U1, class _U2>
+        requires(__fcxx_zip_all<__fcxx_const_assignable_pred, _TList, __fcxx_type_list<const _U1&, const _U2&>>::value)
+    constexpr const tuple& operator=(const pair<_U1, _U2>& __p) const {
+        _Base::__assign_const(__p);
+        return *this;
+    }
+
+    template <class _U1, class _U2>
+        requires (__fcxx_zip_all<__fcxx_assignable_pred, _TList, __fcxx_type_list<_U1, _U2> >::value)
+    constexpr tuple& operator=(pair<_U1, _U2>&& __p) {
+        _Base::__assign(std::move(__p));
+        return *this;
+    }
+
+    template <class _U1, class _U2>
+        requires (__fcxx_zip_all<__fcxx_const_assignable_pred, _TList, __fcxx_type_list<_U1, _U2> >::value)
+    constexpr const tuple& operator=(pair<_U1, _U2>&& __p) const {
+        _Base::__assign_const(std::move(__p));
+        return *this;
+    }
+
+    template <class _UTuple>
+        requires (__fcxx_tuple_like_other<_UTuple, tuple, _TList>
+                  && __fcxx_zip_all<__fcxx_assignable_pred, _TList, _GetTypes<_UTuple> >::value)
+    constexpr tuple& operator=(_UTuple&& __u) {
+        _Base::__assign(std::forward<_UTuple>(__u));
+        return *this;
+    }
+
+    template <class _UTuple>
+        requires (__fcxx_tuple_like_other<_UTuple, tuple, _TList>
+                  && __fcxx_zip_all<__fcxx_const_assignable_pred, _TList, _GetTypes<_UTuple> >::value)
+    constexpr const tuple& operator=(_UTuple&& __u) const {
+        _Base::__assign_const(std::forward<_UTuple>(__u));
+        return *this;
+    }
+
+    /* [tuple.swap], tuple swap */
+    constexpr void swap(tuple& __u) noexcept(__fcxx_and<__fcxx_is_nothrow_swappable<_Types>...>::value) {
+        _Base::__swap(__u);
+    }
+
+    constexpr void swap(const tuple& __u) const
+        noexcept(__fcxx_and<__fcxx_is_nothrow_swappable<const _Types>...>::value) {
+        _Base::__swap_const(__u);
+    }
+
+    /* [tuple.rel], the comparisons with the other tuple-like types, which
+     * argument-dependent lookup only finds */
+    template <class _UTuple>
+        requires __fcxx_tuple_comparable_with<tuple, _UTuple>
+    friend constexpr bool operator==(const tuple& __t, const _UTuple& __u) {
+        static_assert(sizeof...(_Types) == tuple_size<_UTuple>::value,
+                      "std::tuple comparison with a tuple-like object of a different size");
+        return __fcxx_tuple_compare<0, sizeof...(_Types)>::__eq(__t, __u);
+    }
+
+    template <class _UTuple>
+        requires (__fcxx_tuple_like<_UTuple> && !__fcxx_is_tuple_spec<_UTuple>::value)
+    friend constexpr typename __fcxx_tuple_three_way_result<tuple, _UTuple>::type
+    operator<=>(const tuple& __t, const _UTuple& __u) {
+        return std::__fcxx_tuple_three_way<typename __fcxx_tuple_three_way_result<tuple, _UTuple>::type, 0,
+                                           sizeof...(_Types)>(__t, __u);
+    }
+
+    /* The elements, for get and for pair. GCC takes no builtin traits in the
+     * signatures of functions, which only name tuple_element. */
+    template <size_t _Ip>
+    constexpr typename tuple_element<_Ip, tuple>::type& __fcxx_get() noexcept {
+        return static_cast<__fcxx_tuple_leaf<_Ip, typename tuple_element<_Ip, tuple>::type>&>(*this).__get();
+    }
+
+    template <size_t _Ip>
+    constexpr const typename tuple_element<_Ip, tuple>::type& __fcxx_get() const noexcept {
+        return static_cast<const __fcxx_tuple_leaf<_Ip, typename tuple_element<_Ip, tuple>::type>&>(*this).__get();
+    }
+};
+
+/* The tuple of no elements, whose default constructor is trivial. */
+template <>
+class tuple<> {
+public:
+    tuple() noexcept = default;
+    tuple(const tuple&) = default;
+    tuple(tuple&&) = default;
+
+    template <class _Alloc>
+    constexpr tuple(allocator_arg_t, const _Alloc&) noexcept {}
+
+    template <class _Alloc>
+    constexpr tuple(allocator_arg_t, const _Alloc&, const tuple&) noexcept {}
+
+    template <class _Alloc>
+    constexpr tuple(allocator_arg_t, const _Alloc&, tuple&&) noexcept {}
+
+    template <class _UTuple>
+        requires (__fcxx_tuple_like_other<_UTuple, tuple, __fcxx_type_list<> >)
+    constexpr tuple(_UTuple&&) noexcept {}
+
+    template <class _Alloc, class _UTuple>
+        requires (__fcxx_tuple_like_other<_UTuple, tuple, __fcxx_type_list<> >)
+    constexpr tuple(allocator_arg_t, const _Alloc&, _UTuple&&) noexcept {}
+
+    tuple& operator=(const tuple&) = default;
+    tuple& operator=(tuple&&) = default;
+
+    constexpr const tuple& operator=(const tuple&) const noexcept {
+        return *this;
+    }
+
+    constexpr const tuple& operator=(tuple&&) const noexcept {
+        return *this;
+    }
+
+    template <class _UTuple>
+        requires (__fcxx_tuple_like_other<_UTuple, tuple, __fcxx_type_list<> >)
+    constexpr tuple& operator=(_UTuple&&) noexcept {
+        return *this;
+    }
+
+    template <class _UTuple>
+        requires (__fcxx_tuple_like_other<_UTuple, tuple, __fcxx_type_list<> >)
+    constexpr const tuple& operator=(_UTuple&&) const noexcept {
+        return *this;
+    }
+
+    constexpr void swap(tuple&) noexcept {}
+
+    constexpr void swap(const tuple&) const noexcept {}
+
+    template <class _UTuple>
+        requires __fcxx_tuple_comparable_with<tuple, _UTuple>
+    friend constexpr bool operator==(const tuple&, const _UTuple&) {
+        static_assert(tuple_size<_UTuple>::value == 0,
+                      "std::tuple comparison with a tuple-like object of a different size");
+        return true;
+    }
+
+    template <class _UTuple>
+        requires (__fcxx_tuple_like<_UTuple> && !__fcxx_is_tuple_spec<_UTuple>::value)
+    friend constexpr typename __fcxx_tuple_three_way_result<tuple, _UTuple>::type operator<=>(const tuple&,
+                                                                                            const _UTuple&) {
+        return strong_ordering::equal;
+    }
+};
+
+template <class... _UTypes>
+tuple(_UTypes...) -> tuple<_UTypes...>;
+
+template <class _T1, class _T2>
+tuple(pair<_T1, _T2>) -> tuple<_T1, _T2>;
+
+template <class _Alloc, class... _UTypes>
+tuple(allocator_arg_t, _Alloc, _UTypes...) -> tuple<_UTypes...>;
+
+template <class _Alloc, class _T1, class _T2>
+tuple(allocator_arg_t, _Alloc, pair<_T1, _T2>) -> tuple<_T1, _T2>;
+
+template <class _Alloc, class... _UTypes>
+tuple(allocator_arg_t, _Alloc, tuple<_UTypes...>) -> tuple<_UTypes...>;
+
+/* [tuple.elem], element access */
+
+template <size_t _Ip, class... _Types>
+constexpr typename tuple_element<_Ip, tuple<_Types...> >::type& get(tuple<_Types...>& __t) noexcept {
+    return __t.template __fcxx_get<_Ip>();
+}
+
+template <size_t _Ip, class... _Types>
+constexpr typename tuple_element<_Ip, tuple<_Types...> >::type&& get(tuple<_Types...>&& __t) noexcept {
+    return static_cast<typename tuple_element<_Ip, tuple<_Types...> >::type&&>(__t.template __fcxx_get<_Ip>());
+}
+
+template <size_t _Ip, class... _Types>
+constexpr const typename tuple_element<_Ip, tuple<_Types...>>::type& get(const tuple<_Types...>& __t) noexcept {
+    return __t.template __fcxx_get<_Ip>();
+}
+
+template <size_t _Ip, class... _Types>
+constexpr const typename tuple_element<_Ip, tuple<_Types...> >::type&& get(
+    const tuple<_Types...>&& __t) noexcept {
+    return static_cast<const typename tuple_element<_Ip, tuple<_Types...> >::type&&>(__t.template __fcxx_get<_Ip>());
+}
+
+template <class _Tp, class... _Types>
+constexpr _Tp& get(tuple<_Types...>& __t) noexcept {
+    static_assert(__fcxx_find_type<0, _Tp, _Types...>::__count == 1,
+                  "std::get: the type must occur exactly once in the std::tuple");
+    return __t.template __fcxx_get<__fcxx_find_type<0, _Tp, _Types...>::__index>();
+}
+
+template <class _Tp, class... _Types>
+constexpr _Tp&& get(tuple<_Types...>&& __t) noexcept {
+    static_assert(__fcxx_find_type<0, _Tp, _Types...>::__count == 1,
+                  "std::get: the type must occur exactly once in the std::tuple");
+    return static_cast<_Tp&&>(__t.template __fcxx_get<__fcxx_find_type<0, _Tp, _Types...>::__index>());
+}
+
+template <class _Tp, class... _Types>
+constexpr const _Tp& get(const tuple<_Types...>& __t) noexcept {
+    static_assert(__fcxx_find_type<0, _Tp, _Types...>::__count == 1,
+                  "std::get: the type must occur exactly once in the std::tuple");
+    return __t.template __fcxx_get<__fcxx_find_type<0, _Tp, _Types...>::__index>();
+}
+
+template <class _Tp, class... _Types>
+constexpr const _Tp&& get(const tuple<_Types...>&& __t) noexcept {
+    static_assert(__fcxx_find_type<0, _Tp, _Types...>::__count == 1,
+                  "std::get: the type must occur exactly once in the std::tuple");
+    return static_cast<const _Tp&&>(__t.template __fcxx_get<__fcxx_find_type<0, _Tp, _Types...>::__index>());
+}
+
+/* [tuple.creation], tuple creation functions */
+
+template <class... _Types>
+constexpr tuple<__fcxx_unwrap_ref_decay_t<_Types>...> make_tuple(_Types&&... __args) {
+    return tuple<__fcxx_unwrap_ref_decay_t<_Types>...>(std::forward<_Types>(__args)...);
+}
+
+template <class... _Types>
+constexpr tuple<_Types&&...> forward_as_tuple(_Types&&... __args) noexcept {
+    return tuple<_Types&&...>(std::forward<_Types>(__args)...);
+}
+
+template <class... _Types>
+constexpr tuple<_Types&...> tie(_Types&... __args) noexcept {
+    return tuple<_Types&...>(__args...);
+}
+
+/* The elements of tuple-like objects, one after the other, and the type
+ * of the tuple of them. */
+template <class... _Seqs>
+struct __fcxx_concat_seqs;
+
+template <>
+struct __fcxx_concat_seqs<> {
+    typedef index_sequence<> type;
+};
+
+template <size_t... _Is>
+struct __fcxx_concat_seqs<index_sequence<_Is...> > {
+    typedef index_sequence<_Is...> type;
+};
+
+template <size_t... _Is, size_t... _Js, class... _Rest>
+struct __fcxx_concat_seqs<index_sequence<_Is...>, index_sequence<_Js...>, _Rest...>
+    : __fcxx_concat_seqs<index_sequence<_Is..., _Js...>, _Rest...> {};
+
+template <size_t _Value, class _Seq>
+struct __fcxx_repeat_seq;
+
+template <size_t _Value, size_t... _Is>
+struct __fcxx_repeat_seq<_Value, index_sequence<_Is...> > {
+    typedef index_sequence<(_Is * 0 + _Value)...> type;
+};
+
+template <class _Tuple, class _Seq = make_index_sequence<tuple_size<_Tuple>::value> >
+struct __fcxx_tuple_elements;
+
+template <class _Tuple, size_t... _Is>
+struct __fcxx_tuple_elements<_Tuple, index_sequence<_Is...> > {
+    typedef tuple<typename tuple_element<_Is, _Tuple>::type...> type;
+};
+
+template <class... _Tuples>
+struct __fcxx_concat_tuples;
+
+template <>
+struct __fcxx_concat_tuples<> {
+    typedef tuple<> type;
+};
+
+template <class... _Ts>
+struct __fcxx_concat_tuples<tuple<_Ts...> > {
+    typedef tuple<_Ts...> type;
+};
+
+template <class... _Ts, class... _Us, class... _Rest>
+struct __fcxx_concat_tuples<tuple<_Ts...>, tuple<_Us...>, _Rest...>
+    : __fcxx_concat_tuples<tuple<_Ts..., _Us...>, _Rest...> {};
+
+template <class _Seq, class... _Tuples>
+struct __fcxx_tuple_cat_impl;
+
+template <size_t... _Js, class... _Tuples>
+struct __fcxx_tuple_cat_impl<index_sequence<_Js...>, _Tuples...> {
+    typedef typename __fcxx_concat_tuples<typename __fcxx_tuple_elements<_Tuples>::type...>::type type;
+    typedef typename __fcxx_concat_seqs<
+        typename __fcxx_repeat_seq<_Js, make_index_sequence<tuple_size<_Tuples>::value> >::type...>::type _Outer;
+    typedef typename __fcxx_concat_seqs<make_index_sequence<tuple_size<_Tuples>::value>...>::type _Inner;
+};
+
+template <class... _Tuples>
+struct __fcxx_tuple_cat : __fcxx_tuple_cat_impl<index_sequence_for<_Tuples...>, __fcxx_remove_cvref_t<_Tuples>...> {};
+
+template <class _Ret, size_t... _Os, size_t... _Is, class _Refs>
+constexpr _Ret __fcxx_tuple_cat_from(index_sequence<_Os...>, index_sequence<_Is...>, _Refs&& __refs) {
+    return _Ret(std::__fcxx_adl_get<_Is>(std::__fcxx_adl_get<_Os>(std::move(__refs)))...);
+}
+
+template <class... _Tuples
+          >
+    requires (__fcxx_tuple_like<_Tuples> && ...)
+constexpr typename __fcxx_tuple_cat<_Tuples...>::type tuple_cat(_Tuples&&... __tpls) {
+    typedef __fcxx_tuple_cat<_Tuples...> _Cat;
+    return std::__fcxx_tuple_cat_from<typename _Cat::type>(typename _Cat::_Outer(), typename _Cat::_Inner(),
+                                                           std::forward_as_tuple(std::forward<_Tuples>(__tpls)...));
+}
+
+/* [tuple.apply], calling a function with a tuple of arguments */
+
+template <class _Fp, class _Tuple, size_t... _Is>
+constexpr decltype(auto) __fcxx_apply(_Fp&& __f, _Tuple&& __t, index_sequence<_Is...>) noexcept(
+    noexcept(std::__fcxx_invoke(std::forward<_Fp>(__f), std::__fcxx_adl_get<_Is>(std::forward<_Tuple>(__t))...))) {
+    return std::__fcxx_invoke(std::forward<_Fp>(__f), std::__fcxx_adl_get<_Is>(std::forward<_Tuple>(__t))...);
+}
+
+template <class _Tuple>
+using __fcxx_tuple_indices = make_index_sequence<tuple_size<__fcxx_remove_ref_t<_Tuple> >::value>;
+
+#if _FCXX_STD >= 2026
+template <class _Fp, __fcxx_tuple_like _Tuple>
+constexpr apply_result_t<_Fp, _Tuple> apply(_Fp&& __f, _Tuple&& __t) noexcept(is_nothrow_applicable_v<_Fp, _Tuple>) {
+    return std::__fcxx_apply(std::forward<_Fp>(__f), std::forward<_Tuple>(__t), __fcxx_tuple_indices<_Tuple>());
+}
+#else
+template <class _Fp, class _Tuple
+          >
+    requires __fcxx_tuple_like<_Tuple>
+constexpr decltype(auto) apply(_Fp&& __f, _Tuple&& __t) noexcept(
+    noexcept(std::__fcxx_apply(std::forward<_Fp>(__f), std::forward<_Tuple>(__t), __fcxx_tuple_indices<_Tuple>()))) {
+    return std::__fcxx_apply(std::forward<_Fp>(__f), std::forward<_Tuple>(__t), __fcxx_tuple_indices<_Tuple>());
+}
+#endif
+
+/* Whether make_from_tuple would bind a reference to a temporary. */
+template <class _Tp, class _Tuple, bool = (tuple_size<__fcxx_remove_ref_t<_Tuple> >::value == 1)>
+struct __fcxx_make_from_tuple_dangles : false_type {};
+
+#if _FCXX_STD >= 2026 && _FCXX_HAS_BUILTIN(__reference_constructs_from_temporary)
+template <class _Tp, class _Tuple>
+struct __fcxx_make_from_tuple_dangles<_Tp, _Tuple, true>
+    : __fcxx_bool_constant<__reference_constructs_from_temporary(
+          _Tp, decltype(std::__fcxx_adl_get<0>(std::declval<_Tuple>())))> {};
+#endif
+
+template <class _Tp, class _Tuple, size_t... _Is>
+constexpr _Tp __fcxx_make_from_tuple(_Tuple&& __t, index_sequence<_Is...>) {
+    static_assert(is_constructible<_Tp, decltype(std::__fcxx_adl_get<_Is>(std::forward<_Tuple>(__t)))...>::value,
+                  "std::make_from_tuple: the type is not constructible from the elements");
+    static_assert(!__fcxx_make_from_tuple_dangles<_Tp, _Tuple>::value,
+                  "std::make_from_tuple: the reference would be bound to a temporary");
+    return _Tp(std::__fcxx_adl_get<_Is>(std::forward<_Tuple>(__t))...);
+}
+
+template <class _Tp, class _Tuple
+          >
+    requires __fcxx_tuple_like<_Tuple>
+constexpr _Tp make_from_tuple(_Tuple&& __t) {
+    return std::__fcxx_make_from_tuple<_Tp>(std::forward<_Tuple>(__t), __fcxx_tuple_indices<_Tuple>());
+}
+
+/* [tuple.rel], relational operators */
+
+template <class... _TTypes, class... _UTypes>
+#if _FCXX_STD >= 2026
+    requires (__fcxx_tuple_eq_check<tuple<_TTypes...>, tuple<_UTypes...> >::value)
+#endif
+constexpr bool operator==(const tuple<_TTypes...>& __t, const tuple<_UTypes...>& __u) {
+    static_assert(sizeof...(_TTypes) == sizeof...(_UTypes), "std::tuple comparison of tuples of different sizes");
+    return __fcxx_tuple_compare<0, sizeof...(_TTypes)>::__eq(__t, __u);
+}
+
+template <class... _TTypes, class... _UTypes>
+constexpr typename __fcxx_tuple_three_way_result<tuple<_TTypes...>, tuple<_UTypes...> >::type
+operator<=>(const tuple<_TTypes...>& __t, const tuple<_UTypes...>& __u) {
+    return std::__fcxx_tuple_three_way<
+        typename __fcxx_tuple_three_way_result<tuple<_TTypes...>, tuple<_UTypes...> >::type, 0, sizeof...(_TTypes)>(__t,
+                                                                                                                  __u);
+}
+
+/* [tuple.traits], allocator-related traits */
+
+template <class... _Types, class _Alloc>
+struct uses_allocator<tuple<_Types...>, _Alloc> : true_type {};
+
+/* [tuple.special], specialized algorithms */
+
+template <class... _Types>
+constexpr __fcxx_enable_if_t<__fcxx_and<__fcxx_is_swappable<_Types>...>::value>
+swap(tuple<_Types...>& __x, tuple<_Types...>& __y) noexcept(noexcept(__x.swap(__y))) {
+    __x.swap(__y);
+}
+
+template <class... _Types>
+    requires (__fcxx_and<__fcxx_is_swappable<const _Types>...>::value)
+constexpr void swap(const tuple<_Types...>& __x, const tuple<_Types...>& __y) noexcept(noexcept(__x.swap(__y))) {
+    __x.swap(__y);
+}
+
+/* [tuple.common.ref], common_reference related specializations */
+
+template <class _TTuple, class _UTuple, template <class> class _TQual, template <class> class _UQual,
+          class _Seq = make_index_sequence<tuple_size<_TTuple>::value> >
+struct __fcxx_tuple_common_reference {};
+
+template <class _TTuple, class _UTuple, template <class> class _TQual, template <class> class _UQual, size_t... _Is>
+    requires requires {
+        typename tuple<common_reference_t<_TQual<typename tuple_element<_Is, _TTuple>::type>,
+                                          _UQual<typename tuple_element<_Is, _UTuple>::type> >...>;
+    }
+struct __fcxx_tuple_common_reference<_TTuple, _UTuple, _TQual, _UQual, index_sequence<_Is...> > {
+    using type = tuple<common_reference_t<_TQual<typename tuple_element<_Is, _TTuple>::type>,
+                                          _UQual<typename tuple_element<_Is, _UTuple>::type> >...>;
+};
+
+template <class _TTuple, class _UTuple, class _Seq = make_index_sequence<tuple_size<_TTuple>::value> >
+struct __fcxx_tuple_common_type {};
+
+template <class _TTuple, class _UTuple, size_t... _Is>
+    requires requires {
+        typename tuple<common_type_t<typename tuple_element<_Is, _TTuple>::type,
+                                     typename tuple_element<_Is, _UTuple>::type>...>;
+    }
+struct __fcxx_tuple_common_type<_TTuple, _UTuple, index_sequence<_Is...> > {
+    using type = tuple<common_type_t<typename tuple_element<_Is, _TTuple>::type,
+                                     typename tuple_element<_Is, _UTuple>::type>...>;
+};
+
+template <class _TTuple, class _UTuple>
+concept __fcxx_tuple_common_candidates = (__fcxx_is_tuple_spec<_TTuple>::value || __fcxx_is_tuple_spec<_UTuple>::value)
+    && is_same<_TTuple, __fcxx_decay_t<_TTuple> >::value && is_same<_UTuple, __fcxx_decay_t<_UTuple> >::value
+    && tuple_size<_TTuple>::value == tuple_size<_UTuple>::value;
+
+template <__fcxx_tuple_like _TTuple, __fcxx_tuple_like _UTuple, template <class> class _TQual,
+          template <class> class _UQual>
+    requires (__fcxx_tuple_common_candidates<_TTuple, _UTuple>
+              && requires { typename __fcxx_tuple_common_reference<_TTuple, _UTuple, _TQual, _UQual>::type; })
+struct basic_common_reference<_TTuple, _UTuple, _TQual, _UQual> {
+    using type = typename __fcxx_tuple_common_reference<_TTuple, _UTuple, _TQual, _UQual>::type;
+};
+
+template <__fcxx_tuple_like _TTuple, __fcxx_tuple_like _UTuple>
+    requires (__fcxx_tuple_common_candidates<_TTuple, _UTuple>
+              && requires { typename __fcxx_tuple_common_type<_TTuple, _UTuple>::type; })
+struct common_type<_TTuple, _UTuple> {
+    using type = typename __fcxx_tuple_common_type<_TTuple, _UTuple>::type;
+};
+
+} /* namespace std */
+
+#include <__fcxx/uses_allocator_args.h>
+
+#endif
+
+#endif

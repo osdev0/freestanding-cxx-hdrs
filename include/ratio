@@ -1,0 +1,450 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_RATIO
+#define __FREESTANDING_CXX_HDRS_RATIO 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2023
+#  error "<ratio> is not a freestanding header before C++23"
+#endif
+
+#define _FCXX_VERSION_RATIO
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_RATIO
+
+#if _FCXX_STD >= 2023
+
+#include <type_traits>
+
+namespace std {
+
+/* intmax_t and uintmax_t, as the compiler has them, which <cstdint> takes
+ * them to be too, so that no C header is needed. */
+typedef __INTMAX_TYPE__ __fcxx_intmax_t;
+typedef __UINTMAX_TYPE__ __fcxx_uintmax_t;
+
+/* The arithmetic is done on the magnitudes of the values, as uintmax_t, with
+ * products twice as wide, so that every result that can be represented is
+ * computed, however large the values in between. The magnitudes are at most
+ * INTMAX_MAX, as the most negative value is not a valid argument of ratio. */
+
+constexpr __fcxx_uintmax_t __fcxx_ratio_abs(__fcxx_intmax_t __x) noexcept {
+    return __x < 0 ? static_cast<__fcxx_uintmax_t>(0) - static_cast<__fcxx_uintmax_t>(__x)
+                   : static_cast<__fcxx_uintmax_t>(__x);
+}
+
+constexpr __fcxx_uintmax_t __fcxx_ratio_max() noexcept {
+    return static_cast<__fcxx_uintmax_t>(__INTMAX_MAX__);
+}
+
+constexpr __fcxx_uintmax_t __fcxx_ratio_gcd(__fcxx_uintmax_t __a, __fcxx_uintmax_t __b) noexcept {
+    return __b == 0 ? __a : __fcxx_ratio_gcd(__b, __a % __b);
+}
+
+/* The reduced numerator, which has the sign, and denominator, which are 0
+ * and 1 for invalid arguments, so that only their static assertion fails. */
+
+constexpr bool __fcxx_ratio_valid(__fcxx_intmax_t __n, __fcxx_intmax_t __d) noexcept {
+    return __d != 0 && __n >= -__INTMAX_MAX__ && __d >= -__INTMAX_MAX__;
+}
+
+constexpr __fcxx_intmax_t __fcxx_ratio_reduced_num(__fcxx_intmax_t __n, __fcxx_intmax_t __d) noexcept {
+    return !__fcxx_ratio_valid(__n, __d) ? 0
+         : (__n < 0) != (__d < 0)
+             ? -static_cast<__fcxx_intmax_t>(__fcxx_ratio_abs(__n)
+                                      / __fcxx_ratio_gcd(__fcxx_ratio_abs(__n), __fcxx_ratio_abs(__d)))
+             : static_cast<__fcxx_intmax_t>(__fcxx_ratio_abs(__n)
+                                     / __fcxx_ratio_gcd(__fcxx_ratio_abs(__n), __fcxx_ratio_abs(__d)));
+}
+
+constexpr __fcxx_intmax_t __fcxx_ratio_reduced_den(__fcxx_intmax_t __n, __fcxx_intmax_t __d) noexcept {
+    return !__fcxx_ratio_valid(__n, __d)
+             ? 1
+             : static_cast<__fcxx_intmax_t>(__fcxx_ratio_abs(__d)
+                                     / __fcxx_ratio_gcd(__fcxx_ratio_abs(__n), __fcxx_ratio_abs(__d)));
+}
+
+/* [ratio.ratio], class template ratio */
+template <__fcxx_intmax_t _Num, __fcxx_intmax_t _Den = 1>
+class ratio {
+    static_assert(_Den != 0, "std::ratio with a denominator of 0");
+    static_assert(_Num >= -__INTMAX_MAX__ && _Den >= -__INTMAX_MAX__,
+                  "std::ratio with an argument whose absolute value cannot be represented");
+
+public:
+    static constexpr __fcxx_intmax_t num = __fcxx_ratio_reduced_num(_Num, _Den);
+    static constexpr __fcxx_intmax_t den = __fcxx_ratio_reduced_den(_Num, _Den);
+    typedef ratio<num, den> type;
+};
+
+/* The numerator and denominator of a specialization of ratio, and 0 and 1
+ * for any other type, which is diagnosed where it is used. */
+template <class _Tp>
+struct __fcxx_ratio_parts {
+    static constexpr bool __is_ratio = false;
+    static constexpr __fcxx_intmax_t __num = 0;
+    static constexpr __fcxx_intmax_t __den = 1;
+};
+
+template <__fcxx_intmax_t _Num, __fcxx_intmax_t _Den>
+struct __fcxx_ratio_parts<ratio<_Num, _Den> > {
+    static constexpr bool __is_ratio = true;
+    static constexpr __fcxx_intmax_t __num = ratio<_Num, _Den>::num;
+    static constexpr __fcxx_intmax_t __den = ratio<_Num, _Den>::den;
+};
+
+/* An unsigned value twice as wide as __fcxx_uintmax_t, as its two halves. */
+struct __fcxx_ratio_wide {
+    __fcxx_uintmax_t __high;
+    __fcxx_uintmax_t __low;
+};
+
+constexpr int __fcxx_ratio_bits() noexcept {
+    return static_cast<int>(sizeof(__fcxx_uintmax_t) * __CHAR_BIT__);
+}
+
+constexpr __fcxx_uintmax_t __fcxx_ratio_high_half(__fcxx_uintmax_t __x) noexcept {
+    return __x >> (__fcxx_ratio_bits() / 2);
+}
+
+constexpr __fcxx_uintmax_t __fcxx_ratio_low_half(__fcxx_uintmax_t __x) noexcept {
+    return __x & ((static_cast<__fcxx_uintmax_t>(1) << (__fcxx_ratio_bits() / 2)) - 1);
+}
+
+/* The product of a and b, from those of their halves, as the sum of hh at
+ * the top, lh and hl in the middle and ll at the bottom, with the middle
+ * column adding up the parts of lh, hl and ll that fall into it. */
+constexpr __fcxx_ratio_wide __fcxx_ratio_mul_sum(__fcxx_uintmax_t __ll, __fcxx_uintmax_t __lh, __fcxx_uintmax_t __hl,
+                                                 __fcxx_uintmax_t __hh, __fcxx_uintmax_t __mid) noexcept {
+    return __fcxx_ratio_wide{__hh + __fcxx_ratio_high_half(__lh) + __fcxx_ratio_high_half(__hl)
+                                 + __fcxx_ratio_high_half(__mid),
+                             (__mid << (__fcxx_ratio_bits() / 2)) | __fcxx_ratio_low_half(__ll)};
+}
+
+constexpr __fcxx_ratio_wide __fcxx_ratio_mul_parts(__fcxx_uintmax_t __ll, __fcxx_uintmax_t __lh, __fcxx_uintmax_t __hl,
+                                                   __fcxx_uintmax_t __hh) noexcept {
+    return __fcxx_ratio_mul_sum(__ll, __lh, __hl, __hh,
+                                __fcxx_ratio_high_half(__ll) + __fcxx_ratio_low_half(__lh)
+                                    + __fcxx_ratio_low_half(__hl));
+}
+
+constexpr __fcxx_ratio_wide __fcxx_ratio_mul(__fcxx_uintmax_t __a, __fcxx_uintmax_t __b) noexcept {
+    return __fcxx_ratio_mul_parts(__fcxx_ratio_low_half(__a) * __fcxx_ratio_low_half(__b),
+                                  __fcxx_ratio_low_half(__a) * __fcxx_ratio_high_half(__b),
+                                  __fcxx_ratio_high_half(__a) * __fcxx_ratio_low_half(__b),
+                                  __fcxx_ratio_high_half(__a) * __fcxx_ratio_high_half(__b));
+}
+
+/* Whether a product is a magnitude that can be represented. */
+constexpr bool __fcxx_ratio_mul_fits(__fcxx_uintmax_t __a, __fcxx_uintmax_t __b) noexcept {
+    return __fcxx_ratio_mul(__a, __b).__high == 0 && __fcxx_ratio_mul(__a, __b).__low <= __fcxx_ratio_max();
+}
+
+constexpr bool __fcxx_ratio_less(__fcxx_ratio_wide __a, __fcxx_ratio_wide __b) noexcept {
+    return __a.__high != __b.__high ? __a.__high < __b.__high : __a.__low < __b.__low;
+}
+
+constexpr __fcxx_ratio_wide __fcxx_ratio_add(__fcxx_ratio_wide __a, __fcxx_ratio_wide __b) noexcept {
+    return __fcxx_ratio_wide{__a.__high + __b.__high + (__a.__low + __b.__low < __a.__low ? 1u : 0u),
+                             __a.__low + __b.__low};
+}
+
+/* a - b, for a >= b. */
+constexpr __fcxx_ratio_wide __fcxx_ratio_sub(__fcxx_ratio_wide __a, __fcxx_ratio_wide __b) noexcept {
+    return __fcxx_ratio_wide{__a.__high - __b.__high - (__a.__low < __b.__low ? 1u : 0u), __a.__low - __b.__low};
+}
+
+/* The remainder and the quotient of the division of a wide value by d, for
+ * 0 < d <= INTMAX_MAX, one bit of the low half at a time, from a remainder
+ * r < d that 2 * r + 1 cannot overflow from. The quotient is only computed
+ * for a high half that is below d, as it fits in __fcxx_uintmax_t then. */
+
+constexpr __fcxx_uintmax_t __fcxx_ratio_mod_step(__fcxx_uintmax_t __t, __fcxx_uintmax_t __d) noexcept {
+    return __t >= __d ? __t - __d : __t;
+}
+
+constexpr __fcxx_uintmax_t __fcxx_ratio_mod_bits(__fcxx_uintmax_t __r, __fcxx_uintmax_t __low, __fcxx_uintmax_t __d,
+                                                 int __bit) noexcept {
+    return __bit < 0 ? __r
+                     : __fcxx_ratio_mod_bits(__fcxx_ratio_mod_step((__r << 1) | ((__low >> __bit) & 1), __d), __low,
+                                             __d, __bit - 1);
+}
+
+constexpr __fcxx_uintmax_t __fcxx_ratio_div_bits(__fcxx_uintmax_t __r, __fcxx_uintmax_t __low, __fcxx_uintmax_t __d,
+                                                 int __bit, __fcxx_uintmax_t __q) noexcept;
+
+constexpr __fcxx_uintmax_t __fcxx_ratio_div_step(__fcxx_uintmax_t __t, __fcxx_uintmax_t __low, __fcxx_uintmax_t __d,
+                                                 int __bit, __fcxx_uintmax_t __q) noexcept {
+    return __fcxx_ratio_div_bits(__t >= __d ? __t - __d : __t, __low, __d, __bit - 1,
+                                 (__q << 1) | (__t >= __d ? 1u : 0u));
+}
+
+constexpr __fcxx_uintmax_t __fcxx_ratio_div_bits(__fcxx_uintmax_t __r, __fcxx_uintmax_t __low, __fcxx_uintmax_t __d,
+                                                 int __bit, __fcxx_uintmax_t __q) noexcept {
+    return __bit < 0 ? __q : __fcxx_ratio_div_step((__r << 1) | ((__low >> __bit) & 1), __low, __d, __bit, __q);
+}
+
+constexpr __fcxx_uintmax_t __fcxx_ratio_wide_mod(__fcxx_uintmax_t __high, __fcxx_uintmax_t __low,
+                                                 __fcxx_uintmax_t __d) noexcept {
+    return __fcxx_ratio_mod_bits(__high % __d, __low, __d, __fcxx_ratio_bits() - 1);
+}
+
+constexpr __fcxx_uintmax_t __fcxx_ratio_wide_div(__fcxx_uintmax_t __high, __fcxx_uintmax_t __low,
+                                                 __fcxx_uintmax_t __d) noexcept {
+    return __fcxx_ratio_div_bits(__high, __low, __d, __fcxx_ratio_bits() - 1, 0);
+}
+
+/* The magnitude and the sign of s = n1 * b + n2 * a. */
+
+constexpr __fcxx_ratio_wide __fcxx_ratio_sum_magnitude(__fcxx_intmax_t __n1, __fcxx_uintmax_t __b, __fcxx_intmax_t __n2,
+                                                       __fcxx_uintmax_t __a) noexcept {
+    return (__n1 < 0) == (__n2 < 0)
+             ? __fcxx_ratio_add(__fcxx_ratio_mul(__fcxx_ratio_abs(__n1), __b),
+                                __fcxx_ratio_mul(__fcxx_ratio_abs(__n2), __a))
+         : __fcxx_ratio_less(__fcxx_ratio_mul(__fcxx_ratio_abs(__n1), __b),
+                             __fcxx_ratio_mul(__fcxx_ratio_abs(__n2), __a))
+             ? __fcxx_ratio_sub(__fcxx_ratio_mul(__fcxx_ratio_abs(__n2), __a),
+                                __fcxx_ratio_mul(__fcxx_ratio_abs(__n1), __b))
+             : __fcxx_ratio_sub(__fcxx_ratio_mul(__fcxx_ratio_abs(__n1), __b),
+                                __fcxx_ratio_mul(__fcxx_ratio_abs(__n2), __a));
+}
+
+constexpr bool __fcxx_ratio_sum_negative(__fcxx_intmax_t __n1, __fcxx_uintmax_t __b, __fcxx_intmax_t __n2,
+                                         __fcxx_uintmax_t __a) noexcept {
+    return (__n1 < 0) == (__n2 < 0) ? __n1 < 0
+         : __fcxx_ratio_less(__fcxx_ratio_mul(__fcxx_ratio_abs(__n1), __b),
+                             __fcxx_ratio_mul(__fcxx_ratio_abs(__n2), __a))
+             ? __n2 < 0
+             : __n1 < 0;
+}
+
+/* The sum of the reduced n1/d1 and n2/d2. With g = gcd(d1, d2), d1 = g * a
+ * and d2 = g * b, it is s / (g * a * b) for s = n1 * b + n2 * a, and s has
+ * no factor in common with a or b, so that with h = gcd(s, g), the reduced
+ * sum is (s / h) / ((g / h) * a * b). */
+template <__fcxx_intmax_t _N1, __fcxx_intmax_t _D1, __fcxx_intmax_t _N2, __fcxx_intmax_t _D2>
+struct __fcxx_ratio_sum {
+    static constexpr __fcxx_uintmax_t __g =
+        __fcxx_ratio_gcd(static_cast<__fcxx_uintmax_t>(_D1), static_cast<__fcxx_uintmax_t>(_D2));
+    static constexpr __fcxx_uintmax_t __a = static_cast<__fcxx_uintmax_t>(_D1) / __g;
+    static constexpr __fcxx_uintmax_t __b = static_cast<__fcxx_uintmax_t>(_D2) / __g;
+    static constexpr __fcxx_uintmax_t __high = __fcxx_ratio_sum_magnitude(_N1, __b, _N2, __a).__high;
+    static constexpr __fcxx_uintmax_t __low = __fcxx_ratio_sum_magnitude(_N1, __b, _N2, __a).__low;
+    static constexpr __fcxx_uintmax_t __h = __fcxx_ratio_gcd(__g, __fcxx_ratio_wide_mod(__high, __low, __g));
+    static constexpr bool __fits = __high < __h && __fcxx_ratio_wide_div(__high, __low, __h) <= __fcxx_ratio_max()
+                                && __fcxx_ratio_mul_fits(__g / __h, __a)
+                                && __fcxx_ratio_mul_fits((__g / __h) * __a, __b);
+    static constexpr __fcxx_intmax_t __num = !__fits ? 0
+                                    : __fcxx_ratio_sum_negative(_N1, __b, _N2, __a)
+                                        ? -static_cast<__fcxx_intmax_t>(__fcxx_ratio_wide_div(__high, __low, __h))
+                                        : static_cast<__fcxx_intmax_t>(__fcxx_ratio_wide_div(__high, __low, __h));
+    static constexpr __fcxx_intmax_t __den = !__fits ? 1 : static_cast<__fcxx_intmax_t>((__g / __h) * __a * __b);
+};
+
+/* The product of the reduced n1/d1 and n2/d2, which is reduced once n1 and
+ * d2, and n2 and d1, are divided by their greatest common divisors. */
+template <__fcxx_intmax_t _N1, __fcxx_intmax_t _D1, __fcxx_intmax_t _N2, __fcxx_intmax_t _D2>
+struct __fcxx_ratio_product {
+    static constexpr __fcxx_uintmax_t __g1 = __fcxx_ratio_gcd(__fcxx_ratio_abs(_N1),
+                                                              static_cast<__fcxx_uintmax_t>(_D2));
+    static constexpr __fcxx_uintmax_t __g2 = __fcxx_ratio_gcd(__fcxx_ratio_abs(_N2),
+                                                              static_cast<__fcxx_uintmax_t>(_D1));
+    static constexpr __fcxx_uintmax_t __n1 = __fcxx_ratio_abs(_N1) / __g1;
+    static constexpr __fcxx_uintmax_t __n2 = __fcxx_ratio_abs(_N2) / __g2;
+    static constexpr __fcxx_uintmax_t __d1 = static_cast<__fcxx_uintmax_t>(_D1) / __g2;
+    static constexpr __fcxx_uintmax_t __d2 = static_cast<__fcxx_uintmax_t>(_D2) / __g1;
+    static constexpr bool __fits = __fcxx_ratio_mul_fits(__n1, __n2) && __fcxx_ratio_mul_fits(__d1, __d2);
+    static constexpr __fcxx_intmax_t __num = !__fits ? 0
+                                    : (_N1 < 0) != (_N2 < 0) ? -static_cast<__fcxx_intmax_t>(__n1 * __n2)
+                                                             : static_cast<__fcxx_intmax_t>(__n1 * __n2);
+    static constexpr __fcxx_intmax_t __den = !__fits ? 1 : static_cast<__fcxx_intmax_t>(__d1 * __d2);
+};
+
+/* [ratio.arithmetic], ratio arithmetic. Each is the reduced ratio, and the
+ * program is ill-formed when its numerator or denominator cannot be
+ * represented, or when the arguments are not ratios. */
+
+template <class _R1, class _R2>
+struct __fcxx_ratio_add_result {
+    static_assert(__fcxx_ratio_parts<_R1>::__is_ratio && __fcxx_ratio_parts<_R2>::__is_ratio,
+                  "an argument of std::ratio_add is not a std::ratio");
+    typedef __fcxx_ratio_sum<__fcxx_ratio_parts<_R1>::__num, __fcxx_ratio_parts<_R1>::__den,
+                             __fcxx_ratio_parts<_R2>::__num, __fcxx_ratio_parts<_R2>::__den> _Sum;
+    static_assert(_Sum::__fits, "std::ratio_add overflows");
+    typedef typename ratio<_Sum::__num, _Sum::__den>::type type;
+};
+
+template <class _R1, class _R2>
+struct __fcxx_ratio_subtract_result {
+    static_assert(__fcxx_ratio_parts<_R1>::__is_ratio && __fcxx_ratio_parts<_R2>::__is_ratio,
+                  "an argument of std::ratio_subtract is not a std::ratio");
+    typedef __fcxx_ratio_sum<__fcxx_ratio_parts<_R1>::__num, __fcxx_ratio_parts<_R1>::__den,
+                             -__fcxx_ratio_parts<_R2>::__num, __fcxx_ratio_parts<_R2>::__den> _Sum;
+    static_assert(_Sum::__fits, "std::ratio_subtract overflows");
+    typedef typename ratio<_Sum::__num, _Sum::__den>::type type;
+};
+
+template <class _R1, class _R2>
+struct __fcxx_ratio_multiply_result {
+    static_assert(__fcxx_ratio_parts<_R1>::__is_ratio && __fcxx_ratio_parts<_R2>::__is_ratio,
+                  "an argument of std::ratio_multiply is not a std::ratio");
+    typedef __fcxx_ratio_product<__fcxx_ratio_parts<_R1>::__num, __fcxx_ratio_parts<_R1>::__den,
+                                 __fcxx_ratio_parts<_R2>::__num, __fcxx_ratio_parts<_R2>::__den> _Product;
+    static_assert(_Product::__fits, "std::ratio_multiply overflows");
+    typedef typename ratio<_Product::__num, _Product::__den>::type type;
+};
+
+/* The quotient is the product with the reciprocal of the divisor, which is
+ * taken to be 0/1 when the divisor is 0, as that is diagnosed. */
+template <class _R1, class _R2>
+struct __fcxx_ratio_divide_result {
+    static_assert(__fcxx_ratio_parts<_R1>::__is_ratio && __fcxx_ratio_parts<_R2>::__is_ratio,
+                  "an argument of std::ratio_divide is not a std::ratio");
+    static_assert(__fcxx_ratio_parts<_R2>::__num != 0, "std::ratio_divide by 0");
+    typedef __fcxx_ratio_parts<_R2> _Divisor;
+    static constexpr __fcxx_intmax_t __inverse_num = _Divisor::__num < 0 ? -_Divisor::__den
+                                                   : _Divisor::__num == 0 ? 0
+                                                                          : _Divisor::__den;
+    static constexpr __fcxx_intmax_t __inverse_den =
+        _Divisor::__num == 0 ? 1 : static_cast<__fcxx_intmax_t>(__fcxx_ratio_abs(_Divisor::__num));
+    typedef __fcxx_ratio_product<__fcxx_ratio_parts<_R1>::__num, __fcxx_ratio_parts<_R1>::__den, __inverse_num,
+                                 __inverse_den> _Product;
+    static_assert(_Product::__fits, "std::ratio_divide overflows");
+    typedef typename ratio<_Product::__num, _Product::__den>::type type;
+};
+
+template <class _R1, class _R2>
+using ratio_add = typename __fcxx_ratio_add_result<_R1, _R2>::type;
+
+template <class _R1, class _R2>
+using ratio_subtract = typename __fcxx_ratio_subtract_result<_R1, _R2>::type;
+
+template <class _R1, class _R2>
+using ratio_multiply = typename __fcxx_ratio_multiply_result<_R1, _R2>::type;
+
+template <class _R1, class _R2>
+using ratio_divide = typename __fcxx_ratio_divide_result<_R1, _R2>::type;
+
+/* [ratio.comparison], ratio comparison. The ratios are compared through the
+ * wide products of their numerators and denominators, which cannot
+ * overflow. */
+
+constexpr bool __fcxx_ratio_less_values(__fcxx_intmax_t __n1, __fcxx_intmax_t __d1, __fcxx_intmax_t __n2,
+                                        __fcxx_intmax_t __d2) noexcept {
+    return (__n1 < 0) != (__n2 < 0) ? __n1 < 0
+         : __n1 < 0 ? __fcxx_ratio_less(__fcxx_ratio_mul(__fcxx_ratio_abs(__n2), static_cast<__fcxx_uintmax_t>(__d1)),
+                                        __fcxx_ratio_mul(__fcxx_ratio_abs(__n1), static_cast<__fcxx_uintmax_t>(__d2)))
+                    : __fcxx_ratio_less(__fcxx_ratio_mul(__fcxx_ratio_abs(__n1), static_cast<__fcxx_uintmax_t>(__d2)),
+                                        __fcxx_ratio_mul(__fcxx_ratio_abs(__n2), static_cast<__fcxx_uintmax_t>(__d1)));
+}
+
+template <class _R1, class _R2>
+struct __fcxx_ratio_compare {
+    static_assert(__fcxx_ratio_parts<_R1>::__is_ratio && __fcxx_ratio_parts<_R2>::__is_ratio,
+                  "an argument of a std::ratio comparison is not a std::ratio");
+    static constexpr bool __equal = __fcxx_ratio_parts<_R1>::__num == __fcxx_ratio_parts<_R2>::__num
+                                 && __fcxx_ratio_parts<_R1>::__den == __fcxx_ratio_parts<_R2>::__den;
+    static constexpr bool __less =
+        __fcxx_ratio_less_values(__fcxx_ratio_parts<_R1>::__num, __fcxx_ratio_parts<_R1>::__den,
+                                 __fcxx_ratio_parts<_R2>::__num, __fcxx_ratio_parts<_R2>::__den);
+};
+
+template <class _R1, class _R2>
+struct ratio_equal : integral_constant<bool, __fcxx_ratio_compare<_R1, _R2>::__equal> {};
+
+template <class _R1, class _R2>
+struct ratio_not_equal : integral_constant<bool, !ratio_equal<_R1, _R2>::value> {};
+
+template <class _R1, class _R2>
+struct ratio_less : integral_constant<bool, __fcxx_ratio_compare<_R1, _R2>::__less> {};
+
+template <class _R1, class _R2>
+struct ratio_less_equal : integral_constant<bool, !ratio_less<_R2, _R1>::value> {};
+
+template <class _R1, class _R2>
+struct ratio_greater : integral_constant<bool, ratio_less<_R2, _R1>::value> {};
+
+template <class _R1, class _R2>
+struct ratio_greater_equal : integral_constant<bool, !ratio_less<_R1, _R2>::value> {};
+
+template <class _R1, class _R2>
+inline constexpr bool ratio_equal_v = ratio_equal<_R1, _R2>::value;
+template <class _R1, class _R2>
+inline constexpr bool ratio_not_equal_v = ratio_not_equal<_R1, _R2>::value;
+template <class _R1, class _R2>
+inline constexpr bool ratio_less_v = ratio_less<_R1, _R2>::value;
+template <class _R1, class _R2>
+inline constexpr bool ratio_less_equal_v = ratio_less_equal<_R1, _R2>::value;
+template <class _R1, class _R2>
+inline constexpr bool ratio_greater_v = ratio_greater<_R1, _R2>::value;
+template <class _R1, class _R2>
+inline constexpr bool ratio_greater_equal_v = ratio_greater_equal<_R1, _R2>::value;
+
+/* [ratio.si], convenience SI typedefs. Those with a power of ten beyond
+ * 10^18 are only declared when __fcxx_intmax_t can represent it, which is when
+ * INTMAX_MAX / 10^18 reaches the rest of it. */
+
+#if _FCXX_STD >= 2026 && __INTMAX_MAX__ / 1000000000000000000 >= 1000000000000
+typedef ratio<1, static_cast<__fcxx_intmax_t>(1000000000000000000) * 1000000000000> quecto;
+#endif
+#if _FCXX_STD >= 2026 && __INTMAX_MAX__ / 1000000000000000000 >= 1000000000
+typedef ratio<1, static_cast<__fcxx_intmax_t>(1000000000000000000) * 1000000000> ronto;
+#endif
+#if __INTMAX_MAX__ / 1000000000000000000 >= 1000000
+typedef ratio<1, static_cast<__fcxx_intmax_t>(1000000000000000000) * 1000000> yocto;
+#endif
+#if __INTMAX_MAX__ / 1000000000000000000 >= 1000
+typedef ratio<1, static_cast<__fcxx_intmax_t>(1000000000000000000) * 1000> zepto;
+#endif
+typedef ratio<1, 1000000000000000000> atto;
+typedef ratio<1, 1000000000000000> femto;
+typedef ratio<1, 1000000000000> pico;
+typedef ratio<1, 1000000000> nano;
+typedef ratio<1, 1000000> micro;
+typedef ratio<1, 1000> milli;
+typedef ratio<1, 100> centi;
+typedef ratio<1, 10> deci;
+typedef ratio<10, 1> deca;
+typedef ratio<100, 1> hecto;
+typedef ratio<1000, 1> kilo;
+typedef ratio<1000000, 1> mega;
+typedef ratio<1000000000, 1> giga;
+typedef ratio<1000000000000, 1> tera;
+typedef ratio<1000000000000000, 1> peta;
+typedef ratio<1000000000000000000, 1> exa;
+#if __INTMAX_MAX__ / 1000000000000000000 >= 1000
+typedef ratio<static_cast<__fcxx_intmax_t>(1000000000000000000) * 1000, 1> zetta;
+#endif
+#if __INTMAX_MAX__ / 1000000000000000000 >= 1000000
+typedef ratio<static_cast<__fcxx_intmax_t>(1000000000000000000) * 1000000, 1> yotta;
+#endif
+#if _FCXX_STD >= 2026 && __INTMAX_MAX__ / 1000000000000000000 >= 1000000000
+typedef ratio<static_cast<__fcxx_intmax_t>(1000000000000000000) * 1000000000, 1> ronna;
+#endif
+#if _FCXX_STD >= 2026 && __INTMAX_MAX__ / 1000000000000000000 >= 1000000000000
+typedef ratio<static_cast<__fcxx_intmax_t>(1000000000000000000) * 1000000000000, 1> quetta;
+#endif
+
+} /* namespace std */
+
+#endif
+
+#endif

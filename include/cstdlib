@@ -1,0 +1,182 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_CSTDLIB
+#define __FREESTANDING_CXX_HDRS_CSTDLIB 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#define _FCXX_VERSION_CSTDLIB
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_CSTDLIB
+
+/* The header is freestanding for the functions of start and termination
+ * alone before C++23, which adds _Exit, size_t and NULL, and C++26 all the
+ * rest of it but for the functions that need a hosted environment. Of that,
+ * EXIT_FAILURE and EXIT_SUCCESS are left out: their values are those of the
+ * environment the program runs in, which the library cannot know, as it
+ * cannot know the error numbers of <cerrno>. */
+
+#if _FCXX_STD >= 2023
+#  undef NULL
+#  define NULL __null
+#endif
+
+#if _FCXX_STD >= 2026
+#  include <__fcxx/abs.h>
+#endif
+
+namespace std {
+
+/* Start and termination. These are provided by the environment, under
+ * their C names. They are declared here with C++ language linkage and
+ * those names as their assembler names, so that the declarations cannot
+ * conflict with whatever declarations of the C functions a program has. */
+_FCXX_NORETURN void abort() _FCXX_NOEXCEPT11 _FCXX_ASM_NAME(abort);
+int atexit(void (*__func)()) _FCXX_NOEXCEPT11 _FCXX_ASM_NAME(atexit);
+_FCXX_NORETURN void exit(int __status) _FCXX_ASM_NAME(exit);
+#if _FCXX_STD >= 2011
+int at_quick_exit(void (*__func)()) noexcept _FCXX_ASM_NAME(at_quick_exit);
+[[noreturn]] void quick_exit(int __status) noexcept _FCXX_ASM_NAME(quick_exit);
+#endif
+#if _FCXX_STD >= 2023
+[[noreturn]] void _Exit(int __status) noexcept _FCXX_ASM_NAME(_Exit);
+#endif
+
+#if _FCXX_STD >= 2026
+
+struct div_t { int quot; int rem; };
+struct ldiv_t { long quot; long rem; };
+struct lldiv_t { long long quot; long long rem; };
+
+inline size_t memalignment(const void* __p) {
+    _FCXX_UINTPTR __a = reinterpret_cast<_FCXX_UINTPTR>(__p);
+    return static_cast<size_t>(__a & (~__a + 1));
+}
+
+/* The C standard library algorithms. */
+
+inline const void* __bsearch(const void* __key, const void* __base, size_t __nmemb, size_t __size,
+                             int (*__compar)(const void*, const void*)) {
+    const char* __first = static_cast<const char*>(__base);
+    while (__nmemb > 0) {
+        const char* __mid = __first + (__nmemb / 2) * __size;
+        int __c = __compar(__key, __mid);
+        if (__c == 0) {
+            return __mid;
+        }
+        if (__c > 0) {
+            __first = __mid + __size;
+            __nmemb -= __nmemb / 2 + 1;
+        } else {
+            __nmemb /= 2;
+        }
+    }
+    return 0;
+}
+
+inline void* bsearch(const void* __key, void* __base, size_t __nmemb, size_t __size,
+                     int (*__compar)(const void*, const void*)) {
+    return const_cast<void*>(__bsearch(__key, __base, __nmemb, __size, __compar));
+}
+
+inline const void* bsearch(const void* __key, const void* __base, size_t __nmemb, size_t __size,
+                           int (*__compar)(const void*, const void*)) {
+    return __bsearch(__key, __base, __nmemb, __size, __compar);
+}
+
+inline void __qsort_swap(char* __a, char* __b, size_t __size) {
+    while (__size-- > 0) {
+        char __tmp = *__a;
+        *__a++ = *__b;
+        *__b++ = __tmp;
+    }
+}
+
+inline void __qsort_sift_down(char* __base, size_t __root, size_t __nmemb, size_t __size,
+                              int (*__compar)(const void*, const void*)) {
+    for (;;) {
+        size_t __child = 2 * __root + 1;
+        if (__child >= __nmemb) {
+            return;
+        }
+        if (__child + 1 < __nmemb
+         && __compar(__base + __child * __size, __base + (__child + 1) * __size) < 0) {
+            ++__child;
+        }
+        if (__compar(__base + __root * __size, __base + __child * __size) >= 0) {
+            return;
+        }
+        __qsort_swap(__base + __root * __size, __base + __child * __size, __size);
+        __root = __child;
+    }
+}
+
+/* A heapsort, which needs neither recursion nor extra memory. */
+inline void qsort(void* __base, size_t __nmemb, size_t __size,
+                  int (*__compar)(const void*, const void*)) {
+    if (__nmemb < 2 || __size == 0) {
+        return;
+    }
+    char* __first = static_cast<char*>(__base);
+    for (size_t __i = __nmemb / 2; __i-- > 0;) {
+        __qsort_sift_down(__first, __i, __nmemb, __size, __compar);
+    }
+    for (size_t __end = __nmemb - 1; __end > 0; --__end) {
+        __qsort_swap(__first, __first + __end * __size, __size);
+        __qsort_sift_down(__first, 0, __end, __size, __compar);
+    }
+}
+
+/* Absolute values and division. */
+
+constexpr long labs(long __j) { return __j < 0 ? -__j : __j; }
+
+constexpr div_t div(int __numer, int __denom) {
+    div_t __r = { __numer / __denom, __numer % __denom };
+    return __r;
+}
+
+constexpr ldiv_t div(long __numer, long __denom) {
+    ldiv_t __r = { __numer / __denom, __numer % __denom };
+    return __r;
+}
+
+constexpr ldiv_t ldiv(long __numer, long __denom) {
+    ldiv_t __r = { __numer / __denom, __numer % __denom };
+    return __r;
+}
+
+constexpr long long llabs(long long __j) { return __j < 0 ? -__j : __j; }
+
+constexpr lldiv_t div(long long __numer, long long __denom) {
+    lldiv_t __r = { __numer / __denom, __numer % __denom };
+    return __r;
+}
+
+constexpr lldiv_t lldiv(long long __numer, long long __denom) {
+    lldiv_t __r = { __numer / __denom, __numer % __denom };
+    return __r;
+}
+
+#endif
+
+} /* namespace std */
+
+#endif

@@ -1,0 +1,60 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+/* <ranges>, which is freestanding from C++23 on, but for elements_of and the
+ * istream views, which are not. The views are written as in C++26, with the
+ * defect reports against C++20 and C++23; what C++26 adds is only there in
+ * it. */
+
+#ifndef __FREESTANDING_CXX_HDRS_RANGES
+#define __FREESTANDING_CXX_HDRS_RANGES 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2023
+#  error "<ranges> is not a freestanding header before C++23"
+#endif
+
+#define _FCXX_VERSION_RANGES
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_RANGES
+
+#if _FCXX_STD >= 2023
+
+#include <compare>
+#include <initializer_list>
+#include <iterator>
+#include <__fcxx/ranges_access.h>
+#include <__fcxx/ranges_adaptors.h>
+#include <__fcxx/ranges_base.h>
+#include <__fcxx/ranges_chunk.h>
+#include <__fcxx/ranges_core.h>
+#include <__fcxx/ranges_factories.h>
+#include <__fcxx/ranges_join.h>
+#include <__fcxx/ranges_to.h>
+#include <__fcxx/ranges_util.h>
+#include <__fcxx/ranges_zip.h>
+
+namespace std {
+namespace views = ranges::views;
+}
+
+#endif
+
+#endif

@@ -1,0 +1,355 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_EXCEPTION
+#define __FREESTANDING_CXX_HDRS_EXCEPTION 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#define _FCXX_VERSION_EXCEPTION
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_EXCEPTION
+#include <__fcxx/exception.h>
+
+#if _FCXX_STD >= 2011
+#  include <type_traits>
+#  include <__fcxx/addressof.h>
+#endif
+#if _FCXX_STD >= 2026
+#  include <optional>
+#endif
+
+/* Most of what is declared here, and not defined, is provided by the C++
+ * runtime, as the Itanium C++ ABI has it, or by the program. */
+
+namespace std {
+
+class bad_exception : public exception {
+public:
+#if _FCXX_CONSTEXPR_EXCEPTION_CLASSES
+    constexpr bad_exception() noexcept {}
+    constexpr bad_exception(const bad_exception&) noexcept = default;
+    constexpr bad_exception& operator=(const bad_exception&) noexcept = default;
+    constexpr const char* what() const noexcept override { return "std::bad_exception"; }
+#else
+    bad_exception() _FCXX_NOEXCEPT {}
+#  if _FCXX_STD >= 2011
+    bad_exception(const bad_exception&) noexcept = default;
+    bad_exception& operator=(const bad_exception&) noexcept = default;
+#  endif
+    virtual ~bad_exception() _FCXX_NOEXCEPT;
+    virtual const char* what() const _FCXX_NOEXCEPT;
+#endif
+};
+
+typedef void (*terminate_handler)();
+terminate_handler set_terminate(terminate_handler __f) _FCXX_NOEXCEPT;
+#if _FCXX_STD >= 2011
+terminate_handler get_terminate() noexcept;
+#endif
+
+/* terminate() itself is declared by <__fcxx/config.h>. */
+
+/* Deprecated from C++11 on, with the dynamic exception specifications, and
+ * gone in C++17. */
+#if _FCXX_STD >= 2011 && _FCXX_STD < 2017
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+#if _FCXX_STD < 2017
+typedef void (*unexpected_handler)() _FCXX_DEPRECATED_CXX11("removed in C++17");
+_FCXX_DEPRECATED_CXX11("removed in C++17")
+unexpected_handler set_unexpected(unexpected_handler __f) _FCXX_NOEXCEPT;
+#  if _FCXX_STD >= 2011
+_FCXX_DEPRECATED_CXX11("removed in C++17") unexpected_handler get_unexpected() noexcept;
+#  endif
+_FCXX_NORETURN _FCXX_DEPRECATED_CXX11("removed in C++17") void unexpected();
+#endif
+#if _FCXX_STD >= 2011 && _FCXX_STD < 2017
+#  pragma GCC diagnostic pop
+#endif
+
+#if _FCXX_STD < 2020
+_FCXX_DEPRECATED_CXX17("use std::uncaught_exceptions() instead")
+bool uncaught_exception() _FCXX_NOEXCEPT;
+#endif
+
+#if _FCXX_STD >= 2017
+int uncaught_exceptions() noexcept;
+#endif
+
+#if _FCXX_STD >= 2011
+
+/* The exception pointer. What it needs of the C++ runtime, which owns the
+ * exception objects, comes from the program, for the runtime it has, as a
+ * freestanding program has none in particular: current_exception() and
+ * rethrow_exception(), and the counting of the references to an exception
+ * object that exception pointers keep, by these two functions:
+ *     extern "C" void __fcxx_exception_ptr_retain(void* object) noexcept;
+ *     extern "C" void __fcxx_exception_ptr_release(void* object) noexcept;
+ * where object is what an exception pointer keeps: what the program made it
+ * with, through exception_ptr(__fcxx_exception_ptr_adopt, object), for a
+ * reference it counted already, and what __fcxx_object() gives back. Where
+ * exceptions can be thrown in constant evaluation, the compiler does all of
+ * this there. */
+
+#  if _FCXX_HAS_CONSTEXPR_EXCEPTIONS
+#    define _FCXX_CONSTEXPR_EH constexpr
+#  else
+#    define _FCXX_CONSTEXPR_EH inline
+#  endif
+
+extern "C" void __fcxx_exception_ptr_retain(void* __object) noexcept;
+extern "C" void __fcxx_exception_ptr_release(void* __object) noexcept;
+
+struct __fcxx_exception_ptr_adopt_t {
+    explicit __fcxx_exception_ptr_adopt_t() = default;
+};
+
+_FCXX_INLINE_VAR constexpr __fcxx_exception_ptr_adopt_t __fcxx_exception_ptr_adopt{};
+
+class exception_ptr {
+public:
+    _FCXX_CONSTEXPR_EH exception_ptr() noexcept : __ptr(nullptr) {}
+
+    _FCXX_CONSTEXPR_EH exception_ptr(nullptr_t) noexcept : __ptr(nullptr) {}
+
+    _FCXX_CONSTEXPR_EH exception_ptr(__fcxx_exception_ptr_adopt_t, void* __object) noexcept : __ptr(__object) {}
+
+    _FCXX_CONSTEXPR_EH exception_ptr(const exception_ptr& __other) noexcept : __ptr(__other.__ptr) {
+        if (__ptr != nullptr) {
+            __adjust_ref(1);
+        }
+    }
+
+    _FCXX_CONSTEXPR_EH exception_ptr(exception_ptr&& __other) noexcept : __ptr(__other.__ptr) {
+        __other.__ptr = nullptr;
+    }
+
+    _FCXX_CONSTEXPR_EH ~exception_ptr() {
+        if (__ptr != nullptr) {
+            __adjust_ref(-1);
+        }
+    }
+
+    _FCXX_CONSTEXPR_EH exception_ptr& operator=(const exception_ptr& __other) noexcept {
+        exception_ptr(__other).swap(*this);
+        return *this;
+    }
+
+    _FCXX_CONSTEXPR_EH exception_ptr& operator=(exception_ptr&& __other) noexcept {
+        exception_ptr(static_cast<exception_ptr&&>(__other)).swap(*this);
+        return *this;
+    }
+
+    _FCXX_CONSTEXPR_EH void swap(exception_ptr& __other) noexcept {
+        void* __tmp = __ptr;
+        __ptr = __other.__ptr;
+        __other.__ptr = __tmp;
+    }
+
+    _FCXX_CONSTEXPR_EH explicit operator bool() const noexcept {
+        return __ptr != nullptr;
+    }
+
+    _FCXX_CONSTEXPR_EH void* __fcxx_object() const noexcept {
+        return __ptr;
+    }
+
+    friend _FCXX_CONSTEXPR_EH bool operator==(const exception_ptr& __a, const exception_ptr& __b) noexcept {
+        return __a.__ptr == __b.__ptr;
+    }
+
+    /* Rewritten from operator== from C++20 on, by the compilers that can. */
+#  if !_FCXX_HAS_THREE_WAY_COMPARISON
+    friend _FCXX_CONSTEXPR_EH bool operator!=(const exception_ptr& __a, const exception_ptr& __b) noexcept {
+        return __a.__ptr != __b.__ptr;
+    }
+#  endif
+
+    friend _FCXX_CONSTEXPR_EH void swap(exception_ptr& __a, exception_ptr& __b) noexcept {
+        __a.swap(__b);
+    }
+
+private:
+    void* __ptr;
+
+    _FCXX_CONSTEXPR_EH void __adjust_ref(int __delta) noexcept {
+#  if _FCXX_HAS_CONSTEXPR_EXCEPTIONS
+        if consteval {
+            __builtin_eh_ptr_adjust_ref(__ptr, __delta);
+            return;
+        }
+#  endif
+        if (__delta > 0) {
+            __fcxx_exception_ptr_retain(__ptr);
+        } else {
+            __fcxx_exception_ptr_release(__ptr);
+        }
+    }
+};
+
+exception_ptr current_exception() noexcept;
+
+/* Where exceptions can be thrown in constant evaluation, the compiler knows
+ * this function, and the definition of the program is used otherwise. */
+_FCXX_NORETURN void rethrow_exception(exception_ptr __p);
+
+_FCXX_CONSTEXPR_EH exception_ptr __current_exception() noexcept {
+#  if _FCXX_HAS_CONSTEXPR_EXCEPTIONS
+    if consteval {
+        return __builtin_current_exception();
+    }
+#  endif
+    return current_exception();
+}
+
+template <class _Ep>
+_FCXX_CONSTEXPR_EH exception_ptr make_exception_ptr(_Ep __e) noexcept {
+#  if _FCXX_HAS_EXCEPTIONS
+    try {
+        throw __e;
+    } catch (...) {
+        return __current_exception();
+    }
+#  else
+    (void)__e;
+    return exception_ptr();
+#  endif
+}
+
+#  if _FCXX_STD >= 2026
+template <class _Ep>
+constexpr optional<const _Ep&> exception_ptr_cast(const exception_ptr& __p) noexcept {
+    static_assert(!is_const<_Ep>::value && !is_volatile<_Ep>::value && is_object<_Ep>::value
+                  && !is_array<_Ep>::value && !is_pointer<_Ep>::value && !is_member_pointer<_Ep>::value,
+                  "std::exception_ptr_cast needs a cv-unqualified object type that is not an array or a pointer");
+#    if _FCXX_HAS_EXCEPTIONS
+    if (__p) {
+        try {
+            rethrow_exception(__p);
+        } catch (const _Ep& __e) {
+            return optional<const _Ep&>(__e);
+        } catch (...) {
+        }
+    }
+#    else
+    (void)__p;
+#    endif
+    return nullopt;
+}
+
+template <class _Ep>
+void exception_ptr_cast(const exception_ptr&&) = delete;
+#  endif
+
+#  undef _FCXX_CONSTEXPR_EH
+
+class nested_exception {
+public:
+    nested_exception() noexcept : __ptr(current_exception()) {}
+    nested_exception(const nested_exception&) noexcept = default;
+    nested_exception& operator=(const nested_exception&) noexcept = default;
+    virtual ~nested_exception() = default;
+
+    _FCXX_NORETURN void rethrow_nested() const {
+        if (!__ptr) {
+            terminate();
+        }
+        rethrow_exception(__ptr);
+    }
+
+    exception_ptr nested_ptr() const noexcept {
+        return __ptr;
+    }
+
+private:
+    exception_ptr __ptr;
+};
+
+template <class _Tp>
+struct __nested_exception_holder : public _Tp, public nested_exception {
+    template <class _Up>
+    explicit __nested_exception_holder(_Up&& __t) : _Tp(static_cast<_Up&&>(__t)) {}
+};
+
+#  if _FCXX_HAS_EXCEPTIONS
+template <class _Up, class _Tp>
+_FCXX_NORETURN void __throw_with_nested(_Tp&& __t, true_type) {
+    throw __nested_exception_holder<_Up>(static_cast<_Tp&&>(__t));
+}
+
+template <class _Up, class _Tp>
+_FCXX_NORETURN void __throw_with_nested(_Tp&& __t, false_type) {
+    throw static_cast<_Tp&&>(__t);
+}
+#  endif
+
+template <class _Tp>
+_FCXX_NORETURN void throw_with_nested(_Tp&& __t) {
+#  if _FCXX_HAS_EXCEPTIONS
+    typedef typename decay<_Tp>::type _Up;
+    __throw_with_nested<_Up>(static_cast<_Tp&&>(__t),
+                             integral_constant<bool, is_class<_Up>::value && !__is_final(_Up)
+                                                     && !is_base_of<nested_exception, _Up>::value>());
+#  else
+    (void)__t;
+    terminate();
+#  endif
+}
+
+template <class _Ep>
+inline void __rethrow_if_nested_base(const _Ep& __e, true_type) {
+    static_cast<const nested_exception&>(__e).rethrow_nested();
+}
+
+template <class _Ep>
+inline void __rethrow_if_nested_base(const _Ep&, false_type) {}
+
+/* Only an exception that can be converted to a nested exception has one,
+ * and without RTTI, only one whose type is derived from it can be. */
+template <class _Ep>
+inline void __rethrow_if_nested(const _Ep& __e, true_type) {
+#  if _FCXX_HAS_RTTI
+    if (const nested_exception* __p = dynamic_cast<const nested_exception*>(std::__fcxx_addressof(__e))) {
+        __p->rethrow_nested();
+    }
+#  else
+    __rethrow_if_nested_base(__e,
+                             integral_constant<bool, is_convertible<const _Ep*, const nested_exception*>::value>());
+#  endif
+}
+
+template <class _Ep>
+inline void __rethrow_if_nested(const _Ep&, false_type) {}
+
+template <class _Ep>
+void rethrow_if_nested(const _Ep& __e) {
+    __rethrow_if_nested(__e,
+                        integral_constant<bool,
+                                          is_polymorphic<_Ep>::value
+                                              && (!is_base_of<nested_exception, _Ep>::value
+                                                  || is_convertible<const _Ep*, const nested_exception*>::value)>());
+}
+
+#endif
+
+} /* namespace std */
+
+#endif

@@ -1,0 +1,1115 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_VARIANT
+#define __FREESTANDING_CXX_HDRS_VARIANT 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2026
+#  error "<variant> is not a freestanding header before C++26"
+#endif
+
+#define _FCXX_VERSION_VARIANT
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_VARIANT
+
+#if _FCXX_STD >= 2026
+
+#include <initializer_list>
+#include <type_traits>
+#include <utility>
+#include <__fcxx/addressof.h>
+#include <__fcxx/construct_at.h>
+#include <__fcxx/exception.h>
+#include <__fcxx/hash.h>
+#include <__fcxx/integer_sequence.h>
+#include <__fcxx/monostate.h>
+#include <__fcxx/pack.h>
+#include <__fcxx/special_members.h>
+#include <compare>
+#include <concepts>
+#include <__fcxx/comparison_constraints.h>
+
+/* The comparisons are constrained from C++26 on, where they are written
+ * with requires-clauses. */
+
+namespace std {
+
+template <class... _Types>
+class variant;
+
+/* [variant.helper], variant helper classes */
+
+template <class _Tp>
+struct variant_size;
+
+template <class _Tp>
+struct variant_size<const _Tp> : integral_constant<size_t, variant_size<_Tp>::value> {};
+
+template <class _Tp>
+inline constexpr size_t variant_size_v = variant_size<_Tp>::value;
+
+template <class... _Types>
+struct variant_size<variant<_Types...> > : integral_constant<size_t, sizeof...(_Types)> {};
+
+template <size_t _Ip, class _Tp>
+struct variant_alternative;
+
+template <size_t _Ip, class _Tp>
+struct variant_alternative<_Ip, const _Tp> {
+    typedef typename add_const<typename variant_alternative<_Ip, _Tp>::type>::type type;
+};
+
+template <size_t _Ip, class _Tp>
+using variant_alternative_t = typename variant_alternative<_Ip, _Tp>::type;
+
+template <size_t _Ip, class... _Types>
+struct variant_alternative<_Ip, variant<_Types...> > {
+    static_assert(_Ip < sizeof...(_Types), "std::variant_alternative index out of range");
+    typedef __fcxx_type_at_t<_Ip, _Types...> type;
+};
+
+inline constexpr size_t variant_npos = static_cast<size_t>(-1);
+
+/* [variant.bad.access], class bad_variant_access, whose members are all
+ * defined here, as no C++ runtime defines them */
+
+class bad_variant_access : public exception {
+public:
+    constexpr bad_variant_access() noexcept {}
+    constexpr bad_variant_access(const bad_variant_access&) noexcept = default;
+    constexpr bad_variant_access& operator=(const bad_variant_access&) noexcept = default;
+
+    constexpr const char* what() const noexcept override {
+        return "std::bad_variant_access";
+    }
+};
+
+/* The alternatives are held in a union of the first of them and of a union
+ * of the others, whose destructor is trivial where theirs all are. They are
+ * held without their cv-qualifiers, and used through the alternative types
+ * themselves. */
+template <bool _Trivial, class... _Types>
+union __fcxx_variant_union;
+
+template <bool _Trivial>
+union __fcxx_variant_union<_Trivial> {
+    __fcxx_union_empty __empty;
+
+    constexpr __fcxx_variant_union() noexcept : __empty() {}
+};
+
+template <class _T0, class... _Rest>
+union __fcxx_variant_union<true, _T0, _Rest...> {
+    __fcxx_union_empty __empty;
+    __fcxx_remove_cv_t<_T0> __head;
+    __fcxx_variant_union<true, _Rest...> __tail;
+
+    constexpr __fcxx_variant_union() noexcept : __empty() {}
+
+    template <class... _Args>
+    constexpr explicit __fcxx_variant_union(in_place_index_t<0>, _Args&&... __args)
+        : __head(std::forward<_Args>(__args)...) {}
+
+    template <size_t _Ip, class... _Args>
+    constexpr explicit __fcxx_variant_union(in_place_index_t<_Ip>, _Args&&... __args)
+        : __tail(in_place_index_t<_Ip - 1>(), std::forward<_Args>(__args)...) {}
+};
+
+template <class _T0, class... _Rest>
+union __fcxx_variant_union<false, _T0, _Rest...> {
+    __fcxx_union_empty __empty;
+    __fcxx_remove_cv_t<_T0> __head;
+    __fcxx_variant_union<false, _Rest...> __tail;
+
+    constexpr __fcxx_variant_union() noexcept : __empty() {}
+
+    template <class... _Args>
+    constexpr explicit __fcxx_variant_union(in_place_index_t<0>, _Args&&... __args)
+        : __head(std::forward<_Args>(__args)...) {}
+
+    template <size_t _Ip, class... _Args>
+    constexpr explicit __fcxx_variant_union(in_place_index_t<_Ip>, _Args&&... __args)
+        : __tail(in_place_index_t<_Ip - 1>(), std::forward<_Args>(__args)...) {}
+
+    __fcxx_variant_union(const __fcxx_variant_union&) = default;
+    __fcxx_variant_union(__fcxx_variant_union&&) = default;
+    __fcxx_variant_union& operator=(const __fcxx_variant_union&) = default;
+    __fcxx_variant_union& operator=(__fcxx_variant_union&&) = default;
+
+    constexpr ~__fcxx_variant_union() {}
+};
+
+/* The alternative at an index of a union, as it is held. */
+template <size_t _Ip>
+struct __fcxx_variant_union_get {
+    template <class _Up>
+    static constexpr auto& __get(_Up& __u) noexcept {
+        return __fcxx_variant_union_get<_Ip - 1>::__get(__u.__tail);
+    }
+};
+
+template <>
+struct __fcxx_variant_union_get<0> {
+    template <class _Up>
+    static constexpr auto& __get(_Up& __u) noexcept {
+        return __u.__head;
+    }
+};
+
+/* What GET<I> gives for a variant of a value category, which is named
+ * through variant_alternative.
+ * Workaround: GCC 14 and later, all targets: they reject builtin traits in
+ * the signatures of functions, which they cannot mangle, such as the
+ * __type_pack_element that __fcxx_type_at_t is then ("use of built-in trait
+ * in function signature; use library traits instead"). The class template
+ * costs the other compilers nothing, and is not narrowed to GCC. */
+template <size_t _Ip, class _Vp>
+using __fcxx_variant_get_t
+    = __fcxx_conditional_t<is_lvalue_reference<_Vp>::value,
+                           typename variant_alternative<_Ip, __fcxx_remove_ref_t<_Vp> >::type&,
+                           typename variant_alternative<_Ip, __fcxx_remove_ref_t<_Vp> >::type&&>;
+
+/* GET<I>, the alternative at an index of a variant, which is a friend of
+ * variant. */
+struct __fcxx_variant_access {
+    template <size_t _Ip, class _Vp>
+    static constexpr __fcxx_variant_get_t<_Ip, _Vp&&> __get(_Vp&& __v) noexcept {
+        return static_cast<__fcxx_variant_get_t<_Ip, _Vp&&> >(__fcxx_variant_union_get<_Ip>::__get(__v.__u));
+    }
+
+    template <class _Vp>
+    static constexpr auto& __payload(_Vp& __v) noexcept {
+        return __v.__payload();
+    }
+};
+
+/* Calling a function of the index of an alternative, known at run time,
+ * through a table of the functions for each index. The class _Fn has a
+ * static member function template __call taking the index and the types of
+ * the arguments as its template arguments. */
+template <class _Rp, class _Fn, class _Seq, class... _Args>
+struct __fcxx_variant_table;
+
+template <class _Rp, class _Fn, size_t... _Is, class... _Args>
+struct __fcxx_variant_table<_Rp, _Fn, index_sequence<_Is...>, _Args...> {
+    typedef _Rp (*__fn_type)(_Args&&...);
+
+    static constexpr __fn_type __table[sizeof...(_Is)] = {&_Fn::template __call<_Is, _Args...>...};
+};
+
+template <class _Rp, class _Fn, size_t _Np, class... _Args>
+constexpr _Rp __fcxx_variant_dispatch(size_t __i, _Args&&... __args) {
+    return __fcxx_variant_table<_Rp, _Fn, make_index_sequence<_Np>, _Args...>::__table[__i](
+        std::forward<_Args>(__args)...);
+}
+
+/* The smallest unsigned type that holds the indices of the alternatives,
+ * and its largest value, for no alternative. */
+template <size_t _Np>
+using __fcxx_variant_index_t = __fcxx_conditional_t<(_Np < 255), unsigned char,
+                                                    __fcxx_conditional_t<(_Np < 65535), unsigned short, unsigned int> >;
+
+struct __fcxx_variant_destroy_fn;
+struct __fcxx_variant_construct_fn;
+struct __fcxx_variant_assign_fn;
+
+/* The alternatives, and the index of that held, and what variant does with
+ * them. */
+template <class... _Types>
+struct __fcxx_variant_payload {
+    typedef __fcxx_variant_union<__fcxx_and<is_trivially_destructible<_Types>...>::value, _Types...> _Union;
+    typedef __fcxx_variant_index_t<sizeof...(_Types)> _Index;
+
+    _Union __u;
+    _Index __index;
+
+    constexpr explicit __fcxx_variant_payload(__fcxx_no_value_tag) noexcept
+        : __u(), __index(static_cast<_Index>(-1)) {}
+
+    template <size_t _Ip, class... _Args>
+    constexpr explicit __fcxx_variant_payload(in_place_index_t<_Ip> __tag, _Args&&... __args)
+        : __u(__tag, std::forward<_Args>(__args)...), __index(static_cast<_Index>(_Ip)) {}
+
+    constexpr __fcxx_variant_payload& __payload() noexcept {
+        return *this;
+    }
+
+    constexpr const __fcxx_variant_payload& __payload() const noexcept {
+        return *this;
+    }
+
+    constexpr bool __valueless() const noexcept {
+        return __index == static_cast<_Index>(-1);
+    }
+
+    constexpr size_t __fcxx_index() const noexcept {
+        return __index == static_cast<_Index>(-1) ? variant_npos : static_cast<size_t>(__index);
+    }
+
+    /* The alternative at an index, through its type. */
+    template <size_t _Ip>
+    constexpr typename variant_alternative<_Ip, variant<_Types...> >::type& __get() noexcept {
+        return __fcxx_variant_union_get<_Ip>::__get(__u);
+    }
+
+    template <size_t _Ip>
+    constexpr const typename variant_alternative<_Ip, variant<_Types...> >::type& __get() const noexcept {
+        return __fcxx_variant_union_get<_Ip>::__get(__u);
+    }
+
+    /* Destroys the alternative held, if any, leaving none. */
+    constexpr void __destroy() noexcept {
+        if constexpr (!__fcxx_and<is_trivially_destructible<_Types>...>::value) {
+            if (!__valueless()) {
+                std::__fcxx_variant_dispatch<void, __fcxx_variant_destroy_fn, sizeof...(_Types)>(__index, *this);
+            }
+        }
+        __index = static_cast<_Index>(-1);
+    }
+
+    /* Constructs the alternative at an index, where there is none, with the
+     * constructor of the whole union, which constant evaluation allows where
+     * making a member of a member of the union active is not. */
+    template <size_t _Ip, class... _Args>
+    constexpr void __construct(_Args&&... __args) {
+        std::construct_at(std::addressof(__u), in_place_index_t<_Ip>(), std::forward<_Args>(__args)...);
+        __index = static_cast<_Index>(_Ip);
+    }
+
+    template <size_t _Ip, class... _Args>
+    constexpr void __emplace(_Args&&... __args) {
+        __destroy();
+        __construct<_Ip>(std::forward<_Args>(__args)...);
+    }
+
+    /* The copy and move constructors and assignment operators, of which the
+     * copy constructor is only noexcept from C++26 on. */
+    constexpr __fcxx_variant_payload(__fcxx_smf_construct_tag, const __fcxx_variant_payload& __other)
+        noexcept(__fcxx_and<is_nothrow_copy_constructible<_Types>...>::value)
+        : __u(), __index(static_cast<_Index>(-1)) {
+        __construct_from(__other);
+    }
+
+    constexpr __fcxx_variant_payload(__fcxx_smf_construct_tag, __fcxx_variant_payload&& __other)
+        noexcept(__fcxx_and<is_nothrow_move_constructible<_Types>...>::value)
+        : __u(), __index(static_cast<_Index>(-1)) {
+        __construct_from(std::move(__other));
+    }
+
+    /* Constructs the alternative that another holds, if any, where there is
+     * none. */
+    template <class _Pp>
+    constexpr void __construct_from(_Pp&& __other) {
+        if (!__other.__valueless()) {
+            std::__fcxx_variant_dispatch<void, __fcxx_variant_construct_fn, sizeof...(_Types)>(
+                __other.__index, *this, std::forward<_Pp>(__other));
+        }
+    }
+
+    constexpr void __fcxx_assign_from(const __fcxx_variant_payload& __other) {
+        if (__other.__valueless()) {
+            __destroy();
+        } else {
+            std::__fcxx_variant_dispatch<void, __fcxx_variant_assign_fn, sizeof...(_Types)>(__other.__index, *this,
+                                                                                            __other);
+        }
+    }
+
+    constexpr void __fcxx_assign_from(__fcxx_variant_payload&& __other)
+        noexcept(__fcxx_and<is_nothrow_move_constructible<_Types>..., is_nothrow_move_assignable<_Types>...>::value) {
+        if (__other.__valueless()) {
+            __destroy();
+        } else {
+            std::__fcxx_variant_dispatch<void, __fcxx_variant_assign_fn, sizeof...(_Types)>(__other.__index, *this,
+                                                                                            std::move(__other));
+        }
+    }
+};
+
+/* The alternative at an index of a payload of a value category, through
+ * its type. */
+template <size_t _Ip, class _Pp>
+constexpr decltype(auto) __fcxx_variant_payload_get(_Pp&& __p) noexcept {
+    if constexpr (is_lvalue_reference<_Pp>::value) {
+        return __p.template __get<_Ip>();
+    } else {
+        return std::move(__p.template __get<_Ip>());
+    }
+}
+
+struct __fcxx_variant_destroy_fn {
+    template <size_t _Ip, class _Pp>
+    static constexpr void __call(_Pp& __p) {
+        std::destroy_at(std::addressof(__fcxx_variant_union_get<_Ip>::__get(__p.__u)));
+    }
+};
+
+struct __fcxx_variant_construct_fn {
+    template <size_t _Ip, class _Pp, class _Op>
+    static constexpr void __call(_Pp& __p, _Op&& __other) {
+        __p.template __construct<_Ip>(std::__fcxx_variant_payload_get<_Ip>(std::forward<_Op>(__other)));
+    }
+};
+
+struct __fcxx_variant_assign_fn {
+    /* The copy assignment copies an alternative that may throw where moving
+     * it does not before destroying that held, as through a temporary
+     * variant. */
+    template <size_t _Ip, class _Pp, class _Op>
+    static constexpr void __call(_Pp& __p, _Op&& __other) {
+        typedef __fcxx_remove_ref_t<decltype(__p.template __get<_Ip>())> _Tj;
+        if (__p.__index == _Ip) {
+            __p.template __get<_Ip>() = std::__fcxx_variant_payload_get<_Ip>(std::forward<_Op>(__other));
+        } else if constexpr (!is_lvalue_reference<_Op>::value || is_nothrow_copy_constructible<_Tj>::value
+                             || !is_nothrow_move_constructible<_Tj>::value) {
+            __p.template __emplace<_Ip>(std::__fcxx_variant_payload_get<_Ip>(std::forward<_Op>(__other)));
+        } else {
+            _Tj __tmp(__other.template __get<_Ip>());
+            __p.template __emplace<_Ip>(std::move(__tmp));
+        }
+    }
+};
+
+/* The payload, with a destructor that destroys the alternative held, where
+ * it is not trivial. */
+template <bool _Trivial, class... _Types>
+struct __fcxx_variant_storage : __fcxx_variant_payload<_Types...> {
+    using __fcxx_variant_payload<_Types...>::__fcxx_variant_payload;
+};
+
+template <class... _Types>
+struct __fcxx_variant_storage<false, _Types...> : __fcxx_variant_payload<_Types...> {
+    using __fcxx_variant_payload<_Types...>::__fcxx_variant_payload;
+
+    __fcxx_variant_storage(const __fcxx_variant_storage&) = default;
+    __fcxx_variant_storage(__fcxx_variant_storage&&) = default;
+    __fcxx_variant_storage& operator=(const __fcxx_variant_storage&) = default;
+    __fcxx_variant_storage& operator=(__fcxx_variant_storage&&) = default;
+
+    constexpr ~__fcxx_variant_storage() {
+        this->__destroy();
+    }
+};
+
+/* Whether a type can be an alternative: an object type other than an
+ * array. */
+template <class _Tp>
+struct __fcxx_variant_valid : __fcxx_bool_constant<is_object<_Tp>::value && !is_array<_Tp>::value> {};
+
+/* The base class of variant, with its copy and move constructors and
+ * assignment operators, for the types it can hold. */
+template <class... _Types>
+struct __fcxx_variant_smf {
+    typedef __fcxx_smf<
+        __fcxx_variant_storage<__fcxx_and<is_trivially_destructible<_Types>...>::value, _Types...>,
+        __fcxx_smf_select<__fcxx_and<is_copy_constructible<_Types>...>::value,
+                          __fcxx_and<is_trivially_copy_constructible<_Types>...>::value, __fcxx_smf_deleted>::value,
+        __fcxx_smf_select<__fcxx_and<is_move_constructible<_Types>...>::value,
+                          __fcxx_and<is_trivially_move_constructible<_Types>...>::value, __fcxx_smf_absent>::value,
+        __fcxx_smf_select<
+            __fcxx_and<is_copy_constructible<_Types>..., is_copy_assignable<_Types>...>::value,
+            __fcxx_and<is_trivially_copy_constructible<_Types>..., is_trivially_copy_assignable<_Types>...,
+                       is_trivially_destructible<_Types>...>::value,
+            __fcxx_smf_deleted>::value,
+        __fcxx_smf_select<
+            __fcxx_and<is_move_constructible<_Types>..., is_move_assignable<_Types>...>::value,
+            __fcxx_and<is_trivially_move_constructible<_Types>..., is_trivially_move_assignable<_Types>...,
+                       is_trivially_destructible<_Types>...>::value,
+            __fcxx_smf_absent>::value>
+        type;
+};
+
+struct __fcxx_variant_invalid {};
+
+template <class... _Types>
+using __fcxx_variant_base_t = typename __fcxx_conditional_t<(sizeof...(_Types) > 0)
+                                                                 && __fcxx_and<__fcxx_variant_valid<_Types>...>::value,
+                                                             __fcxx_variant_smf<_Types...>,
+                                                             __fcxx_type_identity<__fcxx_variant_invalid> >::type;
+
+/* The imaginary functions FUN(T_i) of the converting constructor and
+ * assignment operator, for each alternative T_i, at index I, for which
+ * "T_i x[] = {std::forward<T>(t)};" is well-formed, which leaves out the
+ * narrowing conversions. They take a pointer to an entry of their own
+ * besides, lest the same function be declared for two alternatives, which
+ * must be ambiguous. */
+template <class _Ti>
+void __fcxx_variant_array_init(_Ti (&&)[1]);
+
+template <class _Ti, class _Tp, class = void>
+struct __fcxx_variant_fun_viable : false_type {};
+
+template <class _Ti, class _Tp>
+struct __fcxx_variant_fun_viable<_Ti, _Tp, decltype(std::__fcxx_variant_array_init<_Ti>({std::declval<_Tp>()}))>
+    : true_type {};
+
+template <size_t _Ip, class _Ti>
+struct __fcxx_variant_fun_entry {};
+
+template <class... _Entries>
+struct __fcxx_variant_overloads {};
+
+template <size_t _Ip, class _Ti>
+struct __fcxx_variant_overloads<__fcxx_variant_fun_entry<_Ip, _Ti> > {
+    static integral_constant<size_t, _Ip> __fun(_Ti, __fcxx_variant_fun_entry<_Ip, _Ti>*);
+};
+
+template <size_t _Ip, class _Ti, class _Next, class... _Rest>
+struct __fcxx_variant_overloads<__fcxx_variant_fun_entry<_Ip, _Ti>, _Next, _Rest...>
+    : __fcxx_variant_overloads<_Next, _Rest...> {
+    using __fcxx_variant_overloads<_Next, _Rest...>::__fun;
+
+    static integral_constant<size_t, _Ip> __fun(_Ti, __fcxx_variant_fun_entry<_Ip, _Ti>*);
+};
+
+template <class _Tp, class _Entries, size_t _Ip, class... _Types>
+struct __fcxx_variant_fun_filter;
+
+template <class _Tp, class... _Entries, size_t _Ip>
+struct __fcxx_variant_fun_filter<_Tp, __fcxx_type_list<_Entries...>, _Ip> {
+    typedef __fcxx_variant_overloads<_Entries...> type;
+};
+
+template <class _Tp, class... _Entries, size_t _Ip, class _T0, class... _Rest>
+struct __fcxx_variant_fun_filter<_Tp, __fcxx_type_list<_Entries...>, _Ip, _T0, _Rest...>
+    : __fcxx_variant_fun_filter<_Tp,
+                                __fcxx_conditional_t<__fcxx_variant_fun_viable<_T0, _Tp>::value,
+                                                     __fcxx_type_list<_Entries..., __fcxx_variant_fun_entry<_Ip, _T0> >,
+                                                     __fcxx_type_list<_Entries...> >,
+                                _Ip + 1, _Rest...> {};
+
+template <class _Tp, class _Overloads, class = void>
+struct __fcxx_variant_fun_result {
+    static constexpr bool __found = false;
+    static constexpr size_t __index = 0;
+};
+
+template <class _Tp, class _Overloads>
+struct __fcxx_variant_fun_result<_Tp, _Overloads,
+                                 __fcxx_void_t<decltype(_Overloads::__fun(std::declval<_Tp>(), nullptr))> > {
+    static constexpr bool __found = true;
+    static constexpr size_t __index = decltype(_Overloads::__fun(std::declval<_Tp>(), nullptr))::value;
+};
+
+/* The alternative T_j that FUN selects for a type, if any. */
+template <class _Tp, class... _Types>
+struct __fcxx_variant_selected {
+    typedef __fcxx_variant_fun_result<_Tp,
+                                      typename __fcxx_variant_fun_filter<_Tp, __fcxx_type_list<>, 0, _Types...>::type>
+        _Result;
+    static constexpr bool __found = _Result::__found;
+    static constexpr size_t __index = _Result::__index;
+    typedef __fcxx_type_at_t<_Result::__index, _Types...> type;
+};
+
+template <class _Tp, class... _Types>
+struct __fcxx_variant_constructible_from
+    : __fcxx_and<__fcxx_bool_constant<__fcxx_variant_selected<_Tp, _Types...>::__found>,
+                 is_constructible<typename __fcxx_variant_selected<_Tp, _Types...>::type, _Tp> > {};
+
+template <class _Tp, class... _Types>
+struct __fcxx_variant_assignable_from
+    : __fcxx_and<__fcxx_bool_constant<__fcxx_variant_selected<_Tp, _Types...>::__found>,
+                 is_assignable<typename __fcxx_variant_selected<_Tp, _Types...>::type&, _Tp>,
+                 is_constructible<typename __fcxx_variant_selected<_Tp, _Types...>::type, _Tp> > {};
+
+template <class _Tp>
+struct __fcxx_is_in_place_tag : false_type {};
+
+template <class _Tp>
+struct __fcxx_is_in_place_tag<in_place_type_t<_Tp> > : true_type {};
+
+template <size_t _Ip>
+struct __fcxx_is_in_place_tag<in_place_index_t<_Ip> > : true_type {};
+
+template <class _Vp, class _Tp, class... _Types>
+struct __fcxx_variant_converting_ctor
+    : __fcxx_and<__fcxx_not<is_same<__fcxx_remove_cvref_t<_Tp>, _Vp> >,
+                 __fcxx_not<__fcxx_is_in_place_tag<__fcxx_remove_cvref_t<_Tp> > >,
+                 __fcxx_variant_constructible_from<_Tp, _Types...> > {};
+
+template <class _Vp, class _Tp, class... _Types>
+struct __fcxx_variant_converting_assign
+    : __fcxx_and<__fcxx_not<is_same<__fcxx_remove_cvref_t<_Tp>, _Vp> >,
+                 __fcxx_variant_assignable_from<_Tp, _Types...> > {};
+
+/* The constraints of the constructors and emplace functions taking the
+ * index or the type of an alternative. */
+template <bool _Valid, size_t _Ip, class _Args, class... _Types>
+struct __fcxx_variant_in_place_impl : false_type {};
+
+template <size_t _Ip, class... _Args, class... _Types>
+struct __fcxx_variant_in_place_impl<true, _Ip, __fcxx_type_list<_Args...>, _Types...>
+    : is_constructible<__fcxx_type_at_t<_Ip, _Types...>, _Args...> {};
+
+template <size_t _Ip, class _Args, class... _Types>
+struct __fcxx_variant_index_ok : __fcxx_variant_in_place_impl<(_Ip < sizeof...(_Types)), _Ip, _Args, _Types...> {};
+
+template <class _Tp, class _Args, class... _Types>
+struct __fcxx_variant_type_ok
+    : __fcxx_variant_in_place_impl<__fcxx_find_type<0, _Tp, _Types...>::__count == 1,
+                                   __fcxx_find_type<0, _Tp, _Types...>::__index, _Args, _Types...> {};
+
+template <class _Dummy, class... _Types>
+struct __fcxx_variant_default {
+    typedef __fcxx_type_at_t<0, _Types...> _T0;
+    static constexpr bool value = is_default_constructible<_T0>::value;
+    static constexpr bool __nothrow = is_nothrow_default_constructible<_T0>::value;
+};
+
+/* [variant.visit], visitation, which takes the variants deriving from
+ * variant as their variant base, from C++23 on, and as a defect report
+ * before. */
+template <class... _Ts>
+constexpr variant<_Ts...>& __fcxx_as_variant(variant<_Ts...>& __v) noexcept {
+    return __v;
+}
+
+template <class... _Ts>
+constexpr const variant<_Ts...>& __fcxx_as_variant(const variant<_Ts...>& __v) noexcept {
+    return __v;
+}
+
+template <class... _Ts>
+constexpr variant<_Ts...>&& __fcxx_as_variant(variant<_Ts...>&& __v) noexcept {
+    return std::move(__v);
+}
+
+template <class... _Ts>
+constexpr const variant<_Ts...>&& __fcxx_as_variant(const variant<_Ts...>&& __v) noexcept {
+    return std::move(__v);
+}
+
+template <class _Void, class _Visitor, class... _Vs>
+struct __fcxx_visit_result_impl {};
+
+template <class _Visitor, class... _Vs>
+struct __fcxx_visit_result_impl<__fcxx_void_t<decltype(std::__fcxx_invoke(
+                                    std::declval<_Visitor>(), std::declval<__fcxx_variant_get_t<0, _Vs> >()...))>,
+                                _Visitor, _Vs...> {
+    typedef decltype(std::__fcxx_invoke(std::declval<_Visitor>(),
+                                        std::declval<__fcxx_variant_get_t<0, _Vs> >()...)) type;
+};
+
+/* The return type of visit, that of calling the visitor with the first
+ * alternatives, which all the others must have too. */
+template <class _Visitor, class... _Vs>
+struct __fcxx_visit_result : __fcxx_visit_result_impl<void, _Visitor, _Vs...> {};
+
+/* Calling the visitor, for the return type of the first form, or for that
+ * given to the second. */
+template <class _Rp, bool _Exact, class _Fp, class... _Args>
+constexpr _Rp __fcxx_visit_invoke(_Fp&& __f, _Args&&... __args) {
+    if constexpr (_Exact) {
+        static_assert(is_same<decltype(std::__fcxx_invoke(std::forward<_Fp>(__f), std::forward<_Args>(__args)...)),
+                              _Rp>::value,
+                      "std::visit of a visitor returning different types for different alternatives");
+        return std::__fcxx_invoke(std::forward<_Fp>(__f), std::forward<_Args>(__args)...);
+    } else if constexpr (is_void<_Rp>::value) {
+        static_cast<void>(std::__fcxx_invoke(std::forward<_Fp>(__f), std::forward<_Args>(__args)...));
+    } else {
+        typedef decltype(std::__fcxx_invoke(std::forward<_Fp>(__f), std::forward<_Args>(__args)...)) _Result;
+        static_assert(!__fcxx_reference_converts_from_temporary<_Rp, _Result>::value,
+                      "std::visit returning a reference bound to a temporary");
+        return std::__fcxx_invoke(std::forward<_Fp>(__f), std::forward<_Args>(__args)...);
+    }
+}
+
+/* The combinations of the indices of the alternatives of all the variants
+ * visited are numbered as the digits of a number, whose bases are the
+ * numbers of alternatives, so that one table has a function for each. */
+template <size_t... _Sizes>
+struct __fcxx_visit_shape {
+    static constexpr size_t __digit(size_t __flat, size_t __k) {
+        constexpr size_t __sizes[] = {_Sizes..., 1};
+        size_t __stride = 1;
+        for (size_t __j = __k + 1; __j < sizeof...(_Sizes); ++__j) {
+            __stride *= __sizes[__j];
+        }
+        return __flat / __stride % __sizes[__k];
+    }
+};
+
+template <class _Rp, bool _Exact, class _Shape, class _Ks>
+struct __fcxx_visit_entries;
+
+template <class _Rp, bool _Exact, class _Shape, size_t... _Ks>
+struct __fcxx_visit_entries<_Rp, _Exact, _Shape, index_sequence<_Ks...> > {
+    template <size_t _Flat, class _Visitor, class... _Vs>
+    static constexpr _Rp __call(_Visitor&& __vis, _Vs&&... __vs) {
+        return std::__fcxx_visit_invoke<_Rp, _Exact>(
+            std::forward<_Visitor>(__vis),
+            __fcxx_variant_access::__get<_Shape::__digit(_Flat, _Ks)>(std::forward<_Vs>(__vs))...);
+    }
+};
+
+template <class _Rp, bool _Exact, class _Visitor, class... _Vs>
+constexpr _Rp __fcxx_visit_impl(_Visitor&& __vis, _Vs&&... __vs) {
+    if ((__vs.valueless_by_exception() || ...)) {
+        _FCXX_THROW(bad_variant_access());
+    }
+    const size_t __sizes[] = {variant_size<__fcxx_remove_cvref_t<_Vs> >::value..., 1};
+    const size_t __indices[] = {__vs.index()..., 0};
+    size_t __flat = 0;
+    for (size_t __k = 0; __k < sizeof...(_Vs); ++__k) {
+        __flat = __flat * __sizes[__k] + __indices[__k];
+    }
+    typedef __fcxx_visit_shape<variant_size<__fcxx_remove_cvref_t<_Vs> >::value...> _Shape;
+    typedef __fcxx_visit_entries<_Rp, _Exact, _Shape, index_sequence_for<_Vs...> > _Entries;
+    return __fcxx_variant_table<_Rp, _Entries,
+                                make_index_sequence<(variant_size<__fcxx_remove_cvref_t<_Vs> >::value * ... * 1)>,
+                                _Visitor, _Vs...>::__table[__flat](std::forward<_Visitor>(__vis),
+                                                                   std::forward<_Vs>(__vs)...);
+}
+
+template <class _Visitor, class... _Variants>
+constexpr typename __fcxx_visit_result<_Visitor, decltype(std::__fcxx_as_variant(std::declval<_Variants>()))...>::type
+visit(_Visitor&& __vis, _Variants&&... __vars) {
+    typedef typename __fcxx_visit_result<_Visitor, decltype(std::__fcxx_as_variant(std::declval<_Variants>()))...>::type
+        _Rp;
+    return std::__fcxx_visit_impl<_Rp, true>(std::forward<_Visitor>(__vis),
+                                              std::__fcxx_as_variant(std::forward<_Variants>(__vars))...);
+}
+
+template <class _Rp, class _Visitor, class... _Variants,
+          class = __fcxx_void_t<decltype(std::__fcxx_as_variant(std::declval<_Variants>()))...> >
+constexpr _Rp visit(_Visitor&& __vis, _Variants&&... __vars) {
+    return std::__fcxx_visit_impl<_Rp, false>(std::forward<_Visitor>(__vis),
+                                               std::__fcxx_as_variant(std::forward<_Variants>(__vars))...);
+}
+
+struct __fcxx_variant_swap_fn {
+    template <size_t _Ip, class _Vp, class _Wp>
+    static constexpr void __call(_Vp& __v, _Wp& __w) {
+        using std::swap;
+        swap(__fcxx_variant_access::__get<_Ip>(__v), __fcxx_variant_access::__get<_Ip>(__w));
+    }
+};
+
+/* [variant.variant], class template variant */
+
+template <class... _Types>
+class variant : private __fcxx_variant_base_t<_Types...> {
+    typedef __fcxx_variant_base_t<_Types...> _Base;
+
+    static_assert(sizeof...(_Types) > 0, "std::variant of no alternatives");
+    static_assert(__fcxx_and<__fcxx_variant_valid<_Types>...>::value,
+                  "std::variant of an alternative other than an object type that is no array");
+
+    friend struct __fcxx_variant_access;
+
+public:
+    /* [variant.ctor], constructors */
+
+    template <class _Dummy = void, __fcxx_enable_if_t<__fcxx_variant_default<_Dummy, _Types...>::value, int> = 0>
+    constexpr variant() noexcept(__fcxx_variant_default<_Dummy, _Types...>::__nothrow)
+        : _Base(in_place_index_t<0>()) {}
+
+    variant(const variant&) = default;
+    variant(variant&&) = default;
+
+    template <class _Tp, __fcxx_enable_if_t<__fcxx_variant_converting_ctor<variant, _Tp, _Types...>::value, int> = 0>
+    constexpr variant(_Tp&& __t)
+        noexcept(is_nothrow_constructible<typename __fcxx_variant_selected<_Tp, _Types...>::type, _Tp>::value)
+        : _Base(in_place_index_t<__fcxx_variant_selected<_Tp, _Types...>::__index>(), std::forward<_Tp>(__t)) {}
+
+    template <class _Tp, class... _Args,
+              __fcxx_enable_if_t<__fcxx_variant_type_ok<_Tp, __fcxx_type_list<_Args...>, _Types...>::value, int> = 0>
+    constexpr explicit variant(in_place_type_t<_Tp>, _Args&&... __args)
+        : _Base(in_place_index_t<__fcxx_find_type<0, _Tp, _Types...>::__index>(), std::forward<_Args>(__args)...) {}
+
+    template <class _Tp, class _Up, class... _Args,
+              __fcxx_enable_if_t<__fcxx_variant_type_ok<_Tp, __fcxx_type_list<initializer_list<_Up>&, _Args...>,
+                                                        _Types...>::value,
+                                 int> = 0>
+    constexpr explicit variant(in_place_type_t<_Tp>, initializer_list<_Up> __il, _Args&&... __args)
+        : _Base(in_place_index_t<__fcxx_find_type<0, _Tp, _Types...>::__index>(), __il,
+                std::forward<_Args>(__args)...) {}
+
+    template <size_t _Ip, class... _Args,
+              __fcxx_enable_if_t<__fcxx_variant_index_ok<_Ip, __fcxx_type_list<_Args...>, _Types...>::value, int> = 0>
+    constexpr explicit variant(in_place_index_t<_Ip> __tag, _Args&&... __args)
+        : _Base(__tag, std::forward<_Args>(__args)...) {}
+
+    template <size_t _Ip, class _Up, class... _Args,
+              __fcxx_enable_if_t<__fcxx_variant_index_ok<_Ip, __fcxx_type_list<initializer_list<_Up>&, _Args...>,
+                                                         _Types...>::value,
+                                 int> = 0>
+    constexpr explicit variant(in_place_index_t<_Ip> __tag, initializer_list<_Up> __il, _Args&&... __args)
+        : _Base(__tag, __il, std::forward<_Args>(__args)...) {}
+
+    /* [variant.assign], assignment */
+
+    variant& operator=(const variant&) = default;
+    variant& operator=(variant&&) = default;
+
+    template <class _Tp, __fcxx_enable_if_t<__fcxx_variant_converting_assign<variant, _Tp, _Types...>::value, int> = 0>
+    constexpr variant& operator=(_Tp&& __t)
+        noexcept(is_nothrow_assignable<typename __fcxx_variant_selected<_Tp, _Types...>::type&, _Tp>::value
+                 && is_nothrow_constructible<typename __fcxx_variant_selected<_Tp, _Types...>::type, _Tp>::value) {
+        typedef typename __fcxx_variant_selected<_Tp, _Types...>::type _Tj;
+        constexpr size_t __j = __fcxx_variant_selected<_Tp, _Types...>::__index;
+        if (this->__index == __j) {
+            __fcxx_variant_access::__get<__j>(*this) = std::forward<_Tp>(__t);
+        } else if constexpr (is_nothrow_constructible<_Tj, _Tp>::value || !is_nothrow_move_constructible<_Tj>::value) {
+            this->template __emplace<__j>(std::forward<_Tp>(__t));
+        } else {
+            this->template __emplace<__j>(_Tj(std::forward<_Tp>(__t)));
+        }
+        return *this;
+    }
+
+    /* [variant.mod], modifiers */
+
+    template <class _Tp, class... _Args,
+              __fcxx_enable_if_t<__fcxx_variant_type_ok<_Tp, __fcxx_type_list<_Args...>, _Types...>::value, int> = 0>
+    constexpr _Tp& emplace(_Args&&... __args) {
+        return this->template emplace<__fcxx_find_type<0, _Tp, _Types...>::__index>(std::forward<_Args>(__args)...);
+    }
+
+    template <class _Tp, class _Up, class... _Args,
+              __fcxx_enable_if_t<__fcxx_variant_type_ok<_Tp, __fcxx_type_list<initializer_list<_Up>&, _Args...>,
+                                                        _Types...>::value,
+                                 int> = 0>
+    constexpr _Tp& emplace(initializer_list<_Up> __il, _Args&&... __args) {
+        return this->template emplace<__fcxx_find_type<0, _Tp, _Types...>::__index>(__il,
+                                                                                    std::forward<_Args>(__args)...);
+    }
+
+    template <size_t _Ip, class... _Args,
+              __fcxx_enable_if_t<__fcxx_variant_index_ok<_Ip, __fcxx_type_list<_Args...>, _Types...>::value, int> = 0>
+    constexpr typename variant_alternative<_Ip, variant>::type& emplace(_Args&&... __args) {
+        this->template __emplace<_Ip>(std::forward<_Args>(__args)...);
+        return __fcxx_variant_access::__get<_Ip>(*this);
+    }
+
+    template <size_t _Ip, class _Up, class... _Args,
+              __fcxx_enable_if_t<__fcxx_variant_index_ok<_Ip, __fcxx_type_list<initializer_list<_Up>&, _Args...>,
+                                                         _Types...>::value,
+                                 int> = 0>
+    constexpr typename variant_alternative<_Ip, variant>::type& emplace(initializer_list<_Up> __il,
+                                                                               _Args&&... __args) {
+        this->template __emplace<_Ip>(__il, std::forward<_Args>(__args)...);
+        return __fcxx_variant_access::__get<_Ip>(*this);
+    }
+
+    /* [variant.status], value status */
+
+    constexpr bool valueless_by_exception() const noexcept {
+        return this->__valueless();
+    }
+
+    constexpr size_t index() const noexcept {
+        return this->__fcxx_index();
+    }
+
+    /* [variant.swap], swap, which exchanges the values with the move
+     * constructor where the alternatives differ */
+
+    constexpr void swap(variant& __rhs)
+        noexcept(__fcxx_and<is_nothrow_move_constructible<_Types>..., __fcxx_is_nothrow_swappable<_Types>...>::value) {
+        static_assert(__fcxx_and<is_move_constructible<_Types>...>::value,
+                      "std::variant::swap of alternatives that cannot be moved");
+        if (this->__valueless() && __rhs.__valueless()) {
+            return;
+        }
+        if (this->__index == __rhs.__index) {
+            std::__fcxx_variant_dispatch<void, __fcxx_variant_swap_fn, sizeof...(_Types)>(this->__index, *this, __rhs);
+        } else {
+            variant __tmp(std::move(__rhs));
+            __rhs.__destroy();
+            __rhs.__construct_from(std::move(this->__payload()));
+            this->__destroy();
+            this->__construct_from(std::move(__tmp.__payload()));
+        }
+    }
+
+#if _FCXX_HAS_EXPLICIT_THIS
+    /* [variant.visit], visitation, of which the first form is not used
+     * where a type is given as the first template argument */
+
+    template <int&... _NoTypeArguments, class _Self, class _Visitor>
+    constexpr decltype(auto) visit(this _Self&& __self, _Visitor&& __vis) {
+        using _Vq = __fcxx_conditional_t<is_const<__fcxx_remove_ref_t<_Self> >::value, const variant, variant>;
+        using _Vp = __fcxx_conditional_t<is_rvalue_reference<_Self&&>::value, _Vq&&, _Vq&>;
+        return std::visit(std::forward<_Visitor>(__vis), (_Vp)__self);
+    }
+
+    template <class _Rp, class _Self, class _Visitor>
+    constexpr _Rp visit(this _Self&& __self, _Visitor&& __vis) {
+        using _Vq = __fcxx_conditional_t<is_const<__fcxx_remove_ref_t<_Self> >::value, const variant, variant>;
+        using _Vp = __fcxx_conditional_t<is_rvalue_reference<_Self&&>::value, _Vq&&, _Vq&>;
+        return std::visit<_Rp>(std::forward<_Visitor>(__vis), (_Vp)__self);
+    }
+#endif
+};
+
+/* [variant.get], value access, where get is freestanding-deleted */
+
+template <class _Tp, class... _Types>
+constexpr bool holds_alternative(const variant<_Types...>& __v) noexcept {
+    static_assert(__fcxx_find_type<0, _Tp, _Types...>::__count == 1,
+                  "std::holds_alternative of a type not occurring exactly once in the std::variant");
+    return __v.index() == __fcxx_find_type<0, _Tp, _Types...>::__index;
+}
+
+template <size_t _Ip, class... _Types>
+constexpr typename variant_alternative<_Ip, variant<_Types...> >::type& get(variant<_Types...>&) = delete;
+
+template <size_t _Ip, class... _Types>
+constexpr typename variant_alternative<_Ip, variant<_Types...> >::type&& get(variant<_Types...>&&) = delete;
+
+template <size_t _Ip, class... _Types>
+constexpr const typename variant_alternative<_Ip, variant<_Types...> >::type& get(const variant<_Types...>&) = delete;
+
+template <size_t _Ip, class... _Types>
+constexpr const typename variant_alternative<_Ip, variant<_Types...> >::type&& get(const variant<_Types...>&&) = delete;
+
+template <class _Tp, class... _Types>
+constexpr _Tp& get(variant<_Types...>&) = delete;
+
+template <class _Tp, class... _Types>
+constexpr _Tp&& get(variant<_Types...>&&) = delete;
+
+template <class _Tp, class... _Types>
+constexpr const _Tp& get(const variant<_Types...>&) = delete;
+
+template <class _Tp, class... _Types>
+constexpr const _Tp&& get(const variant<_Types...>&&) = delete;
+
+template <size_t _Ip, class... _Types>
+constexpr typename add_pointer<typename variant_alternative<_Ip, variant<_Types...> >::type>::type
+get_if(variant<_Types...>* __v) noexcept {
+    if (__v != nullptr && __v->index() == _Ip) {
+        return std::addressof(__fcxx_variant_access::__get<_Ip>(*__v));
+    }
+    return nullptr;
+}
+
+template <size_t _Ip, class... _Types>
+constexpr typename add_pointer<const typename variant_alternative<_Ip, variant<_Types...> >::type>::type
+get_if(const variant<_Types...>* __v) noexcept {
+    if (__v != nullptr && __v->index() == _Ip) {
+        return std::addressof(__fcxx_variant_access::__get<_Ip>(*__v));
+    }
+    return nullptr;
+}
+
+template <class _Tp, class... _Types>
+constexpr typename add_pointer<_Tp>::type get_if(variant<_Types...>* __v) noexcept {
+    static_assert(__fcxx_find_type<0, _Tp, _Types...>::__count == 1,
+                  "std::get_if of a type not occurring exactly once in the std::variant");
+    return std::get_if<__fcxx_find_type<0, _Tp, _Types...>::__index>(__v);
+}
+
+template <class _Tp, class... _Types>
+constexpr typename add_pointer<const _Tp>::type get_if(const variant<_Types...>* __v) noexcept {
+    static_assert(__fcxx_find_type<0, _Tp, _Types...>::__count == 1,
+                  "std::get_if of a type not occurring exactly once in the std::variant");
+    return std::get_if<__fcxx_find_type<0, _Tp, _Types...>::__index>(__v);
+}
+
+/* [variant.relops], relational operators, constrained from C++26 on */
+
+#define _FCXX_VARIANT_RELOP_FN(name, op) \
+    struct name { \
+        template <size_t _Ip, class _Vp, class _Wp> \
+        static constexpr bool __call(_Vp& __v, _Wp& __w) { \
+            return __fcxx_variant_access::__get<_Ip>(__v) op __fcxx_variant_access::__get<_Ip>(__w); \
+        } \
+    };
+_FCXX_VARIANT_RELOP_FN(__fcxx_variant_eq_fn, ==)
+_FCXX_VARIANT_RELOP_FN(__fcxx_variant_ne_fn, !=)
+_FCXX_VARIANT_RELOP_FN(__fcxx_variant_lt_fn, <)
+_FCXX_VARIANT_RELOP_FN(__fcxx_variant_gt_fn, >)
+_FCXX_VARIANT_RELOP_FN(__fcxx_variant_le_fn, <=)
+_FCXX_VARIANT_RELOP_FN(__fcxx_variant_ge_fn, >=)
+#undef _FCXX_VARIANT_RELOP_FN
+
+template <class... _Types>
+    requires ((__fcxx_eq_comparable<_Types, _Types> && ...))
+constexpr bool operator==(const variant<_Types...>& __v, const variant<_Types...>& __w) {
+    if (__v.index() != __w.index()) {
+        return false;
+    }
+    if (__v.valueless_by_exception()) {
+        return true;
+    }
+    return std::__fcxx_variant_dispatch<bool, __fcxx_variant_eq_fn, sizeof...(_Types)>(__v.index(), __v, __w);
+}
+
+template <class... _Types>
+    requires ((__fcxx_ne_comparable<_Types, _Types> && ...))
+constexpr bool operator!=(const variant<_Types...>& __v, const variant<_Types...>& __w) {
+    if (__v.index() != __w.index()) {
+        return true;
+    }
+    if (__v.valueless_by_exception()) {
+        return false;
+    }
+    return std::__fcxx_variant_dispatch<bool, __fcxx_variant_ne_fn, sizeof...(_Types)>(__v.index(), __v, __w);
+}
+
+template <class... _Types>
+    requires ((__fcxx_lt_comparable<_Types, _Types> && ...))
+constexpr bool operator<(const variant<_Types...>& __v, const variant<_Types...>& __w) {
+    if (__w.valueless_by_exception()) {
+        return false;
+    }
+    if (__v.valueless_by_exception()) {
+        return true;
+    }
+    if (__v.index() != __w.index()) {
+        return __v.index() < __w.index();
+    }
+    return std::__fcxx_variant_dispatch<bool, __fcxx_variant_lt_fn, sizeof...(_Types)>(__v.index(), __v, __w);
+}
+
+template <class... _Types>
+    requires ((__fcxx_gt_comparable<_Types, _Types> && ...))
+constexpr bool operator>(const variant<_Types...>& __v, const variant<_Types...>& __w) {
+    if (__v.valueless_by_exception()) {
+        return false;
+    }
+    if (__w.valueless_by_exception()) {
+        return true;
+    }
+    if (__v.index() != __w.index()) {
+        return __v.index() > __w.index();
+    }
+    return std::__fcxx_variant_dispatch<bool, __fcxx_variant_gt_fn, sizeof...(_Types)>(__v.index(), __v, __w);
+}
+
+template <class... _Types>
+    requires ((__fcxx_le_comparable<_Types, _Types> && ...))
+constexpr bool operator<=(const variant<_Types...>& __v, const variant<_Types...>& __w) {
+    if (__v.valueless_by_exception()) {
+        return true;
+    }
+    if (__w.valueless_by_exception()) {
+        return false;
+    }
+    if (__v.index() != __w.index()) {
+        return __v.index() < __w.index();
+    }
+    return std::__fcxx_variant_dispatch<bool, __fcxx_variant_le_fn, sizeof...(_Types)>(__v.index(), __v, __w);
+}
+
+template <class... _Types>
+    requires ((__fcxx_ge_comparable<_Types, _Types> && ...))
+constexpr bool operator>=(const variant<_Types...>& __v, const variant<_Types...>& __w) {
+    if (__w.valueless_by_exception()) {
+        return true;
+    }
+    if (__v.valueless_by_exception()) {
+        return false;
+    }
+    if (__v.index() != __w.index()) {
+        return __v.index() > __w.index();
+    }
+    return std::__fcxx_variant_dispatch<bool, __fcxx_variant_ge_fn, sizeof...(_Types)>(__v.index(), __v, __w);
+}
+
+/* Workaround: GCC 14 to 16, all targets, from -O2 on: of two evaluations of
+ * <=> of the same floating-point values in a function, where one is a NaN,
+ * the second may be miscompiled, which __fcxx_three_way of <compare> avoids
+ * (see there). The alternatives are compared through a table of functions,
+ * which GCC does not inline, so that it has not shown here, but it would
+ * where it did. */
+template <class _Rp>
+struct __fcxx_variant_three_way_fn {
+    template <size_t _Ip, class _Vp, class _Wp>
+    static constexpr _Rp __call(_Vp& __v, _Wp& __w) {
+        return std::__fcxx_three_way(__fcxx_variant_access::__get<_Ip>(__v), __fcxx_variant_access::__get<_Ip>(__w));
+    }
+};
+
+template <class... _Types>
+    requires (three_way_comparable<_Types> && ...)
+constexpr common_comparison_category_t<compare_three_way_result_t<_Types>...>
+operator<=>(const variant<_Types...>& __v, const variant<_Types...>& __w) {
+    typedef common_comparison_category_t<compare_three_way_result_t<_Types>...> _Rp;
+    if (__v.valueless_by_exception() && __w.valueless_by_exception()) {
+        return strong_ordering::equal;
+    }
+    if (__v.valueless_by_exception()) {
+        return strong_ordering::less;
+    }
+    if (__w.valueless_by_exception()) {
+        return strong_ordering::greater;
+    }
+    if (auto __c = __v.index() <=> __w.index(); __c != 0) {
+        return __c;
+    }
+    return std::__fcxx_variant_dispatch<_Rp, __fcxx_variant_three_way_fn<_Rp>, sizeof...(_Types)>(__v.index(), __v,
+                                                                                                  __w);
+}
+
+/* [variant.specalg], specialized algorithms */
+
+template <class... _Types>
+constexpr
+    __fcxx_enable_if_t<__fcxx_and<is_move_constructible<_Types>..., __fcxx_is_swappable<_Types>...>::value>
+    swap(variant<_Types...>& __v, variant<_Types...>& __w) noexcept(noexcept(__v.swap(__w))) {
+    __v.swap(__w);
+}
+
+/* [variant.hash], hash support, enabled where those of all the alternatives
+ * are */
+
+struct __fcxx_variant_hash_fn {
+    template <size_t _Ip, class _Vp>
+    static size_t __call(_Vp& __v) {
+        typedef typename remove_const<typename variant_alternative<_Ip, __fcxx_remove_cvref_t<_Vp> >::type>::type _Tp;
+        return hash<_Tp>()(__fcxx_variant_access::__get<_Ip>(__v));
+    }
+};
+
+template <bool _Enabled, class... _Types>
+struct __fcxx_variant_hash : __fcxx_disabled_hash {};
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
+template <class... _Types>
+struct __fcxx_variant_hash<true, _Types...> {
+
+    size_t operator()(const variant<_Types...>& __v) const {
+        if (__v.valueless_by_exception()) {
+            return static_cast<size_t>(0x7661);
+        }
+        size_t __h = std::__fcxx_variant_dispatch<size_t, __fcxx_variant_hash_fn, sizeof...(_Types)>(__v.index(), __v);
+        return __h * 31 + __v.index();
+    }
+};
+
+#pragma GCC diagnostic pop
+
+template <class... _Types>
+struct hash<variant<_Types...> >
+    : __fcxx_variant_hash<__fcxx_and<__fcxx_is_hash_enabled<typename remove_const<_Types>::type>...>::value,
+                          _Types...> {};
+
+} /* namespace std */
+
+#endif
+
+#endif

@@ -1,0 +1,592 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_NUMERIC
+#define __FREESTANDING_CXX_HDRS_NUMERIC 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2026
+#  error "<numeric> is not a freestanding header before C++26"
+#endif
+
+#define _FCXX_VERSION_NUMERIC
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_NUMERIC
+
+#if _FCXX_STD >= 2026
+
+/* All of the header is freestanding, but the parallel overloads, which are
+ * deleted. */
+
+#include <__fcxx/iterator_base.h>
+#include <type_traits>
+#include <__fcxx/execution_policy.h>
+#include <__fcxx/operations.h>
+#include <limits>
+#include <__fcxx/ranges_algorithm_base.h>
+#include <utility>
+
+/* The accumulators are moved from, as P0616 has it, and adjacent_difference
+ * moves the values to its accumulator. */
+
+namespace std {
+
+/* [accumulate], accumulate */
+template <class _InputIterator, class _Tp>
+[[nodiscard]] constexpr _Tp accumulate(_InputIterator __first, _InputIterator __last, _Tp __init) {
+    for (; __first != __last; ++__first) {
+        __init = std::move(__init) + *__first;
+    }
+    return __init;
+}
+
+template <class _InputIterator, class _Tp, class _BinaryOperation>
+[[nodiscard]] constexpr _Tp accumulate(_InputIterator __first, _InputIterator __last, _Tp __init,
+                                                 _BinaryOperation __binary_op) {
+    for (; __first != __last; ++__first) {
+        __init = __binary_op(std::move(__init), *__first);
+    }
+    return __init;
+}
+
+/* [inner.product], inner product */
+template <class _InputIterator1, class _InputIterator2, class _Tp>
+[[nodiscard]] constexpr _Tp inner_product(_InputIterator1 __first1, _InputIterator1 __last1,
+                                                    _InputIterator2 __first2, _Tp __init) {
+    for (; __first1 != __last1; ++__first1, (void)++__first2) {
+        __init = std::move(__init) + (*__first1) * (*__first2);
+    }
+    return __init;
+}
+
+template <class _InputIterator1, class _InputIterator2, class _Tp, class _BinaryOperation1, class _BinaryOperation2>
+[[nodiscard]] constexpr _Tp inner_product(_InputIterator1 __first1, _InputIterator1 __last1,
+                                                    _InputIterator2 __first2, _Tp __init,
+                                                    _BinaryOperation1 __binary_op1, _BinaryOperation2 __binary_op2) {
+    for (; __first1 != __last1; ++__first1, (void)++__first2) {
+        __init = __binary_op1(std::move(__init), __binary_op2(*__first1, *__first2));
+    }
+    return __init;
+}
+
+/* [partial.sum], partial sum, with an accumulator of the value type of the
+ * input, which is read before the output is written, as they may be the
+ * same. */
+template <class _InputIterator, class _OutputIterator, class _BinaryOperation>
+constexpr _OutputIterator partial_sum(_InputIterator __first, _InputIterator __last, _OutputIterator __result,
+                                              _BinaryOperation __binary_op) {
+    if (__first == __last) {
+        return __result;
+    }
+    typename iterator_traits<_InputIterator>::value_type __acc(*__first);
+    *__result = __acc;
+    ++__result;
+    for (++__first; __first != __last; ++__first, (void)++__result) {
+        __acc = __binary_op(std::move(__acc), *__first);
+        *__result = __acc;
+    }
+    return __result;
+}
+
+template <class _InputIterator, class _OutputIterator>
+constexpr _OutputIterator partial_sum(_InputIterator __first, _InputIterator __last,
+                                              _OutputIterator __result) {
+    if (__first == __last) {
+        return __result;
+    }
+    typename iterator_traits<_InputIterator>::value_type __acc(*__first);
+    *__result = __acc;
+    ++__result;
+    for (++__first; __first != __last; ++__first, (void)++__result) {
+        __acc = std::move(__acc) + *__first;
+        *__result = __acc;
+    }
+    return __result;
+}
+
+/* [adjacent.difference], adjacent difference, with an accumulator of the
+ * previous element, as the output may be the input. */
+template <class _InputIterator, class _OutputIterator, class _BinaryOperation>
+constexpr _OutputIterator adjacent_difference(_InputIterator __first, _InputIterator __last,
+                                                      _OutputIterator __result, _BinaryOperation __binary_op) {
+    typedef typename iterator_traits<_InputIterator>::value_type _Vp;
+    if (__first == __last) {
+        return __result;
+    }
+    _Vp __acc(*__first);
+    *__result = __acc;
+    ++__result;
+    for (++__first; __first != __last; ++__first, (void)++__result) {
+        _Vp __val(*__first);
+        *__result = __binary_op(__val, std::move(__acc));
+        __acc = std::move(__val);
+    }
+    return __result;
+}
+
+template <class _InputIterator, class _OutputIterator>
+constexpr _OutputIterator adjacent_difference(_InputIterator __first, _InputIterator __last,
+                                                      _OutputIterator __result) {
+    typedef typename iterator_traits<_InputIterator>::value_type _Vp;
+    if (__first == __last) {
+        return __result;
+    }
+    _Vp __acc(*__first);
+    *__result = __acc;
+    ++__result;
+    for (++__first; __first != __last; ++__first, (void)++__result) {
+        _Vp __val(*__first);
+        *__result = __val - std::move(__acc);
+        __acc = std::move(__val);
+    }
+    return __result;
+}
+
+/* [numeric.iota], iota */
+template <class _ForwardIterator, class _Tp>
+constexpr void iota(_ForwardIterator __first, _ForwardIterator __last, _Tp __value) {
+    for (; __first != __last; ++__first) {
+        *__first = __value;
+        ++__value;
+    }
+}
+
+/* [reduce], reduce, and the scans, which apply their operations in order,
+ * as the other orders they may apply them in are not needed without
+ * parallelism. */
+template <class _InputIterator, class _Tp, class _BinaryOperation>
+[[nodiscard]] constexpr _Tp reduce(_InputIterator __first, _InputIterator __last, _Tp __init,
+                                             _BinaryOperation __binary_op) {
+    for (; __first != __last; ++__first) {
+        __init = __binary_op(std::move(__init), *__first);
+    }
+    return __init;
+}
+
+template <class _InputIterator, class _Tp>
+[[nodiscard]] constexpr _Tp reduce(_InputIterator __first, _InputIterator __last, _Tp __init) {
+    return std::reduce(__first, __last, std::move(__init), plus<>());
+}
+
+template <class _InputIterator>
+[[nodiscard]] constexpr typename iterator_traits<_InputIterator>::value_type
+reduce(_InputIterator __first, _InputIterator __last) {
+    return std::reduce(__first, __last, typename iterator_traits<_InputIterator>::value_type{}, plus<>());
+}
+
+/* [transform.reduce], transform reduce */
+template <class _InputIterator1, class _InputIterator2, class _Tp, class _BinaryOperation1, class _BinaryOperation2>
+[[nodiscard]] constexpr _Tp transform_reduce(_InputIterator1 __first1, _InputIterator1 __last1,
+                                                       _InputIterator2 __first2, _Tp __init,
+                                                       _BinaryOperation1 __binary_op1,
+                                                       _BinaryOperation2 __binary_op2) {
+    for (; __first1 != __last1; ++__first1, (void)++__first2) {
+        __init = __binary_op1(std::move(__init), __binary_op2(*__first1, *__first2));
+    }
+    return __init;
+}
+
+template <class _InputIterator1, class _InputIterator2, class _Tp>
+[[nodiscard]] constexpr _Tp transform_reduce(_InputIterator1 __first1, _InputIterator1 __last1,
+                                                       _InputIterator2 __first2, _Tp __init) {
+    return std::transform_reduce(__first1, __last1, __first2, std::move(__init), plus<>(), multiplies<>());
+}
+
+template <class _InputIterator, class _Tp, class _BinaryOperation, class _UnaryOperation>
+[[nodiscard]] constexpr _Tp transform_reduce(_InputIterator __first, _InputIterator __last, _Tp __init,
+                                                       _BinaryOperation __binary_op, _UnaryOperation __unary_op) {
+    for (; __first != __last; ++__first) {
+        __init = __binary_op(std::move(__init), __unary_op(*__first));
+    }
+    return __init;
+}
+
+/* [exclusive.scan], exclusive scan, which reads each element before it
+ * writes the sum of the elements before it. */
+template <class _InputIterator, class _OutputIterator, class _Tp, class _BinaryOperation>
+constexpr _OutputIterator exclusive_scan(_InputIterator __first, _InputIterator __last,
+                                                 _OutputIterator __result, _Tp __init, _BinaryOperation __binary_op) {
+    for (; __first != __last; ++__first, (void)++__result) {
+        _Tp __next = __binary_op(__init, *__first);
+        *__result = std::move(__init);
+        __init = std::move(__next);
+    }
+    return __result;
+}
+
+template <class _InputIterator, class _OutputIterator, class _Tp>
+constexpr _OutputIterator exclusive_scan(_InputIterator __first, _InputIterator __last,
+                                                 _OutputIterator __result, _Tp __init) {
+    return std::exclusive_scan(__first, __last, __result, std::move(__init), plus<>());
+}
+
+/* [inclusive.scan], inclusive scan */
+template <class _InputIterator, class _OutputIterator, class _BinaryOperation, class _Tp>
+constexpr _OutputIterator inclusive_scan(_InputIterator __first, _InputIterator __last,
+                                                 _OutputIterator __result, _BinaryOperation __binary_op, _Tp __init) {
+    for (; __first != __last; ++__first, (void)++__result) {
+        __init = __binary_op(std::move(__init), *__first);
+        *__result = __init;
+    }
+    return __result;
+}
+
+template <class _InputIterator, class _OutputIterator, class _BinaryOperation>
+constexpr _OutputIterator inclusive_scan(_InputIterator __first, _InputIterator __last,
+                                                 _OutputIterator __result, _BinaryOperation __binary_op) {
+    if (__first == __last) {
+        return __result;
+    }
+    typename iterator_traits<_InputIterator>::value_type __acc(*__first);
+    *__result = __acc;
+    for (++__first, (void)++__result; __first != __last; ++__first, (void)++__result) {
+        __acc = __binary_op(std::move(__acc), *__first);
+        *__result = __acc;
+    }
+    return __result;
+}
+
+template <class _InputIterator, class _OutputIterator>
+constexpr _OutputIterator inclusive_scan(_InputIterator __first, _InputIterator __last,
+                                                 _OutputIterator __result) {
+    return std::inclusive_scan(__first, __last, __result, plus<>());
+}
+
+/* [transform.exclusive.scan], [transform.inclusive.scan], which do not
+ * apply the unary operation to the initial value. */
+template <class _InputIterator, class _OutputIterator, class _Tp, class _BinaryOperation, class _UnaryOperation>
+constexpr _OutputIterator transform_exclusive_scan(_InputIterator __first, _InputIterator __last,
+                                                           _OutputIterator __result, _Tp __init,
+                                                           _BinaryOperation __binary_op,
+                                                           _UnaryOperation __unary_op) {
+    for (; __first != __last; ++__first, (void)++__result) {
+        _Tp __next = __binary_op(__init, __unary_op(*__first));
+        *__result = std::move(__init);
+        __init = std::move(__next);
+    }
+    return __result;
+}
+
+template <class _InputIterator, class _OutputIterator, class _BinaryOperation, class _UnaryOperation, class _Tp>
+constexpr _OutputIterator transform_inclusive_scan(_InputIterator __first, _InputIterator __last,
+                                                           _OutputIterator __result, _BinaryOperation __binary_op,
+                                                           _UnaryOperation __unary_op, _Tp __init) {
+    for (; __first != __last; ++__first, (void)++__result) {
+        __init = __binary_op(std::move(__init), __unary_op(*__first));
+        *__result = __init;
+    }
+    return __result;
+}
+
+template <class _InputIterator, class _OutputIterator, class _BinaryOperation, class _UnaryOperation>
+constexpr _OutputIterator transform_inclusive_scan(_InputIterator __first, _InputIterator __last,
+                                                           _OutputIterator __result, _BinaryOperation __binary_op,
+                                                           _UnaryOperation __unary_op) {
+    if (__first == __last) {
+        return __result;
+    }
+    typename iterator_traits<_InputIterator>::value_type __acc(__unary_op(*__first));
+    *__result = __acc;
+    for (++__first, (void)++__result; __first != __last; ++__first, (void)++__result) {
+        __acc = __binary_op(std::move(__acc), __unary_op(*__first));
+        *__result = __acc;
+    }
+    return __result;
+}
+
+/* [numeric.ops.gcd], [numeric.ops.lcm], of the absolute values, in the
+ * unsigned type of the common type, which the absolute values of all the
+ * values of the common type fit. */
+template <class _Tp>
+struct __fcxx_gcd_integer
+    : __fcxx_bool_constant<is_integral<_Tp>::value && !is_same<typename remove_cv<_Tp>::type, bool>::value> {};
+
+template <class _Up, class _Tp>
+constexpr _Up __fcxx_unsigned_abs(_Tp __x) noexcept {
+    return __x < 0 ? static_cast<_Up>(static_cast<_Up>(0) - static_cast<_Up>(__x)) : static_cast<_Up>(__x);
+}
+
+template <class _Up>
+constexpr _Up __fcxx_gcd(_Up __a, _Up __b) noexcept {
+    while (__b != 0) {
+        const _Up __t = static_cast<_Up>(__a % __b);
+        __a = __b;
+        __b = __t;
+    }
+    return __a;
+}
+
+template <class _Mp, class _Np>
+[[nodiscard]] constexpr typename common_type<_Mp, _Np>::type gcd(_Mp __m, _Np __n) {
+    static_assert(__fcxx_gcd_integer<_Mp>::value && __fcxx_gcd_integer<_Np>::value,
+                  "std::gcd takes integers other than bool");
+    typedef typename common_type<_Mp, _Np>::type _Ct;
+    typedef typename make_unsigned<_Ct>::type _Up;
+    return static_cast<_Ct>(std::__fcxx_gcd(std::__fcxx_unsigned_abs<_Up>(__m), std::__fcxx_unsigned_abs<_Up>(__n)));
+}
+
+template <class _Mp, class _Np>
+[[nodiscard]] constexpr typename common_type<_Mp, _Np>::type lcm(_Mp __m, _Np __n) {
+    static_assert(__fcxx_gcd_integer<_Mp>::value && __fcxx_gcd_integer<_Np>::value,
+                  "std::lcm takes integers other than bool");
+    typedef typename common_type<_Mp, _Np>::type _Ct;
+    typedef typename make_unsigned<_Ct>::type _Up;
+    if (__m == 0 || __n == 0) {
+        return 0;
+    }
+    const _Up __a = std::__fcxx_unsigned_abs<_Up>(__m);
+    const _Up __b = std::__fcxx_unsigned_abs<_Up>(__n);
+    return static_cast<_Ct>(static_cast<_Up>(__a / std::__fcxx_gcd(__a, __b)) * __b);
+}
+
+/* [algorithms.parallel.overloads], the parallel overloads, which are
+ * freestanding deleted. */
+template <class _ExecutionPolicy, class _ForwardIterator, __fcxx_enable_if_execution_policy_t<_ExecutionPolicy> = 0>
+typename iterator_traits<_ForwardIterator>::value_type reduce(_ExecutionPolicy&&, _ForwardIterator,
+                                                              _ForwardIterator) = delete;
+
+template <class _ExecutionPolicy, class _ForwardIterator, class _Tp,
+          __fcxx_enable_if_execution_policy_t<_ExecutionPolicy> = 0>
+_Tp reduce(_ExecutionPolicy&&, _ForwardIterator, _ForwardIterator, _Tp) = delete;
+
+template <class _ExecutionPolicy, class _ForwardIterator, class _Tp, class _BinaryOperation,
+          __fcxx_enable_if_execution_policy_t<_ExecutionPolicy> = 0>
+_Tp reduce(_ExecutionPolicy&&, _ForwardIterator, _ForwardIterator, _Tp, _BinaryOperation) = delete;
+
+template <class _ExecutionPolicy, class _ForwardIterator1, class _ForwardIterator2, class _Tp,
+          __fcxx_enable_if_execution_policy_t<_ExecutionPolicy> = 0>
+_Tp transform_reduce(_ExecutionPolicy&&, _ForwardIterator1, _ForwardIterator1, _ForwardIterator2, _Tp) = delete;
+
+template <class _ExecutionPolicy, class _ForwardIterator1, class _ForwardIterator2, class _Tp, class _BinaryOperation1,
+          class _BinaryOperation2, __fcxx_enable_if_execution_policy_t<_ExecutionPolicy> = 0>
+_Tp transform_reduce(_ExecutionPolicy&&, _ForwardIterator1, _ForwardIterator1, _ForwardIterator2, _Tp,
+                     _BinaryOperation1, _BinaryOperation2) = delete;
+
+template <class _ExecutionPolicy, class _ForwardIterator, class _Tp, class _BinaryOperation, class _UnaryOperation,
+          __fcxx_enable_if_execution_policy_t<_ExecutionPolicy> = 0>
+_Tp transform_reduce(_ExecutionPolicy&&, _ForwardIterator, _ForwardIterator, _Tp, _BinaryOperation,
+                     _UnaryOperation) = delete;
+
+template <class _ExecutionPolicy, class _ForwardIterator1, class _ForwardIterator2, class _Tp,
+          __fcxx_enable_if_execution_policy_t<_ExecutionPolicy> = 0>
+_ForwardIterator2 exclusive_scan(_ExecutionPolicy&&, _ForwardIterator1, _ForwardIterator1, _ForwardIterator2,
+                                 _Tp) = delete;
+
+template <class _ExecutionPolicy, class _ForwardIterator1, class _ForwardIterator2, class _Tp, class _BinaryOperation,
+          __fcxx_enable_if_execution_policy_t<_ExecutionPolicy> = 0>
+_ForwardIterator2 exclusive_scan(_ExecutionPolicy&&, _ForwardIterator1, _ForwardIterator1, _ForwardIterator2, _Tp,
+                                 _BinaryOperation) = delete;
+
+template <class _ExecutionPolicy, class _ForwardIterator1, class _ForwardIterator2,
+          __fcxx_enable_if_execution_policy_t<_ExecutionPolicy> = 0>
+_ForwardIterator2 inclusive_scan(_ExecutionPolicy&&, _ForwardIterator1, _ForwardIterator1, _ForwardIterator2) = delete;
+
+template <class _ExecutionPolicy, class _ForwardIterator1, class _ForwardIterator2, class _BinaryOperation,
+          __fcxx_enable_if_execution_policy_t<_ExecutionPolicy> = 0>
+_ForwardIterator2 inclusive_scan(_ExecutionPolicy&&, _ForwardIterator1, _ForwardIterator1, _ForwardIterator2,
+                                 _BinaryOperation) = delete;
+
+template <class _ExecutionPolicy, class _ForwardIterator1, class _ForwardIterator2, class _BinaryOperation, class _Tp,
+          __fcxx_enable_if_execution_policy_t<_ExecutionPolicy> = 0>
+_ForwardIterator2 inclusive_scan(_ExecutionPolicy&&, _ForwardIterator1, _ForwardIterator1, _ForwardIterator2,
+                                 _BinaryOperation, _Tp) = delete;
+
+template <class _ExecutionPolicy, class _ForwardIterator1, class _ForwardIterator2, class _Tp, class _BinaryOperation,
+          class _UnaryOperation, __fcxx_enable_if_execution_policy_t<_ExecutionPolicy> = 0>
+_ForwardIterator2 transform_exclusive_scan(_ExecutionPolicy&&, _ForwardIterator1, _ForwardIterator1, _ForwardIterator2,
+                                           _Tp, _BinaryOperation, _UnaryOperation) = delete;
+
+template <class _ExecutionPolicy, class _ForwardIterator1, class _ForwardIterator2, class _BinaryOperation,
+          class _UnaryOperation, __fcxx_enable_if_execution_policy_t<_ExecutionPolicy> = 0>
+_ForwardIterator2 transform_inclusive_scan(_ExecutionPolicy&&, _ForwardIterator1, _ForwardIterator1, _ForwardIterator2,
+                                           _BinaryOperation, _UnaryOperation) = delete;
+
+template <class _ExecutionPolicy, class _ForwardIterator1, class _ForwardIterator2, class _BinaryOperation,
+          class _UnaryOperation, class _Tp, __fcxx_enable_if_execution_policy_t<_ExecutionPolicy> = 0>
+_ForwardIterator2 transform_inclusive_scan(_ExecutionPolicy&&, _ForwardIterator1, _ForwardIterator1, _ForwardIterator2,
+                                           _BinaryOperation, _UnaryOperation, _Tp) = delete;
+
+template <class _ExecutionPolicy, class _ForwardIterator1, class _ForwardIterator2,
+          __fcxx_enable_if_execution_policy_t<_ExecutionPolicy> = 0>
+_ForwardIterator2 adjacent_difference(_ExecutionPolicy&&, _ForwardIterator1, _ForwardIterator1,
+                                      _ForwardIterator2) = delete;
+
+template <class _ExecutionPolicy, class _ForwardIterator1, class _ForwardIterator2, class _BinaryOperation,
+          __fcxx_enable_if_execution_policy_t<_ExecutionPolicy> = 0>
+_ForwardIterator2 adjacent_difference(_ExecutionPolicy&&, _ForwardIterator1, _ForwardIterator1, _ForwardIterator2,
+                                      _BinaryOperation) = delete;
+
+/* [numeric.ops.midpoint], midpoint. Integers are halved in the unsigned
+ * type, rounding towards a; floating-point values are halved before they
+ * are added where they are so large that their sum would overflow, and
+ * after where one is so small that halving it would be inexact. */
+template <class _Tp>
+    requires(is_arithmetic<_Tp>::value && !is_same<typename remove_cv<_Tp>::type, bool>::value)
+[[nodiscard]] constexpr _Tp midpoint(_Tp __a, _Tp __b) noexcept {
+    if constexpr (is_integral<_Tp>::value) {
+        typedef typename make_unsigned<_Tp>::type _Up;
+        if (__a > __b) {
+            const _Up __half = static_cast<_Up>(static_cast<_Up>(static_cast<_Up>(__a) - static_cast<_Up>(__b)) / 2);
+            return static_cast<_Tp>(__a - static_cast<_Tp>(__half));
+        }
+        const _Up __half = static_cast<_Up>(static_cast<_Up>(static_cast<_Up>(__b) - static_cast<_Up>(__a)) / 2);
+        return static_cast<_Tp>(__a + static_cast<_Tp>(__half));
+    } else {
+        const _Tp __low = numeric_limits<_Tp>::min() * 2;
+        const _Tp __high = numeric_limits<_Tp>::max() / 2;
+        const _Tp __abs_a = __a < 0 ? -__a : __a;
+        const _Tp __abs_b = __b < 0 ? -__b : __b;
+        if (__abs_a <= __high && __abs_b <= __high) {
+            return (__a + __b) / 2;
+        }
+        if (__abs_a < __low) {
+            return __a + __b / 2;
+        }
+        if (__abs_b < __low) {
+            return __a / 2 + __b;
+        }
+        return __a / 2 + __b / 2;
+    }
+}
+
+template <class _Tp>
+    requires is_object<_Tp>::value
+[[nodiscard]] constexpr _Tp* midpoint(_Tp* __a, _Tp* __b) {
+    static_assert(sizeof(_Tp) != 0, "std::midpoint takes pointers to complete types");
+    return __a + (__b - __a) / 2;
+}
+
+/* [numeric.iota], ranges::iota */
+namespace ranges {
+
+template <class _Out, class _Tp>
+using iota_result = out_value_result<_Out, _Tp>;
+
+struct __fcxx_iota_fn {
+    template <input_or_output_iterator _Out, sentinel_for<_Out> _Sp, weakly_incrementable _Tp>
+        requires indirectly_writable<_Out, const _Tp&>
+    constexpr iota_result<_Out, _Tp> operator()(_Out __first, _Sp __last, _Tp __value) const {
+        for (; __first != __last; ++__first) {
+            *__first = static_cast<const _Tp&>(__value);
+            ++__value;
+        }
+        return {std::move(__first), std::move(__value)};
+    }
+
+    template <weakly_incrementable _Tp, output_range<const _Tp&> _Rp>
+    constexpr iota_result<borrowed_iterator_t<_Rp>, _Tp> operator()(_Rp&& __r, _Tp __value) const {
+        return (*this)(ranges::begin(__r), ranges::end(__r), std::move(__value));
+    }
+};
+
+inline constexpr __fcxx_iota_fn iota{};
+
+} /* namespace ranges */
+
+/* [numeric.sat], saturation arithmetic, of the signed and unsigned integer
+ * types, which are the integral types other than bool and the character
+ * types, without cv-qualifiers. The sums and the differences are checked
+ * against the bounds before they are computed, and the products are
+ * computed of the absolute values, in the unsigned type. */
+template <class _Tp>
+concept __fcxx_sat_integer = same_as<_Tp, remove_cv_t<_Tp> > && __fcxx_is_cmp_integer<_Tp>::value;
+
+template <__fcxx_sat_integer _Tp>
+[[nodiscard]] constexpr _Tp saturating_add(_Tp __x, _Tp __y) noexcept {
+    if constexpr (is_signed_v<_Tp>) {
+        if (__y > 0 && __x > numeric_limits<_Tp>::max() - __y) {
+            return numeric_limits<_Tp>::max();
+        }
+        if (__y < 0 && __x < numeric_limits<_Tp>::min() - __y) {
+            return numeric_limits<_Tp>::min();
+        }
+        return static_cast<_Tp>(__x + __y);
+    } else {
+        const _Tp __r = static_cast<_Tp>(__x + __y);
+        return __r < __x ? numeric_limits<_Tp>::max() : __r;
+    }
+}
+
+template <__fcxx_sat_integer _Tp>
+[[nodiscard]] constexpr _Tp saturating_sub(_Tp __x, _Tp __y) noexcept {
+    if constexpr (is_signed_v<_Tp>) {
+        if (__y < 0 && __x > numeric_limits<_Tp>::max() + __y) {
+            return numeric_limits<_Tp>::max();
+        }
+        if (__y > 0 && __x < numeric_limits<_Tp>::min() + __y) {
+            return numeric_limits<_Tp>::min();
+        }
+        return static_cast<_Tp>(__x - __y);
+    } else {
+        return __x < __y ? static_cast<_Tp>(0) : static_cast<_Tp>(__x - __y);
+    }
+}
+
+template <__fcxx_sat_integer _Tp>
+[[nodiscard]] constexpr _Tp saturating_mul(_Tp __x, _Tp __y) noexcept {
+    using _Up = make_unsigned_t<_Tp>;
+    if constexpr (is_signed_v<_Tp>) {
+        const bool __negative = (__x < 0) != (__y < 0);
+        const _Up __ux = std::__fcxx_unsigned_abs<_Up>(__x);
+        const _Up __uy = std::__fcxx_unsigned_abs<_Up>(__y);
+        _Up __product = 0;
+        const bool __overflow = __builtin_mul_overflow(__ux, __uy, &__product);
+        const _Up __limit = static_cast<_Up>(static_cast<_Up>(numeric_limits<_Tp>::max()) + (__negative ? 1 : 0));
+        if (__overflow || __product > __limit) {
+            return __negative ? numeric_limits<_Tp>::min() : numeric_limits<_Tp>::max();
+        }
+        return __negative ? static_cast<_Tp>(static_cast<_Up>(static_cast<_Up>(0) - __product))
+                          : static_cast<_Tp>(__product);
+    } else {
+        _Tp __product = 0;
+        if (__builtin_mul_overflow(__x, __y, &__product)) {
+            return numeric_limits<_Tp>::max();
+        }
+        return __product;
+    }
+}
+
+template <__fcxx_sat_integer _Tp>
+[[nodiscard]] constexpr _Tp saturating_div(_Tp __x, _Tp __y) noexcept {
+    if constexpr (is_signed_v<_Tp>) {
+        if (__x == numeric_limits<_Tp>::min() && __y == -1) {
+            return numeric_limits<_Tp>::max();
+        }
+    }
+    return static_cast<_Tp>(__x / __y);
+}
+
+/* [numeric.sat.cast], casting */
+template <__fcxx_sat_integer _Rp, __fcxx_sat_integer _Tp>
+[[nodiscard]] constexpr _Rp saturating_cast(_Tp __x) noexcept {
+    if (std::cmp_less(__x, numeric_limits<_Rp>::min())) {
+        return numeric_limits<_Rp>::min();
+    }
+    if (std::cmp_greater(__x, numeric_limits<_Rp>::max())) {
+        return numeric_limits<_Rp>::max();
+    }
+    return static_cast<_Rp>(__x);
+}
+
+} /* namespace std */
+
+#endif
+
+#endif

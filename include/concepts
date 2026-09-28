@@ -1,0 +1,292 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_CONCEPTS
+#define __FREESTANDING_CXX_HDRS_CONCEPTS 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2020
+#  error "<concepts> requires C++20 or later"
+#elif !_FCXX_HEADER_CONCEPTS
+#  error "<concepts> requires a compiler with concepts"
+#endif
+
+#define _FCXX_VERSION_CONCEPTS
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_CONCEPTS
+
+#if _FCXX_HEADER_CONCEPTS
+
+#include <type_traits>
+
+namespace std {
+
+/* [concepts.lang], language-related concepts */
+
+template <class _Tp, class _Up>
+concept __same_as_impl = is_same_v<_Tp, _Up>;
+
+template <class _Tp, class _Up>
+concept same_as = __same_as_impl<_Tp, _Up> && __same_as_impl<_Up, _Tp>;
+
+template <class _Derived, class _Base>
+concept derived_from = is_base_of_v<_Base, _Derived>
+                    && is_convertible_v<const volatile _Derived*, const volatile _Base*>;
+
+template <class _From, class _To>
+concept convertible_to = is_convertible_v<_From, _To>
+                      && requires { static_cast<_To>(std::__fcxx_declval<_From>()); };
+
+template <class _Tp, class _Up>
+concept common_reference_with = same_as<common_reference_t<_Tp, _Up>, common_reference_t<_Up, _Tp> >
+                             && convertible_to<_Tp, common_reference_t<_Tp, _Up> >
+                             && convertible_to<_Up, common_reference_t<_Tp, _Up> >;
+
+template <class _Tp, class _Up>
+concept common_with
+    = same_as<common_type_t<_Tp, _Up>, common_type_t<_Up, _Tp> >
+      && requires {
+             static_cast<common_type_t<_Tp, _Up> >(std::__fcxx_declval<_Tp>());
+             static_cast<common_type_t<_Tp, _Up> >(std::__fcxx_declval<_Up>());
+         }
+      && common_reference_with<add_lvalue_reference_t<const _Tp>, add_lvalue_reference_t<const _Up> >
+      && common_reference_with<
+          add_lvalue_reference_t<common_type_t<_Tp, _Up> >,
+          common_reference_t<add_lvalue_reference_t<const _Tp>, add_lvalue_reference_t<const _Up> > >;
+
+/* [concepts.arithmetic], arithmetic concepts */
+
+template <class _Tp>
+concept integral = is_integral_v<_Tp>;
+
+template <class _Tp>
+concept signed_integral = integral<_Tp> && is_signed_v<_Tp>;
+
+template <class _Tp>
+concept unsigned_integral = integral<_Tp> && !signed_integral<_Tp>;
+
+template <class _Tp>
+concept floating_point = is_floating_point_v<_Tp>;
+
+template <class _Lhs, class _Rhs>
+concept assignable_from =
+    is_lvalue_reference_v<_Lhs>
+    && common_reference_with<const remove_reference_t<_Lhs>&, const remove_reference_t<_Rhs>&>
+    && requires(_Lhs __lhs, _Rhs&& __rhs) {
+        { __lhs = std::__fcxx_forward<_Rhs>(__rhs) } -> same_as<_Lhs>;
+    };
+
+/* [concept.destructible] and [concept.constructible], and the rest of the
+ * construction concepts, which [concept.swappable] needs */
+
+template <class _Tp>
+concept destructible = is_nothrow_destructible_v<_Tp>;
+
+template <class _Tp, class... _Args>
+concept constructible_from = destructible<_Tp> && is_constructible_v<_Tp, _Args...>;
+
+/* Whether "T t;" is well-formed. */
+template <class _Tp>
+concept __default_initializable_impl = requires { ::new _Tp; };
+
+template <class _Tp>
+concept default_initializable = constructible_from<_Tp> && requires { _Tp{}; }
+                             && __default_initializable_impl<_Tp>;
+
+template <class _Tp>
+concept move_constructible = constructible_from<_Tp, _Tp> && convertible_to<_Tp, _Tp>;
+
+template <class _Tp>
+concept copy_constructible = move_constructible<_Tp>
+                          && constructible_from<_Tp, _Tp&> && convertible_to<_Tp&, _Tp>
+                          && constructible_from<_Tp, const _Tp&> && convertible_to<const _Tp&, _Tp>
+                          && constructible_from<_Tp, const _Tp> && convertible_to<const _Tp, _Tp>;
+
+/* [concept.swappable], concept swappable */
+
+namespace ranges {
+namespace __swap {
+
+template <class _Tp>
+void swap(_Tp&, _Tp&) = delete;
+
+template <class _Tp>
+concept __class_or_enum = is_class_v<_Tp> || is_union_v<_Tp> || is_enum_v<_Tp>;
+
+template <class _Tp, class _Up>
+concept __adl_swappable = (__class_or_enum<remove_cvref_t<_Tp> > || __class_or_enum<remove_cvref_t<_Up> >)
+                       && requires(_Tp&& __t, _Up&& __u) {
+                              swap(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u));
+                          };
+
+struct __fn {
+    template <class _Tp, class _Up>
+        requires __adl_swappable<_Tp, _Up>
+    constexpr void operator()(_Tp&& __t, _Up&& __u) const
+        noexcept(noexcept(swap(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u)))) {
+        (void)swap(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u));
+    }
+
+    template <class _Tp, class _Up, size_t _Np>
+        requires(!__adl_swappable<_Tp (&)[_Np], _Up (&)[_Np]>)
+             && requires(const __fn& __self, _Tp& __t, _Up& __u) { __self(__t, __u); }
+    constexpr void operator()(_Tp (&__t)[_Np], _Up (&__u)[_Np]) const
+        noexcept(noexcept(std::__fcxx_declval<const __fn&>()(*__t, *__u))) {
+        for (size_t __i = 0; __i < _Np; ++__i) {
+            (*this)(__t[__i], __u[__i]);
+        }
+    }
+
+    template <class _Tp>
+        requires(!__adl_swappable<_Tp&, _Tp&>) && move_constructible<_Tp> && assignable_from<_Tp&, _Tp>
+    constexpr void operator()(_Tp& __x, _Tp& __y) const
+        noexcept(is_nothrow_move_constructible_v<_Tp> && is_nothrow_move_assignable_v<_Tp>) {
+        _Tp __tmp(std::__fcxx_move(__x));
+        __x = std::__fcxx_move(__y);
+        __y = std::__fcxx_move(__tmp);
+    }
+};
+
+} /* namespace __swap */
+
+inline namespace __cpo {
+inline constexpr __swap::__fn swap{};
+}
+
+} /* namespace ranges */
+
+template <class _Tp>
+concept swappable = requires(_Tp& __a, _Tp& __b) { ranges::swap(__a, __b); };
+
+template <class _Tp, class _Up>
+concept swappable_with = common_reference_with<_Tp, _Up>
+                      && requires(_Tp&& __t, _Up&& __u) {
+                             ranges::swap(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Tp>(__t));
+                             ranges::swap(std::__fcxx_forward<_Up>(__u), std::__fcxx_forward<_Up>(__u));
+                             ranges::swap(std::__fcxx_forward<_Tp>(__t), std::__fcxx_forward<_Up>(__u));
+                             ranges::swap(std::__fcxx_forward<_Up>(__u), std::__fcxx_forward<_Tp>(__t));
+                         };
+
+/* [concepts.compare], comparison concepts */
+
+template <class _Tp>
+concept __boolean_testable_impl = convertible_to<_Tp, bool>;
+
+template <class _Tp>
+concept __boolean_testable = __boolean_testable_impl<_Tp>
+                          && requires(_Tp&& __t) {
+                                 { !std::__fcxx_forward<_Tp>(__t) } -> __boolean_testable_impl;
+                             };
+
+template <class _Tp, class _Up, class _Cp = common_reference_t<const _Tp&, const _Up&> >
+concept __comparison_common_type_with_impl =
+    same_as<common_reference_t<const _Tp&, const _Up&>, common_reference_t<const _Up&, const _Tp&> >
+    && requires {
+        requires convertible_to<const _Tp&, const _Cp&> || convertible_to<_Tp, const _Cp&>;
+        requires convertible_to<const _Up&, const _Cp&> || convertible_to<_Up, const _Cp&>;
+    };
+
+template <class _Tp, class _Up>
+concept __comparison_common_type_with = __comparison_common_type_with_impl<remove_cvref_t<_Tp>, remove_cvref_t<_Up> >;
+
+template <class _Tp, class _Up>
+concept __weakly_equality_comparable_with =
+    requires(const remove_reference_t<_Tp>& __t, const remove_reference_t<_Up>& __u) {
+        { __t == __u } -> __boolean_testable;
+        { __t != __u } -> __boolean_testable;
+        { __u == __t } -> __boolean_testable;
+        { __u != __t } -> __boolean_testable;
+    };
+
+template <class _Tp>
+concept equality_comparable = __weakly_equality_comparable_with<_Tp, _Tp>;
+
+template <class _Tp, class _Up>
+concept equality_comparable_with =
+    equality_comparable<_Tp> && equality_comparable<_Up> && __comparison_common_type_with<_Tp, _Up>
+    && equality_comparable<common_reference_t<const remove_reference_t<_Tp>&, const remove_reference_t<_Up>&> >
+    && __weakly_equality_comparable_with<_Tp, _Up>;
+
+template <class _Tp, class _Up>
+concept __partially_ordered_with =
+    requires(const remove_reference_t<_Tp>& __t, const remove_reference_t<_Up>& __u) {
+        { __t < __u } -> __boolean_testable;
+        { __t > __u } -> __boolean_testable;
+        { __t <= __u } -> __boolean_testable;
+        { __t >= __u } -> __boolean_testable;
+        { __u < __t } -> __boolean_testable;
+        { __u > __t } -> __boolean_testable;
+        { __u <= __t } -> __boolean_testable;
+        { __u >= __t } -> __boolean_testable;
+    };
+
+template <class _Tp>
+concept totally_ordered = equality_comparable<_Tp> && __partially_ordered_with<_Tp, _Tp>;
+
+template <class _Tp, class _Up>
+concept totally_ordered_with =
+    totally_ordered<_Tp> && totally_ordered<_Up> && equality_comparable_with<_Tp, _Up>
+    && totally_ordered<common_reference_t<const remove_reference_t<_Tp>&, const remove_reference_t<_Up>&> >
+    && __partially_ordered_with<_Tp, _Up>;
+
+/* [concepts.object], object concepts */
+
+template <class _Tp>
+concept movable = is_object_v<_Tp> && move_constructible<_Tp> && assignable_from<_Tp&, _Tp> && swappable<_Tp>;
+
+template <class _Tp>
+concept copyable = copy_constructible<_Tp> && movable<_Tp> && assignable_from<_Tp&, _Tp&>
+                && assignable_from<_Tp&, const _Tp&> && assignable_from<_Tp&, const _Tp>;
+
+template <class _Tp>
+concept semiregular = copyable<_Tp> && default_initializable<_Tp>;
+
+template <class _Tp>
+concept regular = semiregular<_Tp> && equality_comparable<_Tp>;
+
+/* [concepts.callable], callable concepts */
+
+template <class _Fp, class... _Args>
+concept invocable = requires(_Fp&& __f, _Args&&... __args) {
+    std::__fcxx_invoke(std::__fcxx_forward<_Fp>(__f), std::__fcxx_forward<_Args>(__args)...);
+};
+
+template <class _Fp, class... _Args>
+concept regular_invocable = invocable<_Fp, _Args...>;
+
+template <class _Fp, class... _Args>
+concept predicate = regular_invocable<_Fp, _Args...>
+                 && __boolean_testable<typename __fcxx_invoke_result<_Fp, _Args...>::type>;
+
+template <class _Rp, class _Tp, class _Up>
+concept relation = predicate<_Rp, _Tp, _Tp> && predicate<_Rp, _Up, _Up>
+                && predicate<_Rp, _Tp, _Up> && predicate<_Rp, _Up, _Tp>;
+
+template <class _Rp, class _Tp, class _Up>
+concept equivalence_relation = relation<_Rp, _Tp, _Up>;
+
+template <class _Rp, class _Tp, class _Up>
+concept strict_weak_order = relation<_Rp, _Tp, _Up>;
+
+} /* namespace std */
+
+#endif
+
+#endif

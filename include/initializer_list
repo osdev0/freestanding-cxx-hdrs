@@ -1,0 +1,84 @@
+/* SPDX-License-Identifier: 0BSD */
+
+/* Copyright (C) 2026 Mintsuki and contributors.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+ * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+
+#ifndef __FREESTANDING_CXX_HDRS_INITIALIZER_LIST
+#define __FREESTANDING_CXX_HDRS_INITIALIZER_LIST 1
+
+#pragma GCC system_header
+
+#include <__fcxx/config.h>
+
+#if _FCXX_STD < 2011
+#  error "<initializer_list> requires C++11 or later"
+#endif
+
+#define _FCXX_VERSION_INITIALIZER_LIST
+#include <__fcxx/version.h>
+#undef _FCXX_VERSION_INITIALIZER_LIST
+
+#if _FCXX_STD >= 2011
+
+namespace std {
+
+/* The compilers build these objects themselves, which takes a pointer to
+ * the first element followed by the number of elements. */
+template <class _Ep>
+class initializer_list {
+public:
+    typedef _Ep value_type;
+    typedef const _Ep& reference;
+    typedef const _Ep& const_reference;
+    typedef size_t size_type;
+    typedef const _Ep* iterator;
+    typedef const _Ep* const_iterator;
+
+    /* Like the other members, it is only constexpr from C++14 on. */
+    _FCXX_CONSTEXPR14 initializer_list() noexcept : __array(nullptr), __len(0) {}
+
+#if _FCXX_STD >= 2026
+    constexpr const _Ep* data() const noexcept { return __array; }
+    constexpr bool empty() const noexcept { return __len == 0; }
+#endif
+
+    _FCXX_CONSTEXPR14 size_t size() const noexcept { return __len; }
+    _FCXX_CONSTEXPR14 const _Ep* begin() const noexcept { return __array; }
+    _FCXX_CONSTEXPR14 const _Ep* end() const noexcept { return __array + __len; }
+
+private:
+    const _Ep* __array;
+    size_t __len;
+
+    constexpr initializer_list(const _Ep* __a, size_t __l) noexcept : __array(__a), __len(__l) {}
+};
+
+#if _FCXX_STD < 2026
+template <class _Ep>
+_FCXX_CONSTEXPR14 const _Ep* begin(initializer_list<_Ep> __il) noexcept {
+    return __il.begin();
+}
+
+template <class _Ep>
+_FCXX_CONSTEXPR14 const _Ep* end(initializer_list<_Ep> __il) noexcept {
+    return __il.end();
+}
+#endif
+
+} /* namespace std */
+
+#endif
+
+#endif
