@@ -1056,7 +1056,8 @@ class lazy_split_view : public view_interface<lazy_split_view<_Vp, _Pattern> > {
     template <bool _Const>
     class __inner_iterator;
 
-    /* [range.lazy.split.outer], class template lazy_split_view::outer-iterator */
+    /* [range.lazy.split.outer], class template
+     * lazy_split_view::outer-iterator */
     template <bool _Const>
     class __outer_iterator : public __fcxx_lazy_split_outer_category<forward_range<__fcxx_maybe_const<_Const, _Vp> > > {
         friend lazy_split_view;
@@ -1087,7 +1088,8 @@ class lazy_split_view : public view_interface<lazy_split_view<_Vp, _Pattern> > {
     public:
         using iterator_concept = conditional_t<forward_range<_Base>, forward_iterator_tag, input_iterator_tag>;
 
-        /* [range.lazy.split.outer.value], class lazy_split_view::outer-iterator::value_type */
+        /* [range.lazy.split.outer.value], class
+         * lazy_split_view::outer-iterator::value_type */
         struct value_type : view_interface<value_type> {
         private:
             friend __outer_iterator;
@@ -1184,7 +1186,8 @@ class lazy_split_view : public view_interface<lazy_split_view<_Vp, _Pattern> > {
         friend constexpr bool operator==(const __outer_iterator& __x, default_sentinel_t) { return __at_end(__x); }
     };
 
-    /* [range.lazy.split.inner], class template lazy_split_view::inner-iterator */
+    /* [range.lazy.split.inner], class template
+     * lazy_split_view::inner-iterator */
     template <bool _Const>
     class __inner_iterator : public __fcxx_lazy_split_inner_category<__fcxx_maybe_const<_Const, _Vp> > {
         friend lazy_split_view;

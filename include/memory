@@ -165,8 +165,8 @@ const volatile _Tp* start_lifetime_as_array(const volatile void* __p, size_t __n
 }
 
 /* [allocator.uses.construction], uninitialized_construct_using_allocator,
- * with the rest of uses-allocator construction in <__fcxx/uses_allocator_args.h>,
- * which <tuple> includes. */
+ * with the rest of uses-allocator construction in
+ * <__fcxx/uses_allocator_args.h>, which <tuple> includes. */
 template <class _Tp>
 struct __fcxx_construct_at_fn {
     _Tp* __p;

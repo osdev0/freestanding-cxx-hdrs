@@ -70,18 +70,20 @@ inline constexpr size_t tuple_size_v = tuple_size<_Tp>::value;
 template <class _Tp>
 struct __fcxx_is_subrange : false_type {};
 
-/* Whether a const reference to a type can be copy-list-initialized from
- * empty braces, which decides whether the default constructors of pair and
- * tuple are explicit. */
+/* Whether a type is copy-list-initializable from empty braces, which
+ * decides whether the default constructors of pair and tuple are explicit:
+ * whether a parameter of the type can be, which an argument of empty braces
+ * copy-list-initializes, without the cv-qualifiers of the type, which do not
+ * change that, and which C++20 deprecates for parameters. */
 template <class _Tp>
-void __fcxx_implicit_default_test(const _Tp&);
+void __fcxx_implicit_default_test(_Tp);
 
 template <class _Tp, class = void>
 struct __fcxx_is_implicitly_default_constructible : false_type {};
 
 template <class _Tp>
-struct __fcxx_is_implicitly_default_constructible<_Tp, decltype(std::__fcxx_implicit_default_test<_Tp>({}))>
-    : true_type {};
+struct __fcxx_is_implicitly_default_constructible<
+    _Tp, decltype(std::__fcxx_implicit_default_test<typename remove_cv<_Tp>::type>({}))> : true_type {};
 
 /* The parameter type of the assignment operators of pair and tuple that
  * the element types do not allow, so that the operators are not copy or

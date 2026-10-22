@@ -753,9 +753,19 @@ struct is_nothrow_constructible : __fcxx_bool_constant<__is_nothrow_constructibl
 template <bool, class _Tp, class... _Args>
 struct __fcxx_is_nothrow_constructible_impl : false_type {};
 
+/* Workaround: GCC 9 to 10, all targets: -Winit-list-lifetime warns about the
+ * placement new of an initializer_list here, in an unevaluated operand,
+ * where nothing is created, so the warning is turned off around it. */
+#  if _FCXX_GCC >= 900
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic ignored "-Winit-list-lifetime"
+#  endif
 template <class _Tp, class... _Args>
 struct __fcxx_is_nothrow_constructible_impl<true, _Tp, _Args...>
     : __fcxx_bool_constant<noexcept(::new (__fcxx_declval<void*>()) _Tp(__fcxx_declval<_Args>()...))> {};
+#  if _FCXX_GCC >= 900
+#    pragma GCC diagnostic pop
+#  endif
 
 template <class _Tp, class _Arg>
 struct __fcxx_is_nothrow_constructible_impl<true, _Tp&, _Arg>
@@ -838,8 +848,7 @@ struct has_unique_object_representations : __fcxx_bool_constant<__has_unique_obj
 
 #if _FCXX_STD < 2026
 template <class _Tp>
-struct _FCXX_DEPRECATED_CXX26("use is_trivially_copyable and is_trivially_default_constructible")
-is_trivial : __fcxx_bool_constant<__is_trivial(_Tp)> {};
+struct is_trivial : __fcxx_bool_constant<__is_trivial(_Tp)> {};
 #endif
 
 #if _FCXX_STD < 2023
@@ -2070,9 +2079,7 @@ template <class... _Bp> _FCXX_INLINE_VAR constexpr bool conjunction_v = conjunct
 template <class... _Bp> _FCXX_INLINE_VAR constexpr bool disjunction_v = disjunction<_Bp...>::value;
 template <class _Bp> _FCXX_INLINE_VAR constexpr bool negation_v = negation<_Bp>::value;
 #  if _FCXX_STD < 2026
-template <class _Tp>
-_FCXX_DEPRECATED_CXX26("use is_trivially_copyable_v and is_trivially_default_constructible_v")
-_FCXX_INLINE_VAR constexpr bool is_trivial_v = is_trivial<_Tp>::value;
+template <class _Tp> _FCXX_INLINE_VAR constexpr bool is_trivial_v = is_trivial<_Tp>::value;
 #  endif
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"

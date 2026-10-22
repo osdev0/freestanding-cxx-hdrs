@@ -26,6 +26,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+#include <__fcxx/integer_product.h>
 
 #include <type_traits>
 #include <concepts>
@@ -76,7 +77,7 @@ struct minus {
 template <class _Tp = void>
 struct multiplies {
     constexpr _Tp operator()(const _Tp& __x, const _Tp& __y) const {
-        return __x * __y;
+        return _FCXX_MUL(__x, __y);
     }
 };
 
@@ -254,7 +255,7 @@ struct multiplies<void> {
     constexpr auto operator()(_Tp&& __t, _Up&& __u) const
         noexcept(noexcept(std::forward<_Tp>(__t) * std::forward<_Up>(__u)))
         -> decltype(std::forward<_Tp>(__t) * std::forward<_Up>(__u)) {
-        return std::forward<_Tp>(__t) * std::forward<_Up>(__u);
+        return _FCXX_MUL(std::forward<_Tp>(__t), std::forward<_Up>(__u));
     }
 
     typedef void is_transparent;

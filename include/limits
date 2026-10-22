@@ -277,6 +277,15 @@ template <class _Dummy> _FCXX_LIMITS_CONST int __bool_limits<_Dummy>::max_expone
 template <class _Dummy> _FCXX_LIMITS_CONST int __bool_limits<_Dummy>::max_exponent10;
 #endif
 
+/* The special values of the floating-point types are what they are whatever
+ * the options the program is compiled with, which Clang 18 and later warn
+ * about where the options let it assume there are none (-ffinite-math-only,
+ * of -ffast-math). */
+#if _FCXX_CLANG >= 1800
+#  pragma clang diagnostic push
+#  pragma clang diagnostic ignored "-Wnan-infinity-disabled"
+#endif
+
 /* The floating-point types, whose properties the compilers predefine. The
  * digits of max_digits10 are those needed to tell every value apart. */
 template <class _Dummy>
@@ -895,6 +904,10 @@ template <class _Dummy> _FCXX_LIMITS_CONST int __bfloat16_limits<_Dummy>::max_ex
 #  endif
 #endif
 
+#if _FCXX_CLANG >= 1800
+#  pragma clang diagnostic pop
+#endif
+
 template <> class numeric_limits<bool> : public __bool_limits<void> {};
 
 template <> class numeric_limits<char> : public __integer_limits<char> {};
@@ -910,9 +923,19 @@ template <> class numeric_limits<unsigned long> : public __integer_limits<unsign
 
 /* long long, which C++98 lacks, is given the limits there too, as both
  * compilers have it in that mode as well, and so is __int128, for those
- * that have it. */
+ * that have it.
+ * Workaround: GCC before 15.2, all targets: __extension__ does not keep
+ * -Wpedantic from warning about long long in C++98, so the warning is
+ * turned off around the specializations for it. */
+#if _FCXX_GCC && _FCXX_GCC < 1502 && _FCXX_STD < 2011
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wlong-long"
+#endif
 __extension__ template <> class numeric_limits<long long> : public __integer_limits<long long> {};
 __extension__ template <> class numeric_limits<unsigned long long> : public __integer_limits<unsigned long long> {};
+#if _FCXX_GCC && _FCXX_GCC < 1502 && _FCXX_STD < 2011
+#  pragma GCC diagnostic pop
+#endif
 #ifdef __SIZEOF_INT128__
 __extension__ template <> class numeric_limits<__int128> : public __integer_limits<__int128> {};
 __extension__ template <> class numeric_limits<unsigned __int128> : public __integer_limits<unsigned __int128> {};

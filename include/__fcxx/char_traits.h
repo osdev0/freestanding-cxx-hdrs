@@ -28,18 +28,6 @@
 #include <cstdint>
 #include <compare>
 
-/* Whether a function of the specializations runs at run time, where the
- * builtin functions of the compiler do its work, rather than in a constant
- * expression, where they cannot. This is known without asking where the
- * function is not constexpr in the revision in use, for those constexpr from
- * C++17 on and those constexpr from C++20 on. Where the compiler cannot
- * tell, those of C++17 on do their work by themselves, which is right at run
- * time too, and those of C++20 on, which every compiler that has them can
- * tell for, are left to the builtins. */
-#define _FCXX_CHAR_TRAITS_AT_RUN_TIME17 (!__builtin_is_constant_evaluated())
-
-#define _FCXX_CHAR_TRAITS_AT_RUN_TIME20 (!__builtin_is_constant_evaluated())
-
 namespace std {
 
 /* [char.traits], character traits. The class template is only declared, as
@@ -73,7 +61,7 @@ struct __fcxx_char_traits_base {
     }
 
     static constexpr int compare(const char_type* __s1, const char_type* __s2, size_t __n) {
-        if (sizeof(char_type) == 1 && _FCXX_CHAR_TRAITS_AT_RUN_TIME17) {
+        if (sizeof(char_type) == 1 && !__builtin_is_constant_evaluated()) {
             return __n == 0 ? 0 : __builtin_memcmp(__s1, __s2, __n);
         }
         for (size_t __i = 0; __i < __n; ++__i) {
@@ -107,7 +95,7 @@ struct __fcxx_char_traits_base {
      * the destination, and forwards otherwise, as it is where they are in
      * different arrays. */
     static constexpr char_type* move(char_type* __s1, const char_type* __s2, size_t __n) {
-        if (_FCXX_CHAR_TRAITS_AT_RUN_TIME20) {
+        if (!__builtin_is_constant_evaluated()) {
             if (__n != 0) {
                 __builtin_memmove(__s1, __s2, __n * sizeof(char_type));
             }
@@ -126,7 +114,7 @@ struct __fcxx_char_traits_base {
     }
 
     static constexpr char_type* copy(char_type* __s1, const char_type* __s2, size_t __n) {
-        if (_FCXX_CHAR_TRAITS_AT_RUN_TIME20) {
+        if (!__builtin_is_constant_evaluated()) {
             if (__n != 0) {
                 __builtin_memcpy(__s1, __s2, __n * sizeof(char_type));
             }
@@ -139,7 +127,7 @@ struct __fcxx_char_traits_base {
     }
 
     static constexpr char_type* assign(char_type* __s, size_t __n, char_type __a) {
-        if (sizeof(char_type) == 1 && _FCXX_CHAR_TRAITS_AT_RUN_TIME20) {
+        if (sizeof(char_type) == 1 && !__builtin_is_constant_evaluated()) {
             if (__n != 0) {
                 __builtin_memset(__s, static_cast<unsigned char>(__a), __n);
             }
@@ -199,8 +187,5 @@ struct char_traits<char8_t> : __fcxx_char_traits_base<char8_t, unsigned int, sta
 #endif
 
 } /* namespace std */
-
-#undef _FCXX_CHAR_TRAITS_AT_RUN_TIME17
-#undef _FCXX_CHAR_TRAITS_AT_RUN_TIME20
 
 #endif

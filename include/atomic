@@ -39,8 +39,9 @@
 /* The operations are those of the __atomic builtins of GCC and Clang, whose
  * generic forms take objects of any size. For the sizes the target has no
  * lock-free operations for, they call the functions of the atomic library,
- * of the names of the builtins, which the program then has to provide. Clang warns about these calls where the
- * objects are aligned less than their size, which is by design here. */
+ * of the names of the builtins, which the program then has to provide. Clang
+ * warns about these calls where the objects are aligned less than their
+ * size, which is by design here. */
 #if defined(__clang__)
 #  pragma clang diagnostic push
 #  pragma clang diagnostic ignored "-Wunknown-warning-option"
@@ -368,10 +369,10 @@ struct __fcxx_atomic_is_x87
  * does not give back the value a compare-and-exchange finds.
  *
  * The builtins go by the alignment of the type, and Clang calls the atomic
- * library for the types that are aligned less than their size, even when they are
- * always lock-free with that alignment, which the objects of atomic, and
- * those atomic_ref refers to, have then. Their address is taken as that of
- * the type with that alignment. */
+ * library for the types that are aligned less than their size, even when
+ * they are always lock-free with that alignment, which the objects of
+ * atomic, and those atomic_ref refers to, have then. Their address is taken
+ * as that of the type with that alignment. */
 template <size_t _Size, size_t _Align>
 struct __fcxx_atomic_bytes {
     unsigned char __b[_Size] __attribute__((__aligned__(_Align)));
@@ -871,6 +872,32 @@ struct __fcxx_atomic_op_xor {
 #  define _FCXX_ATOMIC_OBJECT_BARRIER(x) ((void)0)
 #endif
 
+/* Workaround: GCC 16, s390x: it crashes, expanding a conditional move of 2
+ * bytes, on the selections of the maximum and the minimum of _Float16 with
+ * a constant operand inlined into such a loop, so the operations on the
+ * floating-point types of 2 bytes are made out of line there. */
+#if _FCXX_GCC >= 1600 && _FCXX_GCC < 1700 && defined(__s390x__)
+template <class _Tp, class _Fn>
+__attribute__((__noinline__)) _Tp __fcxx_atomic_fetch_outline(_Fn __fn, _Tp __a, _Tp __b) noexcept {
+    return __fn(__a, __b);
+}
+
+template <class _Tp, class _Fn>
+_FCXX_ALWAYS_INLINE inline _Tp __fcxx_atomic_fetch_apply(_Fn __fn, _Tp __a, _Tp __b, true_type) noexcept {
+    return __fcxx_atomic_fetch_outline(__fn, __a, __b);
+}
+
+template <class _Tp, class _Fn>
+_FCXX_ALWAYS_INLINE inline _Tp __fcxx_atomic_fetch_apply(_Fn __fn, _Tp __a, _Tp __b, false_type) noexcept {
+    return __fn(__a, __b);
+}
+
+#  define _FCXX_ATOMIC_FETCH_APPLY(fn, a, b) \
+    __fcxx_atomic_fetch_apply(fn, a, b, __fcxx_bool_constant<is_floating_point<_Tp>::value && sizeof(_Tp) == 2>())
+#else
+#  define _FCXX_ATOMIC_FETCH_APPLY(fn, a, b) fn(a, b)
+#endif
+
 template <class _Tp, class _Up, class _Fn>
 _FCXX_ALWAYS_INLINE inline _Tp __fcxx_atomic_fetch_loop(_Up* __p, _Tp __v, memory_order __m, _Fn __fn) noexcept {
     const int __mo = __fcxx_atomic_order(__m);
@@ -878,7 +905,7 @@ _FCXX_ALWAYS_INLINE inline _Tp __fcxx_atomic_fetch_loop(_Up* __p, _Tp __v, memor
     _Tp __old = __fcxx_atomic_load<_Tp>(__p, memory_order_relaxed);
     __fcxx_atomic_clear_padding(&__old);
     for (;;) {
-        _Tp __new = __fn(__old, __v);
+        _Tp __new = _FCXX_ATOMIC_FETCH_APPLY(__fn, __old, __v);
         __fcxx_atomic_clear_padding(&__new);
         _FCXX_ATOMIC_THROUGH_MEMORY(__new);
         if (__fcxx_atomic_builtin<_Tp>::__cas(__p, &__old, &__new, true, __mo, __ATOMIC_RELAXED)) {
@@ -920,10 +947,29 @@ _FCXX_ALWAYS_INLINE _FCXX_ATOMIC_CE _Tp __fcxx_atomic_fetch_op(_Up* __p, _Tp __v
 
 /* The operations that are loops of compare-and-exchange operations where
  * the builtins do not do: those on the integers of up to 4 bytes for the
- * targets of _FCXX_ATOMIC_MICROBLAZE. */
+ * targets of _FCXX_ATOMIC_MICROBLAZE, and those below.
+ *
+ * Workaround: GCC 16.1, MIPS: the builtins of the addition, the and, the or
+ * and the exclusive or of the objects of 1 and 2 bytes compute their NAND
+ * instead (16.2 computes them right), so those of the integers of 1 and 2
+ * bytes are loops of its compare-and-exchange operation there, which is
+ * right. */
 #if _FCXX_ATOMIC_MICROBLAZE
 #  define _FCXX_ATOMIC_INTEGRAL_LOOP(op, after)                                                                   \
     if (sizeof(_Tp) <= 4) {                                                                                       \
+        const _Tp __old = __fcxx_atomic_fetch_loop(__p, __v, __m, __fcxx_atomic_op_##op());                      \
+        return after ? __fcxx_atomic_op_##op()(__old, __v) : __old;                                               \
+    }
+#elif _FCXX_GCC == 1601 && defined(__mips__)
+enum {
+    __fcxx_atomic_loop_add = 1,
+    __fcxx_atomic_loop_sub = 0,
+    __fcxx_atomic_loop_and = 1,
+    __fcxx_atomic_loop_or = 1,
+    __fcxx_atomic_loop_xor = 1
+};
+#  define _FCXX_ATOMIC_INTEGRAL_LOOP(op, after)                                                                   \
+    if (sizeof(_Tp) <= 2 && __fcxx_atomic_loop_##op) {                                                           \
         const _Tp __old = __fcxx_atomic_fetch_loop(__p, __v, __m, __fcxx_atomic_op_##op());                      \
         return after ? __fcxx_atomic_op_##op()(__old, __v) : __old;                                               \
     }
@@ -2519,6 +2565,7 @@ _FCXX_ATOMIC_CE void atomic_signal_fence(memory_order __m) noexcept {
 #  pragma clang deprecated(ATOMIC_VAR_INIT, "ATOMIC_VAR_INIT is deprecated")
 #endif
 
+#undef _FCXX_ATOMIC_FETCH_APPLY
 #undef _FCXX_ATOMIC_CONSTEXPR
 #undef _FCXX_ATOMIC_CE
 #undef _FCXX_ATOMIC_CLEAR_PADDING

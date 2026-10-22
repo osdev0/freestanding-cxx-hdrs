@@ -21,6 +21,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+#include <__fcxx/integer_product.h>
 
 #if _FCXX_STD < 2026
 #  error "<mdspan> is not a freestanding header before C++26"
@@ -241,9 +242,12 @@ public:
 
     /* [mdspan.extents.expo], exposition-only helpers, which the layout
      * mappings use. */
+    /* The loops are bounded by the rank, which i is less than, so that GCC
+     * sees them stay within the extents (it warns otherwise, from -O1 on,
+     * that their iterations past the rank would be undefined). */
     constexpr size_t __fwd_prod_of_extents(rank_type __i) const noexcept {
         size_t __p = 1;
-        for (rank_type __k = 0; __k != __i; ++__k) {
+        for (rank_type __k = 0; __k < __i && __k < sizeof...(_Extents); ++__k) {
             __p *= static_cast<size_t>(extent(__k));
         }
         return __p;
@@ -251,7 +255,7 @@ public:
 
     constexpr size_t __rev_prod_of_extents(rank_type __i) const noexcept {
         size_t __p = 1;
-        for (rank_type __k = __i + 1; __k != sizeof...(_Extents); ++__k) {
+        for (rank_type __k = __i + 1; __k < sizeof...(_Extents); ++__k) {
             __p *= static_cast<size_t>(extent(__k));
         }
         return __p;
@@ -327,7 +331,7 @@ constexpr bool __fcxx_md_static_size_fits() noexcept {
             if (__size > __fcxx_md_max_of<typename _Extents::index_type> / __e) {
                 return false;
             }
-            __size *= __e;
+            __size = _FCXX_MUL(__size, __e);
         }
         return true;
     }
@@ -429,7 +433,7 @@ constexpr typename _Mapping::index_type __fcxx_md_offset(const _Mapping& __m) {
 /* LEAST-MULTIPLE-AT-LEAST(x, y), and whether it is representable as a value
  * of size_t and of an index type. */
 constexpr size_t __fcxx_md_lmal(size_t __x, size_t __y) noexcept {
-    return __x == 0 ? __y : (__y / __x + (__y % __x != 0 ? 1 : 0)) * __x;
+    return __x == 0 ? __y : _FCXX_MUL(__y / __x + (__y % __x != 0 ? 1 : 0), __x);
 }
 
 template <class _It>
@@ -438,13 +442,13 @@ constexpr bool __fcxx_md_lmal_fits(size_t __x, size_t __y) noexcept {
         return std::__fcxx_md_in_range<_It>(__y);
     }
     const __fcxx_md_umax __q = __y / __x + (__y % __x != 0 ? 1 : 0);
-    const __fcxx_md_umax __r = __q * __x;
+    const __fcxx_md_umax __r = _FCXX_MUL(__q, __x);
     return __r <= static_cast<size_t>(-1) && __r <= __fcxx_md_max_of<_It>;
 }
 
 template <class _It>
 constexpr _It __fcxx_md_lmal_index(_It __x, _It __y) noexcept {
-    return __x == 0 ? __y : static_cast<_It>((__y / __x + (__y % __x != 0 ? 1 : 0)) * __x);
+    return __x == 0 ? __y : static_cast<_It>(_FCXX_MUL(__y / __x + (__y % __x != 0 ? 1 : 0), __x));
 }
 
 /* Whether the product of LEAST-MULTIPLE-AT-LEAST(padding, extent k) and the
@@ -475,7 +479,7 @@ constexpr bool __fcxx_md_padded_size_fits() noexcept {
             if (__size > __max / __e) {
                 return false;
             }
-            __size *= __e;
+            __size = _FCXX_MUL(__size, __e);
         }
     }
     return __size <= __max;
@@ -602,7 +606,7 @@ public:
             const index_type __idx[] = {static_cast<index_type>(std::move(__i))...};
             index_type __r = 0;
             for (rank_type __k = extents_type::rank(); __k != 0; --__k) {
-                __r = static_cast<index_type>(__r * __exts.extent(__k - 1) + __idx[__k - 1]);
+                __r = static_cast<index_type>(_FCXX_MUL(__r, __exts.extent(__k - 1)) + __idx[__k - 1]);
             }
             return __r;
         }
@@ -714,7 +718,7 @@ public:
             const index_type __idx[] = {static_cast<index_type>(std::move(__i))...};
             index_type __r = 0;
             for (rank_type __k = 0; __k != extents_type::rank(); ++__k) {
-                __r = static_cast<index_type>(__r * __exts.extent(__k) + __idx[__k]);
+                __r = static_cast<index_type>(_FCXX_MUL(__r, __exts.extent(__k)) + __idx[__k]);
             }
             return __r;
         }
@@ -837,7 +841,7 @@ public:
             }
             index_type __size = 1;
             for (rank_type __r = 0; __r != __rank; ++__r) {
-                __size = static_cast<index_type>(__size + (__exts.extent(__r) - 1) * __strides[__r]);
+                __size = static_cast<index_type>(__size + _FCXX_MUL(__exts.extent(__r) - 1, __strides[__r]));
             }
             return __size;
         }
@@ -853,7 +857,7 @@ public:
             const index_type __idx[] = {static_cast<index_type>(std::move(__i))...};
             index_type __r = 0;
             for (rank_type __k = 0; __k != __rank; ++__k) {
-                __r = static_cast<index_type>(__r + __idx[__k] * __strides[__k]);
+                __r = static_cast<index_type>(__r + _FCXX_MUL(__idx[__k], __strides[__k]));
             }
             return __r;
         }
@@ -906,7 +910,7 @@ public:
                     return false;
                 }
                 __used[__found] = true;
-                __next = static_cast<index_type>(__next * __exts.extent(__found));
+                __next = static_cast<index_type>(_FCXX_MUL(__next, __exts.extent(__found)));
             }
             return true;
         }
@@ -1106,7 +1110,7 @@ public:
             }
         }
         for (rank_type __r = 0; __r != __rank; ++__r) {
-            __size = static_cast<index_type>(__size + (__exts.extent(__r) - 1) * stride(__r));
+            __size = static_cast<index_type>(__size + _FCXX_MUL(__exts.extent(__r) - 1, stride(__r)));
         }
         return __size;
     }
@@ -1123,9 +1127,9 @@ public:
             index_type __s = __stride_1.__get();
             for (rank_type __k = 1; __k != __rank; ++__k) {
                 if (__k > 1) {
-                    __s = static_cast<index_type>(__s * __exts.extent(__k - 1));
+                    __s = static_cast<index_type>(_FCXX_MUL(__s, __exts.extent(__k - 1)));
                 }
-                __r = static_cast<index_type>(__r + __idx[__k] * __s);
+                __r = static_cast<index_type>(__r + _FCXX_MUL(__idx[__k], __s));
             }
             return __r;
         }
@@ -1173,7 +1177,7 @@ public:
 #else
         for (rank_type __k = 1; __k != __r; ++__k) {
 #endif
-            __s = static_cast<index_type>(__s * __exts.extent(__k));
+            __s = static_cast<index_type>(_FCXX_MUL(__s, __exts.extent(__k)));
         }
         return __s;
     }
@@ -1339,7 +1343,7 @@ public:
             }
         }
         for (rank_type __r = 0; __r != __rank; ++__r) {
-            __size = static_cast<index_type>(__size + (__exts.extent(__r) - 1) * stride(__r));
+            __size = static_cast<index_type>(__size + _FCXX_MUL(__exts.extent(__r) - 1, stride(__r)));
         }
         return __size;
     }
@@ -1356,9 +1360,9 @@ public:
             index_type __s = __stride_rm2.__get();
             for (rank_type __k = __rank - 1; __k != 0; --__k) {
                 if (__k < __rank - 1) {
-                    __s = static_cast<index_type>(__s * __exts.extent(__k));
+                    __s = static_cast<index_type>(_FCXX_MUL(__s, __exts.extent(__k)));
                 }
-                __r = static_cast<index_type>(__r + __idx[__k - 1] * __s);
+                __r = static_cast<index_type>(__r + _FCXX_MUL(__idx[__k - 1], __s));
             }
             return __r;
         }
@@ -1396,7 +1400,7 @@ public:
         }
         index_type __s = __stride_rm2.__get();
         for (rank_type __k = __r + 1; __k + 1 < __rank; ++__k) {
-            __s = static_cast<index_type>(__s * __exts.extent(__k));
+            __s = static_cast<index_type>(_FCXX_MUL(__s, __exts.extent(__k)));
         }
         return __s;
     }
@@ -1887,7 +1891,7 @@ constexpr bool __fcxx_md_valid_slice_type() noexcept {
                 if (__e > 1 && __t == 0) {
                     return false;
                 }
-                return __e == 0 || __o + 1 + (__e - 1) * __t <= _Xp;
+                return __e == 0 || __o + 1 + _FCXX_MUL(__e - 1, __t) <= _Xp;
             }
         }
     } else if constexpr (std::__fcxx_md_canonical_index_type<_Sp, _It>()) {
@@ -2063,7 +2067,7 @@ constexpr array<typename _Map::index_type, _SubExt::rank()> __fcxx_md_sub_stride
     array<_It, _SubExt::rank()> __s{};
     for (size_t __j = 0; __j != _SubExt::rank(); ++__j) {
         const size_t __k = _Info::__map.__v[__j];
-        __s[__j] = static_cast<_It>(__m.stride(__k) * __factor[__k]);
+        __s[__j] = static_cast<_It>(_FCXX_MUL(__m.stride(__k), __factor[__k]));
     }
     return __s;
 }

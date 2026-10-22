@@ -194,11 +194,6 @@ struct __fcxx_variant_access {
     static constexpr __fcxx_variant_get_t<_Ip, _Vp&&> __get(_Vp&& __v) noexcept {
         return static_cast<__fcxx_variant_get_t<_Ip, _Vp&&> >(__fcxx_variant_union_get<_Ip>::__get(__v.__u));
     }
-
-    template <class _Vp>
-    static constexpr auto& __payload(_Vp& __v) noexcept {
-        return __v.__payload();
-    }
 };
 
 /* Calling a function of the index of an alternative, known at run time,

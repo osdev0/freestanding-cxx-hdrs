@@ -266,7 +266,7 @@ struct tuple_element<_Ip, tuple<_Types...> > {
 template <class... _Types>
 struct __fcxx_is_tuple_like_impl<tuple<_Types...> > : true_type {};
 
-/* The comparisons of the elements of tuples and tuple-like objects. */
+/* The equality of the elements of tuples and tuple-like objects. */
 
 template <size_t _Ip, size_t _Np>
 struct __fcxx_tuple_compare {
@@ -275,13 +275,6 @@ struct __fcxx_tuple_compare {
         return bool(std::__fcxx_adl_get<_Ip>(__t) == std::__fcxx_adl_get<_Ip>(__u))
             && __fcxx_tuple_compare<_Ip + 1, _Np>::__eq(__t, __u);
     }
-
-    template <class _Tp, class _Up>
-    static constexpr bool __lt(const _Tp& __t, const _Up& __u) {
-        return bool(std::__fcxx_adl_get<_Ip>(__t) < std::__fcxx_adl_get<_Ip>(__u))
-            || (!bool(std::__fcxx_adl_get<_Ip>(__u) < std::__fcxx_adl_get<_Ip>(__t))
-                && __fcxx_tuple_compare<_Ip + 1, _Np>::__lt(__t, __u));
-    }
 };
 
 template <size_t _Np>
@@ -289,11 +282,6 @@ struct __fcxx_tuple_compare<_Np, _Np> {
     template <class _Tp, class _Up>
     static constexpr bool __eq(const _Tp&, const _Up&) {
         return true;
-    }
-
-    template <class _Tp, class _Up>
-    static constexpr bool __lt(const _Tp&, const _Up&) {
-        return false;
     }
 };
 

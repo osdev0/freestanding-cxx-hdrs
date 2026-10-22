@@ -34,6 +34,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+#include <__fcxx/integer_product.h>
 
 #include <compare>
 #include <concepts>
@@ -85,7 +86,8 @@ class chunk_view : public view_interface<chunk_view<_Vp> > {
         using iterator_concept = input_iterator_tag;
         using difference_type = range_difference_t<_Vp>;
 
-        /* [range.chunk.outer.value], class chunk_view::outer-iterator::value_type */
+        /* [range.chunk.outer.value], class
+         * chunk_view::outer-iterator::value_type */
         struct value_type : view_interface<value_type> {
         private:
             friend __outer_iterator;
@@ -280,7 +282,8 @@ public:
 template <view _Vp>
     requires forward_range<_Vp>
 class chunk_view<_Vp> : public view_interface<chunk_view<_Vp> > {
-    /* [range.chunk.fwd.iter], class template chunk_view::iterator for forward ranges */
+    /* [range.chunk.fwd.iter], class template
+     * chunk_view::iterator for forward ranges */
     template <bool _Const>
     class __iterator {
         friend chunk_view;
@@ -353,10 +356,10 @@ class chunk_view<_Vp> : public view_interface<chunk_view<_Vp> > {
             requires random_access_range<_Base>
         {
             if (__x > 0) {
-                ranges::advance(__current_, __n_ * (__x - 1));
+                ranges::advance(__current_, _FCXX_MUL(__n_, __x - 1));
                 __missing_ = ranges::advance(__current_, __n_, __end_);
             } else if (__x < 0) {
-                ranges::advance(__current_, __n_ * __x + __missing_);
+                ranges::advance(__current_, _FCXX_MUL(__n_, __x) + __missing_);
                 __missing_ = 0;
             }
             return *this;
@@ -1144,10 +1147,10 @@ class stride_view : public view_interface<stride_view<_Vp> > {
             requires random_access_range<_Base>
         {
             if (__n > 0) {
-                ranges::advance(__current_, __stride_ * (__n - 1));
+                ranges::advance(__current_, _FCXX_MUL(__stride_, __n - 1));
                 __missing_ = ranges::advance(__current_, __stride_, __end_);
             } else if (__n < 0) {
-                ranges::advance(__current_, __stride_ * __n + __missing_);
+                ranges::advance(__current_, _FCXX_MUL(__stride_, __n) + __missing_);
                 __missing_ = 0;
             }
             return *this;

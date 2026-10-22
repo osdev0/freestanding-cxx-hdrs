@@ -24,6 +24,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+#include <__fcxx/integer_product.h>
 #include <__fcxx/algorithm_impl.h>
 #include <__fcxx/algorithm_nonmodifying.h>
 #include <__fcxx/iterator_base.h>
@@ -534,7 +535,8 @@ _Up __fcxx_uniform_int(_Gen& __g, _Up __bound) {
     }
     const _Up __gext = static_cast<_Up>(__grange + 1);
     while (true) {
-        const _Up __high = static_cast<_Up>(std::__fcxx_uniform_int(__g, static_cast<_Up>(__bound / __gext)) * __gext);
+        const _Up __high =
+            static_cast<_Up>(_FCXX_MUL(std::__fcxx_uniform_int(__g, static_cast<_Up>(__bound / __gext)), __gext));
         const _Up __v = static_cast<_Up>(__high + static_cast<_Up>(static_cast<_Up>(__g()) - __gmin));
         if (__v >= __high && __v <= __bound) {
             return __v;

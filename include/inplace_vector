@@ -49,6 +49,21 @@
 #include <__fcxx/reverse_iterator.h>
 #include <__fcxx/synth_three_way.h>
 
+/* Workaround: GCC 14 up to at least 16, all targets, at -O3: the size is kept
+ * in a type that can hold more than the capacity, and GCC, which does not see
+ * that it is at most the capacity, warns about the writes past the elements
+ * that the loops it vectorizes or unrolls would make for sizes beyond it
+ * (-Wstringop-overflow), in erase from GCC 14 on, and from GCC 16 on also in
+ * the swap of the elements by swap, which the swap of elements of arithmetic
+ * types, whose only swap is std::swap, is done without. */
+#if _FCXX_GCC >= 1400
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wstringop-overflow"
+#  define _FCXX_IV_EXCHANGE_ARITHMETIC 1
+#else
+#  define _FCXX_IV_EXCHANGE_ARITHMETIC 0
+#endif
+
 namespace std {
 
 /* container-compatible-range, of [container.intro.reqmts]. */
@@ -114,13 +129,13 @@ inline constexpr bool
  * compiler has; and GCC 16, which does, takes no union whose array of
  * scalars, or of trivially destructible classes, has elements that have
  * been destroyed to be the value of a constant, which C++26 allows (P3726R2
- * leaves the elements that are not alive out of its constituent values). So where they can be, all the
- * elements are value-initialized in constant expressions instead, when the
- * storage is, which makes the array active and all of it alive, and those
- * that are destroyed are value-initialized again. This has no effects a
- * constant expression can see, as value-initialization has no arguments to
- * reach anything else by. The other elements can only be constructed in
- * constant expressions by GCC from 16 on. */
+ * leaves the elements that are not alive out of its constituent values). So
+ * where they can be, all the elements are value-initialized in constant
+ * expressions instead, when the storage is, which makes the array active and
+ * all of it alive, and those that are destroyed are value-initialized again.
+ * This has no effects a constant expression can see, as value-initialization
+ * has no arguments to reach anything else by. The other elements can only be
+ * constructed in constant expressions by GCC from 16 on. */
 template <class _Tp>
 inline constexpr bool __fcxx_iv_initialize_in_constant_evaluation =
     (is_trivially_default_constructible_v<_Tp> && is_trivially_destructible_v<_Tp>)
@@ -451,8 +466,14 @@ public:
             }
             const size_type __n = __shorter->size();
             for (size_type __i = 0; __i < __n; ++__i) {
-                using std::swap;
-                swap(__shorter->__data()[__i], __longer->__data()[__i]);
+                if constexpr (_FCXX_IV_EXCHANGE_ARITHMETIC && is_arithmetic_v<_Tp>) {
+                    const _Tp __tmp = __shorter->__data()[__i];
+                    __shorter->__data()[__i] = __longer->__data()[__i];
+                    __longer->__data()[__i] = __tmp;
+                } else {
+                    using std::swap;
+                    swap(__shorter->__data()[__i], __longer->__data()[__i]);
+                }
             }
             for (size_type __i = __n; __i < __longer->size(); ++__i) {
                 __shorter->unchecked_emplace_back(std::move(__longer->__data()[__i]));
@@ -580,6 +601,11 @@ constexpr typename inplace_vector<_Tp, _Np>::size_type erase_if(inplace_vector<_
 }
 
 } /* namespace std */
+
+#if _FCXX_GCC >= 1400
+#  pragma GCC diagnostic pop
+#endif
+#undef _FCXX_IV_EXCHANGE_ARITHMETIC
 
 #endif
 

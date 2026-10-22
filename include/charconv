@@ -21,6 +21,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+#include <__fcxx/integer_product.h>
 
 #if _FCXX_STD < 2026
 #  error "<charconv> is not a freestanding header before C++26"
@@ -157,7 +158,7 @@ constexpr unsigned int __fcxx_to_chars_length(_Up __value, unsigned int __base) 
         if (__power > __limit) {
             break;
         }
-        __power *= __base;
+        __power = static_cast<_Up>(_FCXX_MUL(__power, __base));
     }
     return __n;
 }
@@ -190,7 +191,8 @@ constexpr void __fcxx_to_chars_write(char* __first, char* __last, _Up __value, u
     typedef typename __fcxx_charconv_narrower<_Up>::type _Np;
     const _Up __narrow_max = static_cast<_Up>(static_cast<_Np>(~_Np(0)));
     if (__base == 10) {
-        /* A constant divisor, which the compilers turn into a multiplication. */
+        /* A constant divisor, which the compilers turn into a
+         * multiplication. */
         while (__value > __narrow_max) {
             *--__last = static_cast<char>('0' + static_cast<unsigned int>(__value % 10));
             __value /= 10;
@@ -256,7 +258,7 @@ constexpr from_chars_result __fcxx_from_chars_digits(const char* __first, const 
             break;
         }
         if (__value < __cutoff || (__value == __cutoff && __d <= __cutlim)) {
-            __value = __value * __ubase + __d;
+            __value = _FCXX_MUL(__value, __ubase) + __d;
         } else {
             __overflow = true;
         }

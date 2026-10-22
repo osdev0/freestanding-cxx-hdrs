@@ -21,6 +21,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+#include <__fcxx/integer_product.h>
 
 #if _FCXX_STD < 2026
 #  error "<random> is not a freestanding header before C++26"
@@ -178,14 +179,18 @@ struct __fcxx_lcg_arith;
 template <class _Tp, _Tp _Mp>
 struct __fcxx_lcg_arith<_Tp, _Mp, 0> {
     typedef typename __fcxx_rand_wide<_Tp>::type _Wide;
-    static _Tp __mul(_Tp __x, _Tp __y) { return static_cast<_Tp>(static_cast<_Wide>(__x) * static_cast<_Wide>(__y)); }
+    static _Tp __mul(_Tp __x, _Tp __y) {
+        return static_cast<_Tp>(_FCXX_MUL(static_cast<_Wide>(__x), static_cast<_Wide>(__y)));
+    }
     static _Tp __add(_Tp __x, _Tp __y) { return static_cast<_Tp>(static_cast<_Wide>(__x) + static_cast<_Wide>(__y)); }
     template <class _Up> static _Tp __reduce(_Up __x) { return static_cast<_Tp>(__x); }
 };
 
 template <class _Tp, _Tp _Mp>
 struct __fcxx_lcg_arith<_Tp, _Mp, 1> {
-    static _Tp __mul(_Tp __x, _Tp __y) { return static_cast<_Tp>(static_cast<unsigned long long>(__x) * __y % _Mp); }
+    static _Tp __mul(_Tp __x, _Tp __y) {
+        return static_cast<_Tp>(_FCXX_MUL(static_cast<unsigned long long>(__x), __y) % _Mp);
+    }
     static _Tp __add(_Tp __x, _Tp __y) { return static_cast<_Tp>((static_cast<unsigned long long>(__x) + __y) % _Mp); }
     template <class _Up> static _Tp __reduce(_Up __x) { return static_cast<_Tp>(__x % _Mp); }
 };
@@ -193,7 +198,9 @@ struct __fcxx_lcg_arith<_Tp, _Mp, 1> {
 #if _FCXX_LCG_HAS_INT128
 template <class _Tp, _Tp _Mp>
 struct __fcxx_lcg_arith<_Tp, _Mp, 2> {
-    static _Tp __mul(_Tp __x, _Tp __y) { return static_cast<_Tp>(static_cast<__fcxx_uint128>(__x) * __y % _Mp); }
+    static _Tp __mul(_Tp __x, _Tp __y) {
+        return static_cast<_Tp>(_FCXX_MUL(static_cast<__fcxx_uint128>(__x), __y) % _Mp);
+    }
     static _Tp __add(_Tp __x, _Tp __y) { return static_cast<_Tp>((static_cast<__fcxx_uint128>(__x) + __y) % _Mp); }
     template <class _Up> static _Tp __reduce(_Up __x) { return static_cast<_Tp>(__x % _Mp); }
 };
@@ -364,7 +371,7 @@ public:
         _Wide __x = static_cast<_Wide>(__value) & __mask;
         __state[0] = static_cast<_UIntType>(__x);
         for (size_t __i = 1; __i < _Np; ++__i) {
-            __x = (static_cast<_Wide>(_Fp) * (__x ^ (__x >> (_Wp - 2))) + static_cast<_Wide>(__i)) & __mask;
+            __x = (_FCXX_MUL(static_cast<_Wide>(_Fp), (__x ^ (__x >> (_Wp - 2)))) + static_cast<_Wide>(__i)) & __mask;
             __state[__i] = static_cast<_UIntType>(__x);
         }
         __pos = 0;
@@ -494,7 +501,7 @@ public:
         for (size_t __i = 0; __i < _Rp; ++__i) {
             __seed_type __x = 0;
             for (size_t __j = 0; __j < __n; ++__j) {
-                __lcg = __lcg * 40014u % 2147483563u;
+                __lcg = _FCXX_MUL(__lcg, 40014u) % 2147483563u;
                 __x |= std::__fcxx_rand_shl(static_cast<__seed_type>(__lcg), 32 * __j);
             }
             __state[__i] = static_cast<_UIntType>(__x & __mask);
@@ -583,7 +590,7 @@ template <class _Tp, size_t _Wp>
 void __fcxx_philox_mulhilo(_Tp __a, _Tp __b, _Tp& __hi, _Tp& __lo) {
     constexpr size_t __digits = std::__fcxx_rand_digits<_Tp>();
     if constexpr (2 * _Wp <= __digits) {
-        const _Tp __p = __a * __b;
+        const _Tp __p = _FCXX_MUL(__a, __b);
         __lo = __p & std::__fcxx_rand_mask<_Tp>(_Wp);
         __hi = __p >> _Wp;
     } else {
@@ -591,7 +598,7 @@ void __fcxx_philox_mulhilo(_Tp __a, _Tp __b, _Tp& __hi, _Tp& __lo) {
         _Tp __plo;
 #  ifdef __SIZEOF_INT128__
         if constexpr (__digits <= 64) {
-            const __fcxx_uint128 __p = static_cast<__fcxx_uint128>(__a) * __b;
+            const __fcxx_uint128 __p = _FCXX_MUL(static_cast<__fcxx_uint128>(__a), __b);
             __phi = static_cast<_Tp>(__p >> __digits);
             __plo = static_cast<_Tp>(__p);
         } else
@@ -600,10 +607,10 @@ void __fcxx_philox_mulhilo(_Tp __a, _Tp __b, _Tp& __hi, _Tp& __lo) {
             /* Schoolbook multiplication of the halves. */
             constexpr size_t __half = __digits / 2;
             constexpr _Tp __half_mask = std::__fcxx_rand_mask<_Tp>(__half);
-            const _Tp __p00 = (__a & __half_mask) * (__b & __half_mask);
-            const _Tp __p01 = (__a & __half_mask) * (__b >> __half);
-            const _Tp __p10 = (__a >> __half) * (__b & __half_mask);
-            const _Tp __p11 = (__a >> __half) * (__b >> __half);
+            const _Tp __p00 = _FCXX_MUL(__a & __half_mask, __b & __half_mask);
+            const _Tp __p01 = _FCXX_MUL(__a & __half_mask, __b >> __half);
+            const _Tp __p10 = _FCXX_MUL(__a >> __half, __b & __half_mask);
+            const _Tp __p11 = _FCXX_MUL(__a >> __half, __b >> __half);
             const _Tp __mid = (__p00 >> __half) + (__p01 & __half_mask) + (__p10 & __half_mask);
             __plo = (__mid << __half) | (__p00 & __half_mask);
             __phi = __p11 + (__p01 >> __half) + (__p10 >> __half) + (__mid >> __half);
@@ -1001,7 +1008,8 @@ _Up __fcxx_rand_uniform_extend(_URBG& __g, _Up __range, _Up __gmin, _Up __gsize)
     _Up __high;
     _Up __value;
     do {
-        __high = static_cast<_Up>(std::__fcxx_rand_uniform<_Up>(__g, static_cast<_Up>(__range / __gsize)) * __gsize);
+        __high = static_cast<_Up>(
+            _FCXX_MUL(std::__fcxx_rand_uniform<_Up>(__g, static_cast<_Up>(__range / __gsize)), __gsize));
         __value = static_cast<_Up>(__high + static_cast<_Up>(static_cast<_Up>(__g()) - __gmin));
     } while (__value > __range || __value < __high);
     return __value;

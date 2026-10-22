@@ -1,0 +1,4 @@
+This is a collection of 0BSD-licensed freestanding C++ headers, for use with GCC or Clang.
+
+They must be used together with the companion freestanding C headers:
+https://github.com/osdev0/freestanding-c-hdrs

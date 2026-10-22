@@ -1040,7 +1040,10 @@ constexpr strong_ordering operator<=>(const optional<_Tp>& __x, nullopt_t) noexc
 /* [optional.comp.with.t], comparison with T, whose requirements on the
  * comparisons of the values are constraints, along with that the value is
  * no optional, which keep the rewritten comparisons from taking, say,
- * "nullopt == o" to compare the value of o with nullopt. */
+ * "nullopt == o" to compare the value of o with nullopt. They are
+ * requires-clauses, as conditions on the result type would leave the
+ * operators that take the optional first less constrained than the <=> that
+ * does, which "o < v" would then be rewritten to call in place of <. */
 #define _FCXX_OPTIONAL_CMP_OK(name, op) \
     template <class _Tp, class _Up, class = void> \
     struct name : false_type {}; \
@@ -1061,8 +1064,8 @@ struct __fcxx_optional_cmp_with
 };
 
 template <class _Tp, class _Up>
-constexpr __fcxx_enable_if_t<__fcxx_optional_cmp_with<__fcxx_optional_eq_ok<_Tp, _Up>, _Up>::value, bool>
-operator==(const optional<_Tp>& __x, const _Up& __v) {
+    requires (__fcxx_optional_cmp_with<__fcxx_optional_eq_ok<_Tp, _Up>, _Up>::value)
+constexpr bool operator==(const optional<_Tp>& __x, const _Up& __v) {
     if (__x.has_value()) {
         return *__x == __v;
     }
@@ -1070,8 +1073,8 @@ operator==(const optional<_Tp>& __x, const _Up& __v) {
 }
 
 template <class _Tp, class _Up>
-constexpr __fcxx_enable_if_t<__fcxx_optional_cmp_with<__fcxx_optional_eq_ok<_Tp, _Up>, _Tp>::value, bool>
-operator==(const _Tp& __v, const optional<_Up>& __x) {
+    requires (__fcxx_optional_cmp_with<__fcxx_optional_eq_ok<_Tp, _Up>, _Tp>::value)
+constexpr bool operator==(const _Tp& __v, const optional<_Up>& __x) {
     if (__x.has_value()) {
         return __v == *__x;
     }
@@ -1079,8 +1082,8 @@ operator==(const _Tp& __v, const optional<_Up>& __x) {
 }
 
 template <class _Tp, class _Up>
-constexpr __fcxx_enable_if_t<__fcxx_optional_cmp_with<__fcxx_optional_ne_ok<_Tp, _Up>, _Up>::value, bool>
-operator!=(const optional<_Tp>& __x, const _Up& __v) {
+    requires (__fcxx_optional_cmp_with<__fcxx_optional_ne_ok<_Tp, _Up>, _Up>::value)
+constexpr bool operator!=(const optional<_Tp>& __x, const _Up& __v) {
     if (__x.has_value()) {
         return *__x != __v;
     }
@@ -1088,8 +1091,8 @@ operator!=(const optional<_Tp>& __x, const _Up& __v) {
 }
 
 template <class _Tp, class _Up>
-constexpr __fcxx_enable_if_t<__fcxx_optional_cmp_with<__fcxx_optional_ne_ok<_Tp, _Up>, _Tp>::value, bool>
-operator!=(const _Tp& __v, const optional<_Up>& __x) {
+    requires (__fcxx_optional_cmp_with<__fcxx_optional_ne_ok<_Tp, _Up>, _Tp>::value)
+constexpr bool operator!=(const _Tp& __v, const optional<_Up>& __x) {
     if (__x.has_value()) {
         return __v != *__x;
     }
@@ -1097,8 +1100,8 @@ operator!=(const _Tp& __v, const optional<_Up>& __x) {
 }
 
 template <class _Tp, class _Up>
-constexpr __fcxx_enable_if_t<__fcxx_optional_cmp_with<__fcxx_optional_lt_ok<_Tp, _Up>, _Up>::value, bool>
-operator<(const optional<_Tp>& __x, const _Up& __v) {
+    requires (__fcxx_optional_cmp_with<__fcxx_optional_lt_ok<_Tp, _Up>, _Up>::value)
+constexpr bool operator<(const optional<_Tp>& __x, const _Up& __v) {
     if (__x.has_value()) {
         return *__x < __v;
     }
@@ -1106,8 +1109,8 @@ operator<(const optional<_Tp>& __x, const _Up& __v) {
 }
 
 template <class _Tp, class _Up>
-constexpr __fcxx_enable_if_t<__fcxx_optional_cmp_with<__fcxx_optional_lt_ok<_Tp, _Up>, _Tp>::value, bool>
-operator<(const _Tp& __v, const optional<_Up>& __x) {
+    requires (__fcxx_optional_cmp_with<__fcxx_optional_lt_ok<_Tp, _Up>, _Tp>::value)
+constexpr bool operator<(const _Tp& __v, const optional<_Up>& __x) {
     if (__x.has_value()) {
         return __v < *__x;
     }
@@ -1115,8 +1118,8 @@ operator<(const _Tp& __v, const optional<_Up>& __x) {
 }
 
 template <class _Tp, class _Up>
-constexpr __fcxx_enable_if_t<__fcxx_optional_cmp_with<__fcxx_optional_gt_ok<_Tp, _Up>, _Up>::value, bool>
-operator>(const optional<_Tp>& __x, const _Up& __v) {
+    requires (__fcxx_optional_cmp_with<__fcxx_optional_gt_ok<_Tp, _Up>, _Up>::value)
+constexpr bool operator>(const optional<_Tp>& __x, const _Up& __v) {
     if (__x.has_value()) {
         return *__x > __v;
     }
@@ -1124,8 +1127,8 @@ operator>(const optional<_Tp>& __x, const _Up& __v) {
 }
 
 template <class _Tp, class _Up>
-constexpr __fcxx_enable_if_t<__fcxx_optional_cmp_with<__fcxx_optional_gt_ok<_Tp, _Up>, _Tp>::value, bool>
-operator>(const _Tp& __v, const optional<_Up>& __x) {
+    requires (__fcxx_optional_cmp_with<__fcxx_optional_gt_ok<_Tp, _Up>, _Tp>::value)
+constexpr bool operator>(const _Tp& __v, const optional<_Up>& __x) {
     if (__x.has_value()) {
         return __v > *__x;
     }
@@ -1133,8 +1136,8 @@ operator>(const _Tp& __v, const optional<_Up>& __x) {
 }
 
 template <class _Tp, class _Up>
-constexpr __fcxx_enable_if_t<__fcxx_optional_cmp_with<__fcxx_optional_le_ok<_Tp, _Up>, _Up>::value, bool>
-operator<=(const optional<_Tp>& __x, const _Up& __v) {
+    requires (__fcxx_optional_cmp_with<__fcxx_optional_le_ok<_Tp, _Up>, _Up>::value)
+constexpr bool operator<=(const optional<_Tp>& __x, const _Up& __v) {
     if (__x.has_value()) {
         return *__x <= __v;
     }
@@ -1142,8 +1145,8 @@ operator<=(const optional<_Tp>& __x, const _Up& __v) {
 }
 
 template <class _Tp, class _Up>
-constexpr __fcxx_enable_if_t<__fcxx_optional_cmp_with<__fcxx_optional_le_ok<_Tp, _Up>, _Tp>::value, bool>
-operator<=(const _Tp& __v, const optional<_Up>& __x) {
+    requires (__fcxx_optional_cmp_with<__fcxx_optional_le_ok<_Tp, _Up>, _Tp>::value)
+constexpr bool operator<=(const _Tp& __v, const optional<_Up>& __x) {
     if (__x.has_value()) {
         return __v <= *__x;
     }
@@ -1151,8 +1154,8 @@ operator<=(const _Tp& __v, const optional<_Up>& __x) {
 }
 
 template <class _Tp, class _Up>
-constexpr __fcxx_enable_if_t<__fcxx_optional_cmp_with<__fcxx_optional_ge_ok<_Tp, _Up>, _Up>::value, bool>
-operator>=(const optional<_Tp>& __x, const _Up& __v) {
+    requires (__fcxx_optional_cmp_with<__fcxx_optional_ge_ok<_Tp, _Up>, _Up>::value)
+constexpr bool operator>=(const optional<_Tp>& __x, const _Up& __v) {
     if (__x.has_value()) {
         return *__x >= __v;
     }
@@ -1160,8 +1163,8 @@ operator>=(const optional<_Tp>& __x, const _Up& __v) {
 }
 
 template <class _Tp, class _Up>
-constexpr __fcxx_enable_if_t<__fcxx_optional_cmp_with<__fcxx_optional_ge_ok<_Tp, _Up>, _Tp>::value, bool>
-operator>=(const _Tp& __v, const optional<_Up>& __x) {
+    requires (__fcxx_optional_cmp_with<__fcxx_optional_ge_ok<_Tp, _Up>, _Tp>::value)
+constexpr bool operator>=(const _Tp& __v, const optional<_Up>& __x) {
     if (__x.has_value()) {
         return __v >= *__x;
     }

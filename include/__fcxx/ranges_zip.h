@@ -35,6 +35,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+#include <__fcxx/integer_product.h>
 
 #include <compare>
 #include <concepts>
@@ -471,7 +472,8 @@ class zip_transform_view : public view_interface<zip_transform_view<_Fp, _Views.
     template <bool _Const>
     using __zentinel = sentinel_t<__fcxx_maybe_const<_Const, _InnerView> >;
 
-    /* [range.zip.transform.iterator], class template zip_transform_view::iterator */
+    /* [range.zip.transform.iterator], class template
+     * zip_transform_view::iterator */
     template <bool _Const>
     class __iterator : public __fcxx_zip_transform_category<__fcxx_maybe_const<_Const, _Fp>,
                                                             __fcxx_maybe_const<_Const, _InnerView>,
@@ -616,7 +618,8 @@ class zip_transform_view : public view_interface<zip_transform_view<_Fp, _Views.
         }
     };
 
-    /* [range.zip.transform.sentinel], class template zip_transform_view::sentinel */
+    /* [range.zip.transform.sentinel], class template
+     * zip_transform_view::sentinel */
     template <bool _Const>
     class __sentinel {
         friend zip_transform_view;
@@ -1194,7 +1197,8 @@ class adjacent_transform_view : public view_interface<adjacent_transform_view<_V
     template <bool _Const>
     using __inner_sentinel = sentinel_t<__fcxx_maybe_const<_Const, _InnerView> >;
 
-    /* [range.adjacent.transform.iterator], class template adjacent_transform_view::iterator */
+    /* [range.adjacent.transform.iterator], class template
+     * adjacent_transform_view::iterator */
     template <bool _Const>
     class __iterator : public __fcxx_adjacent_transform_category<__fcxx_maybe_const<_Const, _Fp>,
                                                                  __fcxx_maybe_const<_Const, _Vp>, _Np> {
@@ -1351,7 +1355,8 @@ class adjacent_transform_view : public view_interface<adjacent_transform_view<_V
         }
     };
 
-    /* [range.adjacent.transform.sentinel], class template adjacent_transform_view::sentinel */
+    /* [range.adjacent.transform.sentinel], class template
+     * adjacent_transform_view::sentinel */
     template <bool _Const>
     class __sentinel {
         friend adjacent_transform_view;
@@ -1580,7 +1585,8 @@ class cartesian_product_view : public view_interface<cartesian_product_view<_Fir
 
     typedef __fcxx_cartesian_integers<__fcxx_cartesian_bits<_First, _Vs...> > _Integers;
 
-    /* [range.cartesian.iterator], class template cartesian_product_view::iterator */
+    /* [range.cartesian.iterator], class template
+     * cartesian_product_view::iterator */
     template <bool _Const>
     class __iterator {
         friend cartesian_product_view;
@@ -1665,8 +1671,8 @@ class cartesian_product_view : public view_interface<cartesian_product_view<_Fir
         template <size_t _Np>
         constexpr difference_type __scaled_size() const {
             if constexpr (_Np <= _Nv) {
-                return static_cast<difference_type>(ranges::size(std::get<_Np>(__parent_->__bases_)))
-                     * __scaled_size<_Np + 1>();
+                return _FCXX_MUL(static_cast<difference_type>(ranges::size(std::get<_Np>(__parent_->__bases_))),
+                                 __scaled_size<_Np + 1>());
             } else {
                 return static_cast<difference_type>(1);
             }
@@ -1674,8 +1680,8 @@ class cartesian_product_view : public view_interface<cartesian_product_view<_Fir
 
         template <class _Tuple, size_t... _Is>
         constexpr difference_type __distance_from(const _Tuple& __t, index_sequence<_Is...>) const {
-            return ((static_cast<difference_type>(std::get<_Is>(__current_) - std::get<_Is>(__t))
-                     * __scaled_size<_Is + 1>())
+            return (_FCXX_MUL(static_cast<difference_type>(std::get<_Is>(__current_) - std::get<_Is>(__t)),
+                              __scaled_size<_Is + 1>())
                     + ...);
         }
 
@@ -1869,7 +1875,9 @@ class cartesian_product_view : public view_interface<cartesian_product_view<_Fir
     template <class _Tuple, size_t... _Is>
     static constexpr auto __size(_Tuple& __tuple, index_sequence<_Is...>) {
         using _Size = typename _Integers::__unsigned_type;
-        return (static_cast<_Size>(ranges::size(std::get<_Is>(__tuple))) * ...);
+        _Size __p = 1;
+        ((__p = static_cast<_Size>(_FCXX_MUL(__p, static_cast<_Size>(ranges::size(std::get<_Is>(__tuple)))))), ...);
+        return __p;
     }
 
 public:

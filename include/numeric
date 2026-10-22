@@ -21,6 +21,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+#include <__fcxx/integer_product.h>
 
 #if _FCXX_STD < 2026
 #  error "<numeric> is not a freestanding header before C++26"
@@ -71,7 +72,7 @@ template <class _InputIterator1, class _InputIterator2, class _Tp>
 [[nodiscard]] constexpr _Tp inner_product(_InputIterator1 __first1, _InputIterator1 __last1,
                                                     _InputIterator2 __first2, _Tp __init) {
     for (; __first1 != __last1; ++__first1, (void)++__first2) {
-        __init = std::move(__init) + (*__first1) * (*__first2);
+        __init = std::move(__init) + _FCXX_MUL(*__first1, *__first2);
     }
     return __init;
 }
@@ -353,7 +354,7 @@ template <class _Mp, class _Np>
     }
     const _Up __a = std::__fcxx_unsigned_abs<_Up>(__m);
     const _Up __b = std::__fcxx_unsigned_abs<_Up>(__n);
-    return static_cast<_Ct>(static_cast<_Up>(__a / std::__fcxx_gcd(__a, __b)) * __b);
+    return static_cast<_Ct>(_FCXX_MUL(static_cast<_Up>(__a / std::__fcxx_gcd(__a, __b)), __b));
 }
 
 /* [algorithms.parallel.overloads], the parallel overloads, which are
