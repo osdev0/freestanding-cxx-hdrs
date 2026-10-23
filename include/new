@@ -112,16 +112,35 @@ _FCXX_NODISCARD constexpr _Tp* launder(_Tp* __p) noexcept {
 #  endif
 }
 
-#  ifdef __GCC_DESTRUCTIVE_SIZE
-_FCXX_INLINE_VAR constexpr size_t hardware_destructive_interference_size = __GCC_DESTRUCTIVE_SIZE;
+/* [hardware.interference]: the sizes the compiler tells, as GCC does from 12
+ * on and Clang from 19 on, and with their earlier versions, those that these
+ * first versions tell for the architecture, so that the layouts built on them
+ * do not change when the compiler is upgraded past them. Clang has changed
+ * some of its own since (for AArch64 in 21, and RISC-V in 22). */
+#  if defined(__GCC_DESTRUCTIVE_SIZE) && defined(__GCC_CONSTRUCTIVE_SIZE)
+#    define _FCXX_DESTRUCTIVE_SIZE __GCC_DESTRUCTIVE_SIZE
+#    define _FCXX_CONSTRUCTIVE_SIZE __GCC_CONSTRUCTIVE_SIZE
+#  elif defined(__s390__)
+#    define _FCXX_DESTRUCTIVE_SIZE 256
+#    define _FCXX_CONSTRUCTIVE_SIZE 256
+#  elif defined(__aarch64__) && !defined(__clang__)
+#    define _FCXX_DESTRUCTIVE_SIZE 256
+#    define _FCXX_CONSTRUCTIVE_SIZE 64
+#  elif defined(__powerpc64__) || (defined(__powerpc__) && !defined(__clang__))
+#    define _FCXX_DESTRUCTIVE_SIZE 128
+#    define _FCXX_CONSTRUCTIVE_SIZE 128
+#  elif defined(__mips__) || defined(__riscv) || defined(__sparc__) || defined(__powerpc__) || defined(__hexagon__) \
+      || (defined(__AVR__) && defined(__clang__))                                                                  \
+      || (!defined(__clang__)                                                                                      \
+          && (defined(__m68k__) || defined(__sh__) || defined(__alpha__) || defined(__hppa__) || defined(__arc__)))
+#    define _FCXX_DESTRUCTIVE_SIZE 32
+#    define _FCXX_CONSTRUCTIVE_SIZE 32
 #  else
-_FCXX_INLINE_VAR constexpr size_t hardware_destructive_interference_size = 64;
+#    define _FCXX_DESTRUCTIVE_SIZE 64
+#    define _FCXX_CONSTRUCTIVE_SIZE 64
 #  endif
-#  ifdef __GCC_CONSTRUCTIVE_SIZE
-_FCXX_INLINE_VAR constexpr size_t hardware_constructive_interference_size = __GCC_CONSTRUCTIVE_SIZE;
-#  else
-_FCXX_INLINE_VAR constexpr size_t hardware_constructive_interference_size = 64;
-#  endif
+_FCXX_INLINE_VAR constexpr size_t hardware_destructive_interference_size = _FCXX_DESTRUCTIVE_SIZE;
+_FCXX_INLINE_VAR constexpr size_t hardware_constructive_interference_size = _FCXX_CONSTRUCTIVE_SIZE;
 #endif
 
 } /* namespace std */

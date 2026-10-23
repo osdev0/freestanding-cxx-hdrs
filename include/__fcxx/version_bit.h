@@ -45,5 +45,9 @@
 #  define __cpp_lib_int_pow2 202002L
 #endif
 
-/* <stdbit.h> has none: __cpp_lib_stdbit_h is not one of the freestanding
- * macros, though the header is freestanding. */
+/* [version.syn] does not mark __cpp_lib_stdbit_h as freestanding, but all
+ * of <stdbit.h> is freestanding, so the macro is defined where the header,
+ * that of the C headers, which defines it too, is there. */
+#if !defined(__cpp_lib_stdbit_h) && defined(_FCXX_VERSION_ALL) && _FCXX_STD >= 2026
+#  define __cpp_lib_stdbit_h 202603L
+#endif

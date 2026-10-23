@@ -28,4 +28,12 @@
 #  define __cpp_lib_freestanding_feature_test_macros 202306L
 #endif
 
+/* The modules std and std.compat, where they can be built from the module
+ * units of modules/: from C++23 on, with GCC 15 and later where it compiles
+ * modules (-fmodules), and with Clang 17 and later. */
+#if _FCXX_STD >= 2023 && !defined(__cpp_lib_modules) \
+    && ((_FCXX_GCC >= 1500 && defined(__cpp_modules)) || _FCXX_CLANG >= 1700)
+#  define __cpp_lib_modules 202207L
+#endif
+
 #endif

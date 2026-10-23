@@ -26,9 +26,9 @@
  * The macros of the headers are not part of the module; the headers still
  * give them, such as those of <version>.
  *
- * It exports each name of tests/names.txt in the revisions it gives for it,
- * where the headers declare it with the compiler in use, which tests/run.sh
- * checks, and the operators the headers declare in those namespaces. The
+ * It exports each name of namespace std, and of the namespaces in it, in the
+ * revisions it is part of, where the headers declare it with the compiler in
+ * use, and the operators the headers declare in those namespaces. The
  * customization point objects are exported from the inline namespaces they
  * are in, as the hidden friends of the same names would conflict with them
  * otherwise. */
@@ -44,7 +44,6 @@ module;
 export module std;
 
 export namespace std {
-using std::abort;
 using std::add_const;
 using std::add_const_t;
 using std::add_cv;
@@ -71,8 +70,6 @@ using std::apply;
 using std::as_const;
 using std::assignable_from;
 using std::assume_aligned;
-using std::at_quick_exit;
-using std::atexit;
 using std::atomic;
 using std::atomic_bool;
 using std::atomic_char;
@@ -270,7 +267,6 @@ using std::exa;
 using std::exception;
 using std::exception_ptr;
 using std::exchange;
-using std::exit;
 using std::extent;
 using std::extent_v;
 using std::false_type;
@@ -598,7 +594,6 @@ using std::predicate;
 using std::prev;
 using std::projected;
 using std::ptrdiff_t;
-using std::quick_exit;
 using std::random_access_iterator;
 using std::random_access_iterator_tag;
 using std::rank;

@@ -19,14 +19,15 @@
 /* The products of the integers that the library makes at run time, with
  * _FCXX_MUL(a, b), which is (a) * (b) but for the workaround below.
  *
- * Workaround: GCC 15 and 16 (and possibly earlier), 64-bit MIPS release 6:
- * it makes a product of 128 bits, which it also makes of the operands of 64
- * bits to divide by a constant, of a dmul and a dmuhu of the same operands,
- * the dmul first, and lets the dmul write its half of the product over an
- * operand that the dmuhu then reads, where the operand is not used after the
- * product (as in x = x * y), so that the high half of the product is wrong.
- * The products of the integers of 8 bytes and more keep their operands alive
- * past them there, so that their registers cannot be written over. */
+ * Workaround: GCC 10 and later, up to 16 at least (9 is right), 64-bit MIPS
+ * release 6: it makes a product of 128 bits, which it also makes of the
+ * operands of 64 bits to divide by a constant, of a dmul and a dmuhu of the
+ * same operands, the dmul first, and lets the dmul write its half of the
+ * product over an operand that the dmuhu then reads, where the operand is not
+ * used after the product (as in x = x * y), so that the high half of the
+ * product is wrong. The products of the integers of 8 bytes and more keep
+ * their operands alive past them there, so that their registers cannot be
+ * written over. */
 
 #ifndef __FREESTANDING_CXX_HDRS_FCXX_INTEGER_PRODUCT_H
 #define __FREESTANDING_CXX_HDRS_FCXX_INTEGER_PRODUCT_H 1
@@ -35,7 +36,7 @@
 
 #include <__fcxx/config.h>
 
-#if _FCXX_GCC && defined(__mips64) && defined(__mips_isa_rev) && __mips_isa_rev >= 6 && _FCXX_STD >= 2020 \
+#if _FCXX_GCC >= 1000 && defined(__mips64) && defined(__mips_isa_rev) && __mips_isa_rev >= 6 && _FCXX_STD >= 2020 \
     && _FCXX_HAS_IS_CONSTANT_EVALUATED
 
 #  define _FCXX_MUL(a, b) ::std::__fcxx_mul(a, b)

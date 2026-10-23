@@ -157,6 +157,16 @@
 #  define __cpp_lib_three_way_comparison 201907L
 #endif
 
+/* [version.syn] does not mark __cpp_lib_type_order as freestanding, but
+ * type_order is in <compare>, all of which is freestanding, so the macro is
+ * defined where type_order is there. __cpp_lib_define_static, which it marks
+ * as freestanding, is not defined: its functions are those of <meta>, which
+ * is not freestanding. */
+#if !defined(__cpp_lib_type_order) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_COMPARE)) \
+    && _FCXX_STD >= 2026 && _FCXX_HEADER_COMPARE && _FCXX_HAS_BUILTIN(__builtin_type_order)
+#  define __cpp_lib_type_order 202506L
+#endif
+
 /* <type_traits> */
 
 #if defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_TYPE_TRAITS)

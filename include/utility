@@ -217,10 +217,11 @@ template <__fcxx_cw_fixed_value _Xp, class = typename decltype(_Xp)::type>
 struct constant_wrapper;
 
 /* constant_wrapper<X>, as the library names it.
- * Workaround: GCC 14 to 16, all targets: where X is dependent, GCC computes
- * the default of the second template argument from X before converting X to
- * the type of the parameter, and so fails (on typename int::type), so the
- * library gives that argument itself there. */
+ * Workaround: GCC 14 and later (12 and 13 too, which have no C++26), all
+ * targets: where X is dependent, GCC computes the default of the second
+ * template argument from X before converting X to the type of the parameter,
+ * and so fails (on typename int::type; its trunk of 2026-10-22 even crashes),
+ * so the library gives that argument itself there. */
 #  if _FCXX_GCC
 template <__fcxx_cw_fixed_value _Xp>
 using __fcxx_cw = constant_wrapper<_Xp, typename decltype(_Xp)::type>;

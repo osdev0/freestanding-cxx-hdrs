@@ -39,10 +39,62 @@
 #  define _FCXX_LIMITS_CONST const
 #endif
 
-#if defined(__i386__) || defined(__x86_64__)
+/* Whether the integer types trap, which a division by zero does where the
+ * hardware traps on it, as on x86, m68k, s390 and SPARC, where the routines
+ * that divide do, as on Alpha and HPPA, and on MIPS, where GCC and Clang check
+ * for it with a trap unless -mno-check-zero-division, which nothing tells. On
+ * the others the division gives a value: on Arm without a division
+ * instruction, the __aeabi_idiv0 of the runtime decides, and on LoongArch,
+ * GCC checks for it at -O0 and -Og alone, which no constant can follow. */
+#if defined(__i386__) || defined(__x86_64__) || defined(__m68k__) || defined(__s390__) || defined(__sparc__) \
+    || defined(__alpha__) || defined(__hppa__) || defined(__mips__)
 #  define _FCXX_LIMITS_INTEGER_TRAPS true
 #else
 #  define _FCXX_LIMITS_INTEGER_TRAPS false
+#endif
+
+/* Whether the floating-point arithmetic detects tininess before rounding,
+ * which IEEE 754 leaves to each implementation. That of AArch64, PowerPC and
+ * s390 does, as do Arm with the VFP for the types the VFP has, the 80-bit
+ * long double of m68k, and the quadruple precision of SPARC, in software. The
+ * others detect it after rounding: x86, RISC-V, MIPS, LoongArch, HPPA, SH, and
+ * the float and double of m68k and SPARC. Without flags, as with Arm without
+ * the VFP and the double-double long double of PowerPC, nothing is detected.
+ * The half-precision types, computed in float, are as float. */
+#if defined(__aarch64__) || defined(__s390__)
+#  define _FCXX_LIMITS_TINY_FLOAT true
+#  define _FCXX_LIMITS_TINY_DOUBLE true
+#  define _FCXX_LIMITS_TINY_LONG_DOUBLE true
+#  define _FCXX_LIMITS_TINY_FLOAT128 true
+#elif defined(__powerpc__) && !defined(_SOFT_FLOAT) && !defined(__NO_FPRS__)
+#  define _FCXX_LIMITS_TINY_FLOAT true
+#  define _FCXX_LIMITS_TINY_DOUBLE true
+#  ifdef __LONG_DOUBLE_IBM128__
+#    define _FCXX_LIMITS_TINY_LONG_DOUBLE false
+#  else
+#    define _FCXX_LIMITS_TINY_LONG_DOUBLE true
+#  endif
+#  define _FCXX_LIMITS_TINY_FLOAT128 true
+#elif defined(__arm__) && defined(__ARM_FP)
+#  define _FCXX_LIMITS_TINY_FLOAT ((__ARM_FP & 4) != 0)
+#  define _FCXX_LIMITS_TINY_DOUBLE ((__ARM_FP & 8) != 0)
+#  define _FCXX_LIMITS_TINY_LONG_DOUBLE ((__ARM_FP & 8) != 0)
+#  define _FCXX_LIMITS_TINY_FLOAT128 false
+#elif defined(__m68k__) && __LDBL_MANT_DIG__ == 64
+#  define _FCXX_LIMITS_TINY_FLOAT false
+#  define _FCXX_LIMITS_TINY_DOUBLE false
+#  define _FCXX_LIMITS_TINY_LONG_DOUBLE true
+#  define _FCXX_LIMITS_TINY_FLOAT128 false
+#elif defined(__sparc__)
+#  define _FCXX_LIMITS_TINY_FLOAT false
+#  define _FCXX_LIMITS_TINY_DOUBLE false
+#  define _FCXX_LIMITS_TINY_LONG_DOUBLE (__LDBL_MANT_DIG__ == 113)
+#  define _FCXX_LIMITS_TINY_FLOAT128 true
+#else
+#  define _FCXX_LIMITS_TINY_FLOAT false
+#  define _FCXX_LIMITS_TINY_DOUBLE false
+#  define _FCXX_LIMITS_TINY_LONG_DOUBLE false
+#  define _FCXX_LIMITS_TINY_FLOAT128 false
 #endif
 
 namespace std {
@@ -304,7 +356,7 @@ struct __float_limits {
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = false;
     static _FCXX_LIMITS_CONST bool traps = false;
-    static _FCXX_LIMITS_CONST bool tinyness_before = false;
+    static _FCXX_LIMITS_CONST bool tinyness_before = _FCXX_LIMITS_TINY_FLOAT;
     static _FCXX_LIMITS_CONST float_round_style round_style = round_to_nearest;
     static _FCXX_LIMITS_CONST int digits = __FLT_MANT_DIG__;
     static _FCXX_LIMITS_CONST int digits10 = __FLT_DIG__;
@@ -374,7 +426,7 @@ struct __double_limits {
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = false;
     static _FCXX_LIMITS_CONST bool traps = false;
-    static _FCXX_LIMITS_CONST bool tinyness_before = false;
+    static _FCXX_LIMITS_CONST bool tinyness_before = _FCXX_LIMITS_TINY_DOUBLE;
     static _FCXX_LIMITS_CONST float_round_style round_style = round_to_nearest;
     static _FCXX_LIMITS_CONST int digits = __DBL_MANT_DIG__;
     static _FCXX_LIMITS_CONST int digits10 = __DBL_DIG__;
@@ -470,7 +522,7 @@ struct __long_double_limits {
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = false;
     static _FCXX_LIMITS_CONST bool traps = false;
-    static _FCXX_LIMITS_CONST bool tinyness_before = false;
+    static _FCXX_LIMITS_CONST bool tinyness_before = _FCXX_LIMITS_TINY_LONG_DOUBLE;
     static _FCXX_LIMITS_CONST float_round_style round_style = round_to_nearest;
     static _FCXX_LIMITS_CONST int digits = __LDBL_MANT_DIG__;
     static _FCXX_LIMITS_CONST int digits10 = __LDBL_DIG__;
@@ -559,7 +611,7 @@ struct __float16_limits {
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = false;
     static _FCXX_LIMITS_CONST bool traps = false;
-    static _FCXX_LIMITS_CONST bool tinyness_before = false;
+    static _FCXX_LIMITS_CONST bool tinyness_before = _FCXX_LIMITS_TINY_FLOAT;
     static _FCXX_LIMITS_CONST float_round_style round_style = round_to_nearest;
     static _FCXX_LIMITS_CONST int digits = __FLT16_MANT_DIG__;
     static _FCXX_LIMITS_CONST int digits10 = __FLT16_DIG__;
@@ -631,7 +683,7 @@ struct __float32_limits {
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = false;
     static _FCXX_LIMITS_CONST bool traps = false;
-    static _FCXX_LIMITS_CONST bool tinyness_before = false;
+    static _FCXX_LIMITS_CONST bool tinyness_before = _FCXX_LIMITS_TINY_FLOAT;
     static _FCXX_LIMITS_CONST float_round_style round_style = round_to_nearest;
     static _FCXX_LIMITS_CONST int digits = __FLT32_MANT_DIG__;
     static _FCXX_LIMITS_CONST int digits10 = __FLT32_DIG__;
@@ -703,7 +755,7 @@ struct __float64_limits {
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = false;
     static _FCXX_LIMITS_CONST bool traps = false;
-    static _FCXX_LIMITS_CONST bool tinyness_before = false;
+    static _FCXX_LIMITS_CONST bool tinyness_before = _FCXX_LIMITS_TINY_DOUBLE;
     static _FCXX_LIMITS_CONST float_round_style round_style = round_to_nearest;
     static _FCXX_LIMITS_CONST int digits = __FLT64_MANT_DIG__;
     static _FCXX_LIMITS_CONST int digits10 = __FLT64_DIG__;
@@ -775,7 +827,7 @@ struct __float128_limits {
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = false;
     static _FCXX_LIMITS_CONST bool traps = false;
-    static _FCXX_LIMITS_CONST bool tinyness_before = false;
+    static _FCXX_LIMITS_CONST bool tinyness_before = _FCXX_LIMITS_TINY_FLOAT128;
     static _FCXX_LIMITS_CONST float_round_style round_style = round_to_nearest;
     static _FCXX_LIMITS_CONST int digits = __FLT128_MANT_DIG__;
     static _FCXX_LIMITS_CONST int digits10 = __FLT128_DIG__;
@@ -847,7 +899,7 @@ struct __bfloat16_limits {
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = false;
     static _FCXX_LIMITS_CONST bool traps = false;
-    static _FCXX_LIMITS_CONST bool tinyness_before = false;
+    static _FCXX_LIMITS_CONST bool tinyness_before = _FCXX_LIMITS_TINY_FLOAT;
     static _FCXX_LIMITS_CONST float_round_style round_style = round_to_nearest;
     static _FCXX_LIMITS_CONST int digits = __BFLT16_MANT_DIG__;
     static _FCXX_LIMITS_CONST int digits10 = __BFLT16_DIG__;

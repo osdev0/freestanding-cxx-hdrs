@@ -190,12 +190,12 @@ constexpr bool is_gteq(partial_ordering __cmp) noexcept { return __cmp >= 0; }
  * Workaround: GCC 10 and 11, all targets: an ordered comparison of a NaN is
  * no constant expression (as it raises the invalid exception), which makes
  * <=> of a NaN none either, where == and != are.
- * Workaround: GCC 14 to 16 (the latest), all targets, from -O2 on: of two
- * evaluations of <=> of the same floating-point values in a function, as
- * after inlining, the one that reuses the comparisons of the other is
- * equivalent where the values are unordered (and even greater at -O3). The
- * same comparisons in the order of ==, <, > are too, but those that test for
- * the NaNs first are right. */
+ * Workaround: GCC 14 to 16 (17, its trunk of 2026-10-22, is right), all
+ * targets, from -O2 on: of two evaluations of <=> of the same floating-point
+ * values in a function, as after inlining, the one that reuses the
+ * comparisons of the other is equivalent where the values are unordered (and
+ * even greater at -O3). The same comparisons in the order of ==, <, > are
+ * too, but those that test for the NaNs first are right. */
 template <class _Tp, class _Up>
 struct __fcxx_fp_three_way_operands
     : bool_constant<is_arithmetic<_Tp>::value && is_arithmetic<_Up>::value
@@ -204,7 +204,7 @@ struct __fcxx_fp_three_way_operands
 template <class _Tp, class _Up>
 constexpr auto __fcxx_three_way(const _Tp& __t, const _Up& __u) noexcept(noexcept(__t <=> __u))
     -> decltype(__t <=> __u) {
-#if _FCXX_GCC && (_FCXX_GCC < 1200 || _FCXX_GCC >= 1400)
+#if _FCXX_GCC && (_FCXX_GCC < 1200 || (_FCXX_GCC >= 1400 && _FCXX_GCC < 1700))
     if constexpr (__fcxx_fp_three_way_operands<_Tp, _Up>::value) {
         typedef typename common_type<_Tp, _Up>::type _Cp;
         const _Cp __a = __t;

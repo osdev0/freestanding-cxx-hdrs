@@ -22,6 +22,10 @@
 
 #include <__fcxx/config.h>
 
+#if _FCXX_STD < 2023
+#  error "<cstdlib> requires C++23 or later, as the functions that end the program, all it has before, are left out"
+#endif
+
 #define _FCXX_VERSION_CSTDLIB
 #include <__fcxx/version.h>
 #undef _FCXX_VERSION_CSTDLIB
@@ -29,9 +33,11 @@
 /* The header is freestanding for the functions of start and termination
  * alone before C++23, which adds _Exit, size_t and NULL, and C++26 all the
  * rest of it but for the functions that need a hosted environment. Of that,
- * EXIT_FAILURE and EXIT_SUCCESS are left out: their values are those of the
- * environment the program runs in, which the library cannot know, as it
- * cannot know the error numbers of <cerrno>. */
+ * what only a hosted environment has a use for is left out, which leaves
+ * nothing before C++23: the functions of start and termination, as there is
+ * no environment for the program to return to, and EXIT_FAILURE and
+ * EXIT_SUCCESS, whose values are those of that environment, which the
+ * library cannot know, as it cannot know the error numbers of <cerrno>. */
 
 #if _FCXX_STD >= 2023
 #  undef NULL
@@ -43,21 +49,6 @@
 #endif
 
 namespace std {
-
-/* Start and termination. These are provided by the environment, under
- * their C names. They are declared here with C++ language linkage and
- * those names as their assembler names, so that the declarations cannot
- * conflict with whatever declarations of the C functions a program has. */
-_FCXX_NORETURN void abort() _FCXX_NOEXCEPT11 _FCXX_ASM_NAME(abort);
-int atexit(void (*__func)()) _FCXX_NOEXCEPT11 _FCXX_ASM_NAME(atexit);
-_FCXX_NORETURN void exit(int __status) _FCXX_ASM_NAME(exit);
-#if _FCXX_STD >= 2011
-int at_quick_exit(void (*__func)()) noexcept _FCXX_ASM_NAME(at_quick_exit);
-[[noreturn]] void quick_exit(int __status) noexcept _FCXX_ASM_NAME(quick_exit);
-#endif
-#if _FCXX_STD >= 2023
-[[noreturn]] void _Exit(int __status) noexcept _FCXX_ASM_NAME(_Exit);
-#endif
 
 #if _FCXX_STD >= 2026
 

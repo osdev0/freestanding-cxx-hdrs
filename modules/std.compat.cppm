@@ -68,11 +68,6 @@ using ::uint_least8_t;
 using ::uintmax_t;
 using ::uintptr_t;
 using ::va_list;
-using std::abort;
-using std::at_quick_exit;
-using std::atexit;
-using std::exit;
-using std::quick_exit;
 #if _FCXX_STD >= 2026
 using std::abs;
 using std::bsearch;

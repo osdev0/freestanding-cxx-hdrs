@@ -323,8 +323,7 @@
 #endif
 
 /* Non-type template parameters of class types. Clang has had them since
- * version 12 without ever raising its feature-test macro
- * (tests/reproducers/clang-class-nttp-macro.cpp). */
+ * version 12 without ever raising its feature-test macro. */
 #if _FCXX_STD >= 2020 \
     && ((defined(__cpp_nontype_template_args) && __cpp_nontype_template_args >= 201911L) || _FCXX_CLANG >= 1200)
 #  define _FCXX_HAS_CLASS_NTTP 1
@@ -497,15 +496,6 @@
 /* The largest alignment of any type of the target. */
 #define _FCXX_BIGGEST_ALIGNMENT __BIGGEST_ALIGNMENT__
 
-/* Stringification, for the assembler names of C library functions. */
-#define _FCXX_STRINGIFY_(x) #x
-#define _FCXX_STRINGIFY(x) _FCXX_STRINGIFY_(x)
-#ifdef __USER_LABEL_PREFIX__
-#  define _FCXX_ASM_NAME(name) __asm__(_FCXX_STRINGIFY(__USER_LABEL_PREFIX__) #name)
-#else
-#  define _FCXX_ASM_NAME(name) __asm__(#name)
-#endif
-
 /* Throwing an exception, which calls std::terminate() when exceptions are
  * disabled. Variadic macros are an extension in C++98, where they are not
  * used. */
@@ -521,9 +511,5 @@
 
 #endif
 
-/* The declarations of namespace std that every header needs, which <stdbit.h>
- * alone leaves out, as a C header, which is to include no other header of the
- * library. */
-#ifndef _FCXX_NO_STD_DECLARATIONS
-#  include <__fcxx/std_decls.h>
-#endif
+/* The declarations of namespace std that every header needs. */
+#include <__fcxx/std_decls.h>
