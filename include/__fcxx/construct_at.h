@@ -33,14 +33,10 @@
 namespace std {
 
 /* The address of an object, as a pointer to void, which is not taken of a
- * const object from C++26 on. */
+ * const object, as LWG 3870 has it. */
 template <class _Tp>
 constexpr void* __fcxx_voidify(_Tp& __obj) noexcept {
-#if _FCXX_STD >= 2026
     return std::addressof(__obj);
-#else
-    return const_cast<void*>(static_cast<const volatile void*>(std::addressof(__obj)));
-#endif
 }
 
 template <class _Tp, class... _Args>

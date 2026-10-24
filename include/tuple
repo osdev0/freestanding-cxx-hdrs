@@ -1031,11 +1031,12 @@ constexpr decltype(auto) apply(_Fp&& __f, _Tuple&& __t) noexcept(
 }
 #endif
 
-/* Whether make_from_tuple would bind a reference to a temporary. */
+/* Whether make_from_tuple would bind a reference to a temporary, which it
+ * may not from C++23 on, where the compiler can tell. */
 template <class _Tp, class _Tuple, bool = (tuple_size<__fcxx_remove_ref_t<_Tuple> >::value == 1)>
 struct __fcxx_make_from_tuple_dangles : false_type {};
 
-#if _FCXX_STD >= 2026 && _FCXX_HAS_BUILTIN(__reference_constructs_from_temporary)
+#if _FCXX_HAS_DANGLING_CHECK
 template <class _Tp, class _Tuple>
 struct __fcxx_make_from_tuple_dangles<_Tp, _Tuple, true>
     : __fcxx_bool_constant<__reference_constructs_from_temporary(

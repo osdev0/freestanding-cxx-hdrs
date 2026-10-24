@@ -107,7 +107,7 @@ enum float_round_style {
     round_toward_neg_infinity = 3
 };
 
-enum _FCXX_DEPRECATED_CXX23("removed from the standard") float_denorm_style {
+enum _FCXX_DEPRECATED_CXX23("deprecated in C++23") float_denorm_style {
     denorm_indeterminate = -1,
     denorm_absent = 0,
     denorm_present = 1
@@ -124,9 +124,9 @@ public:
     static _FCXX_LIMITS_CONST bool has_infinity = false;
     static _FCXX_LIMITS_CONST bool has_quiet_NaN = false;
     static _FCXX_LIMITS_CONST bool has_signaling_NaN = false;
-    _FCXX_DEPRECATED_CXX23("removed from the standard")
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23")
     static _FCXX_LIMITS_CONST float_denorm_style has_denorm = denorm_absent;
-    _FCXX_DEPRECATED_CXX23("removed from the standard") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
     static _FCXX_LIMITS_CONST bool is_iec559 = false;
     static _FCXX_LIMITS_CONST bool is_bounded = false;
     static _FCXX_LIMITS_CONST bool is_modulo = false;
@@ -196,9 +196,9 @@ struct __integer_limits {
     static _FCXX_LIMITS_CONST bool has_infinity = false;
     static _FCXX_LIMITS_CONST bool has_quiet_NaN = false;
     static _FCXX_LIMITS_CONST bool has_signaling_NaN = false;
-    _FCXX_DEPRECATED_CXX23("removed from the standard")
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23")
     static _FCXX_LIMITS_CONST float_denorm_style has_denorm = denorm_absent;
-    _FCXX_DEPRECATED_CXX23("removed from the standard") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
     static _FCXX_LIMITS_CONST bool is_iec559 = false;
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = !is_signed;
@@ -268,9 +268,9 @@ struct __bool_limits {
     static _FCXX_LIMITS_CONST bool has_infinity = false;
     static _FCXX_LIMITS_CONST bool has_quiet_NaN = false;
     static _FCXX_LIMITS_CONST bool has_signaling_NaN = false;
-    _FCXX_DEPRECATED_CXX23("removed from the standard")
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23")
     static _FCXX_LIMITS_CONST float_denorm_style has_denorm = denorm_absent;
-    _FCXX_DEPRECATED_CXX23("removed from the standard") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
     static _FCXX_LIMITS_CONST bool is_iec559 = false;
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = false;
@@ -349,9 +349,9 @@ struct __float_limits {
     static _FCXX_LIMITS_CONST bool has_infinity = __FLT_HAS_INFINITY__;
     static _FCXX_LIMITS_CONST bool has_quiet_NaN = __FLT_HAS_QUIET_NAN__;
     static _FCXX_LIMITS_CONST bool has_signaling_NaN = has_quiet_NaN;
-    _FCXX_DEPRECATED_CXX23("removed from the standard")
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23")
     static _FCXX_LIMITS_CONST float_denorm_style has_denorm = __FLT_HAS_DENORM__ ? denorm_present : denorm_absent;
-    _FCXX_DEPRECATED_CXX23("removed from the standard") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
     static _FCXX_LIMITS_CONST bool is_iec559 = has_infinity && has_quiet_NaN && __FLT_HAS_DENORM__;
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = false;
@@ -419,9 +419,9 @@ struct __double_limits {
     static _FCXX_LIMITS_CONST bool has_infinity = __DBL_HAS_INFINITY__;
     static _FCXX_LIMITS_CONST bool has_quiet_NaN = __DBL_HAS_QUIET_NAN__;
     static _FCXX_LIMITS_CONST bool has_signaling_NaN = has_quiet_NaN;
-    _FCXX_DEPRECATED_CXX23("removed from the standard")
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23")
     static _FCXX_LIMITS_CONST float_denorm_style has_denorm = __DBL_HAS_DENORM__ ? denorm_present : denorm_absent;
-    _FCXX_DEPRECATED_CXX23("removed from the standard") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
     static _FCXX_LIMITS_CONST bool is_iec559 = has_infinity && has_quiet_NaN && __DBL_HAS_DENORM__;
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = false;
@@ -515,9 +515,9 @@ struct __long_double_limits {
     static _FCXX_LIMITS_CONST bool has_infinity = __LDBL_HAS_INFINITY__;
     static _FCXX_LIMITS_CONST bool has_quiet_NaN = __LDBL_HAS_QUIET_NAN__;
     static _FCXX_LIMITS_CONST bool has_signaling_NaN = has_quiet_NaN;
-    _FCXX_DEPRECATED_CXX23("removed from the standard")
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23")
     static _FCXX_LIMITS_CONST float_denorm_style has_denorm = __LDBL_HAS_DENORM__ ? denorm_present : denorm_absent;
-    _FCXX_DEPRECATED_CXX23("removed from the standard") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
     static _FCXX_LIMITS_CONST bool is_iec559 = has_infinity && has_quiet_NaN && __LDBL_HAS_DENORM__;
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = false;
@@ -604,9 +604,9 @@ struct __float16_limits {
     static _FCXX_LIMITS_CONST bool has_infinity = __FLT16_HAS_INFINITY__;
     static _FCXX_LIMITS_CONST bool has_quiet_NaN = __FLT16_HAS_QUIET_NAN__;
     static _FCXX_LIMITS_CONST bool has_signaling_NaN = has_quiet_NaN;
-    _FCXX_DEPRECATED_CXX23("removed from the standard")
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23")
     static _FCXX_LIMITS_CONST float_denorm_style has_denorm = __FLT16_HAS_DENORM__ ? denorm_present : denorm_absent;
-    _FCXX_DEPRECATED_CXX23("removed from the standard") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
     static _FCXX_LIMITS_CONST bool is_iec559 = has_infinity && has_quiet_NaN && __FLT16_HAS_DENORM__;
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = false;
@@ -676,9 +676,9 @@ struct __float32_limits {
     static _FCXX_LIMITS_CONST bool has_infinity = __FLT32_HAS_INFINITY__;
     static _FCXX_LIMITS_CONST bool has_quiet_NaN = __FLT32_HAS_QUIET_NAN__;
     static _FCXX_LIMITS_CONST bool has_signaling_NaN = has_quiet_NaN;
-    _FCXX_DEPRECATED_CXX23("removed from the standard")
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23")
     static _FCXX_LIMITS_CONST float_denorm_style has_denorm = __FLT32_HAS_DENORM__ ? denorm_present : denorm_absent;
-    _FCXX_DEPRECATED_CXX23("removed from the standard") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
     static _FCXX_LIMITS_CONST bool is_iec559 = has_infinity && has_quiet_NaN && __FLT32_HAS_DENORM__;
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = false;
@@ -748,9 +748,9 @@ struct __float64_limits {
     static _FCXX_LIMITS_CONST bool has_infinity = __FLT64_HAS_INFINITY__;
     static _FCXX_LIMITS_CONST bool has_quiet_NaN = __FLT64_HAS_QUIET_NAN__;
     static _FCXX_LIMITS_CONST bool has_signaling_NaN = has_quiet_NaN;
-    _FCXX_DEPRECATED_CXX23("removed from the standard")
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23")
     static _FCXX_LIMITS_CONST float_denorm_style has_denorm = __FLT64_HAS_DENORM__ ? denorm_present : denorm_absent;
-    _FCXX_DEPRECATED_CXX23("removed from the standard") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
     static _FCXX_LIMITS_CONST bool is_iec559 = has_infinity && has_quiet_NaN && __FLT64_HAS_DENORM__;
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = false;
@@ -820,9 +820,9 @@ struct __float128_limits {
     static _FCXX_LIMITS_CONST bool has_infinity = __FLT128_HAS_INFINITY__;
     static _FCXX_LIMITS_CONST bool has_quiet_NaN = __FLT128_HAS_QUIET_NAN__;
     static _FCXX_LIMITS_CONST bool has_signaling_NaN = has_quiet_NaN;
-    _FCXX_DEPRECATED_CXX23("removed from the standard")
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23")
     static _FCXX_LIMITS_CONST float_denorm_style has_denorm = __FLT128_HAS_DENORM__ ? denorm_present : denorm_absent;
-    _FCXX_DEPRECATED_CXX23("removed from the standard") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
     static _FCXX_LIMITS_CONST bool is_iec559 = has_infinity && has_quiet_NaN && __FLT128_HAS_DENORM__;
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = false;
@@ -892,9 +892,9 @@ struct __bfloat16_limits {
     static _FCXX_LIMITS_CONST bool has_infinity = __BFLT16_HAS_INFINITY__;
     static _FCXX_LIMITS_CONST bool has_quiet_NaN = __BFLT16_HAS_QUIET_NAN__;
     static _FCXX_LIMITS_CONST bool has_signaling_NaN = has_quiet_NaN;
-    _FCXX_DEPRECATED_CXX23("removed from the standard")
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23")
     static _FCXX_LIMITS_CONST float_denorm_style has_denorm = __BFLT16_HAS_DENORM__ ? denorm_present : denorm_absent;
-    _FCXX_DEPRECATED_CXX23("removed from the standard") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
+    _FCXX_DEPRECATED_CXX23("deprecated in C++23") static _FCXX_LIMITS_CONST bool has_denorm_loss = false;
     static _FCXX_LIMITS_CONST bool is_iec559 = has_infinity && has_quiet_NaN && __BFLT16_HAS_DENORM__;
     static _FCXX_LIMITS_CONST bool is_bounded = true;
     static _FCXX_LIMITS_CONST bool is_modulo = false;

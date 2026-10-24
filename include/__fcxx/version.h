@@ -81,6 +81,14 @@
 #  define __cpp_lib_constexpr_new 202406L
 #endif
 
+/* 0, as the headers have no default versions of the replaceable allocation
+ * functions, which the program provides, that could meet the requirements of
+ * a hosted implementation. */
+#if !defined(__cpp_lib_freestanding_operator_new) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_NEW)) \
+    && _FCXX_STD >= 2026
+#  define __cpp_lib_freestanding_operator_new 0
+#endif
+
 /* <exception> */
 
 #if !defined(__cpp_lib_uncaught_exceptions) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_EXCEPTION)) \
