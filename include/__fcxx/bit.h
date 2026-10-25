@@ -15,8 +15,9 @@
  */
 
 
-/* The bit manipulation of the unsigned integer types, which <bit> is made
- * of. */
+/* The bit manipulation of the unsigned integer types, which <bit> and the
+ * functions of <stdbit.h> in C++ (c_stdbit.h) are made of. It includes no
+ * public header, as <stdbit.h> may include none. */
 
 #ifndef __FREESTANDING_CXX_HDRS_FCXX_BIT_H
 #define __FREESTANDING_CXX_HDRS_FCXX_BIT_H 1
@@ -24,7 +25,6 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
-#include <type_traits>
 
 namespace std {
 
@@ -55,9 +55,14 @@ struct __fcxx_bit_digits {
 
 /* The type to compute in for an unsigned integer type, which is unsigned int
  * for the types that would otherwise be promoted to int. */
-template <class _Tp>
+template <class _Tp, bool = (sizeof(_Tp) < sizeof(unsigned int))>
 struct __fcxx_bit_uint {
-    typedef typename conditional<(sizeof(_Tp) < sizeof(unsigned int)), unsigned int, _Tp>::type type;
+    typedef _Tp type;
+};
+
+template <class _Tp>
+struct __fcxx_bit_uint<_Tp, true> {
+    typedef unsigned int type;
 };
 
 /* The builtins, for unsigned int, unsigned long and unsigned long long, which

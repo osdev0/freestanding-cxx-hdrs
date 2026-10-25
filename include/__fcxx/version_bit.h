@@ -47,7 +47,9 @@
 
 /* [version.syn] does not mark __cpp_lib_stdbit_h as freestanding, but all
  * of <stdbit.h> is freestanding, so the macro is defined where the header,
- * that of the C headers, which defines it too, is there. */
-#if !defined(__cpp_lib_stdbit_h) && defined(_FCXX_VERSION_ALL) && _FCXX_STD >= 2026
+ * that of the C headers, whose part of C++ (c_stdbit.h) defines it too, is
+ * there. */
+#if !defined(__cpp_lib_stdbit_h) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_STDBIT_H)) \
+    && _FCXX_STD >= 2026
 #  define __cpp_lib_stdbit_h 202603L
 #endif

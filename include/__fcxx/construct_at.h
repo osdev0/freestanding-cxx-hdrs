@@ -47,26 +47,19 @@ struct __fcxx_can_construct_at {
     template <class _Up>
     static false_type __test(...);
 
-    static constexpr bool value = decltype(__test<_Tp>(0))::value
-#if _FCXX_STD >= 2026
-                                  && !is_unbounded_array<_Tp>::value
-#endif
-        ;
+    static constexpr bool value = decltype(__test<_Tp>(0))::value && !is_unbounded_array<_Tp>::value;
 };
 
-/* [specialized.construct], construct_at */
+/* [specialized.construct], construct_at, which constructs arrays too, as
+ * LWG 3436 has it */
 template <class _Tp, class... _Args, __fcxx_enable_if_t<__fcxx_can_construct_at<_Tp, _Args...>::value, int> = 0>
 constexpr _Tp* construct_at(_Tp* __location, _Args&&... __args) {
-#if _FCXX_STD >= 2026
     if constexpr (is_array<_Tp>::value) {
         static_assert(sizeof...(_Args) == 0, "std::construct_at of an array with arguments");
         return ::new (std::__fcxx_voidify(*__location)) _Tp[1]();
     } else {
         return ::new (std::__fcxx_voidify(*__location)) _Tp(std::forward<_Args>(__args)...);
     }
-#else
-    return ::new (std::__fcxx_voidify(*__location)) _Tp(std::forward<_Args>(__args)...);
-#endif
 }
 
 /* [specialized.destroy], destroy_at, which destroys the elements of arrays

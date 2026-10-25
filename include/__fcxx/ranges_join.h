@@ -520,16 +520,18 @@ public:
     friend constexpr bool operator==(const __fcxx_either& __x, const __fcxx_either& __y)
         requires equality_comparable<_Ap> && equality_comparable<_Bp>
     {
-        if (__x.__index_ != __y.__index_) {
-            return false;
-        }
+        /* Workaround: GCC 11 and 12, all targets: where it cannot tell what
+         * a copy of one holds, it warns in the code of the caller that the
+         * object of the copy may be used uninitialized (-Wmaybe-uninitialized)
+         * unless the index of each one is checked before its object is read,
+         * so both are. */
         if (__x.__index_ == 0) {
-            return static_cast<bool>(__x.__u_.__a_ == __y.__u_.__a_);
+            return __y.__index_ == 0 && static_cast<bool>(__x.__u_.__a_ == __y.__u_.__a_);
         }
         if (__x.__index_ == 1) {
-            return static_cast<bool>(__x.__u_.__b_ == __y.__u_.__b_);
+            return __y.__index_ == 1 && static_cast<bool>(__x.__u_.__b_ == __y.__u_.__b_);
         }
-        return true;
+        return __y.__index_ == __none;
     }
 };
 
@@ -1623,11 +1625,6 @@ class concat_view : public view_interface<concat_view<_Views...> > {
 
         _Parent* __parent_ = nullptr;
         __base_iter __it_;
-
-        template <size_t _Ip>
-        constexpr decltype(auto) __view() const {
-            return std::get<_Ip>(__parent_->__views_);
-        }
 
         template <size_t _Ip>
         constexpr void __satisfy() {

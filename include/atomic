@@ -1159,42 +1159,6 @@ _FCXX_ALWAYS_INLINE _FCXX_ATOMIC_CE _Tp __fcxx_atomic_fetch_min(_Up* __p, _Tp __
         return __fcxx_atomic_fetch_op(__p, __v, __m, __fcxx_atomic_op_min());
     }
 }
-
-/* Whether two types are similar, as for the qualification conversions. */
-template <class _Tp>
-struct __fcxx_atomic_unqualified;
-
-template <class _Tp>
-struct __fcxx_atomic_unqualified_impl {
-    typedef _Tp type;
-};
-
-template <class _Tp>
-struct __fcxx_atomic_unqualified_impl<_Tp*> {
-    typedef typename __fcxx_atomic_unqualified<_Tp>::type* type;
-};
-
-template <class _Tp, class _Cp>
-struct __fcxx_atomic_unqualified_impl<_Tp _Cp::*> {
-    typedef typename __fcxx_atomic_unqualified<_Tp>::type _Cp::* type;
-};
-
-template <class _Tp>
-struct __fcxx_atomic_unqualified_impl<_Tp[]> {
-    typedef typename __fcxx_atomic_unqualified<_Tp>::type type[];
-};
-
-template <class _Tp, size_t _Np>
-struct __fcxx_atomic_unqualified_impl<_Tp[_Np]> {
-    typedef typename __fcxx_atomic_unqualified<_Tp>::type type[_Np];
-};
-
-template <class _Tp>
-struct __fcxx_atomic_unqualified : __fcxx_atomic_unqualified_impl<__fcxx_remove_cv_t<_Tp> > {};
-
-template <class _Tp, class _Up>
-struct __fcxx_atomic_similar
-    : is_same<typename __fcxx_atomic_unqualified<_Tp>::type, typename __fcxx_atomic_unqualified<_Up>::type> {};
 #endif
 
 /* [atomics.types.generic], class template atomic
@@ -1672,12 +1636,15 @@ struct __fcxx_atomic_ref_base {
         __fcxx_atomic_store<value_type>(__ptr, __d, __m);
     }
 
+    /* Read as values of the type without const, as the builtins write them:
+     * before C++26, the value type of atomic_ref<const T> is const T, and
+     * C++20 lets it read the objects it refers to too. */
     _FCXX_ATOMIC_CE value_type load(memory_order __m = memory_order_seq_cst) const noexcept {
-        return __fcxx_atomic_load<value_type>(__ptr, __m);
+        return __fcxx_atomic_load<typename remove_const<value_type>::type>(__ptr, __m);
     }
 
     _FCXX_ATOMIC_CE operator value_type() const noexcept {
-        return __fcxx_atomic_load<value_type>(__ptr, memory_order_seq_cst);
+        return __fcxx_atomic_load<typename remove_const<value_type>::type>(__ptr, memory_order_seq_cst);
     }
 
     _FCXX_ATOMIC_CE value_type exchange(value_type __d, memory_order __m = memory_order_seq_cst) const noexcept
@@ -1706,7 +1673,7 @@ struct __fcxx_atomic_ref_base {
     }
 
     _FCXX_ATOMIC_CE void wait(value_type __old, memory_order __m = memory_order_seq_cst) const noexcept {
-        __fcxx_atomic_wait<value_type>(__ptr, __old, __m);
+        __fcxx_atomic_wait<typename remove_const<value_type>::type>(__ptr, __old, __m);
     }
     _FCXX_ATOMIC_CE void notify_one() const noexcept _FCXX_ATOMIC_REF_MUTABLE {}
     _FCXX_ATOMIC_CE void notify_all() const noexcept _FCXX_ATOMIC_REF_MUTABLE {}
@@ -1913,6 +1880,42 @@ struct __fcxx_atomic_ref_select {
     typedef __fcxx_conditional_t<__integral, __fcxx_atomic_ref_integral<_Tp>, __other_than_integral> type;
 };
 
+/* Whether two types are similar, as for the qualification conversions. */
+template <class _Tp>
+struct __fcxx_atomic_unqualified;
+
+template <class _Tp>
+struct __fcxx_atomic_unqualified_impl {
+    typedef _Tp type;
+};
+
+template <class _Tp>
+struct __fcxx_atomic_unqualified_impl<_Tp*> {
+    typedef typename __fcxx_atomic_unqualified<_Tp>::type* type;
+};
+
+template <class _Tp, class _Cp>
+struct __fcxx_atomic_unqualified_impl<_Tp _Cp::*> {
+    typedef typename __fcxx_atomic_unqualified<_Tp>::type _Cp::* type;
+};
+
+template <class _Tp>
+struct __fcxx_atomic_unqualified_impl<_Tp[]> {
+    typedef typename __fcxx_atomic_unqualified<_Tp>::type type[];
+};
+
+template <class _Tp, size_t _Np>
+struct __fcxx_atomic_unqualified_impl<_Tp[_Np]> {
+    typedef typename __fcxx_atomic_unqualified<_Tp>::type type[_Np];
+};
+
+template <class _Tp>
+struct __fcxx_atomic_unqualified : __fcxx_atomic_unqualified_impl<__fcxx_remove_cv_t<_Tp> > {};
+
+template <class _Tp, class _Up>
+struct __fcxx_atomic_similar
+    : is_same<typename __fcxx_atomic_unqualified<_Tp>::type, typename __fcxx_atomic_unqualified<_Up>::type> {};
+
 template <class _Tp>
 struct atomic_ref : __fcxx_atomic_ref_select<_Tp>::type {
 private:
@@ -1926,15 +1929,14 @@ private:
 
 public:
     _FCXX_ATOMIC_CE explicit atomic_ref(_Tp& __obj) : __base(std::__fcxx_addressof(__obj)) {}
-#  if _FCXX_STD >= 2026
+    /* Not from temporaries, as LWG 4472 has it. */
     explicit atomic_ref(_Tp&&) = delete;
-#  endif
     atomic_ref(const atomic_ref&) noexcept = default;
-#  if _FCXX_STD >= 2026
-    template <class _Up>
-        requires(__fcxx_atomic_similar<_Tp, _Up>::value && is_convertible<_Up*, _Tp*>::value)
-    constexpr atomic_ref(const atomic_ref<_Up>& __ref) noexcept : __base(__ref.__ptr) {}
-#  endif
+    /* From the references to objects of similar types, as P3860R1, a defect
+     * report for C++20, has it. */
+    template <class _Up,
+              __fcxx_enable_if_t<__fcxx_atomic_similar<_Tp, _Up>::value && is_convertible<_Up*, _Tp*>::value, int> = 0>
+    _FCXX_ATOMIC_CE atomic_ref(const atomic_ref<_Up>& __ref) noexcept : __base(__ref.__ptr) {}
     atomic_ref& operator=(const atomic_ref&) = delete;
 
     _FCXX_ATOMIC_CE typename __base::value_type operator=(typename __base::value_type __d) const noexcept

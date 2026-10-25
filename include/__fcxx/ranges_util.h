@@ -360,18 +360,8 @@ public:
     constexpr explicit operator bool() const noexcept { return this->__engaged_; }
 
     constexpr _Tp& operator*() noexcept { return this->__get(); }
-    constexpr const _Tp& operator*() const noexcept { return this->__get(); }
-
-    constexpr _Tp* operator->() noexcept { return std::addressof(this->__get()); }
-    constexpr const _Tp* operator->() const noexcept { return std::addressof(this->__get()); }
 
     constexpr void reset() noexcept { this->__reset(); }
-
-    template <class... _Args>
-    constexpr _Tp& emplace(_Args&&... __args) {
-        this->__reset();
-        return this->__construct(std::forward<_Args>(__args)...);
-    }
 
     /* emplace-deref, whose value is the result of *i itself. */
     template <class _It>
@@ -458,8 +448,6 @@ public:
         return *this;
     }
 
-    constexpr bool has_value() const noexcept { return this->__engaged_; }
-
     constexpr _Tp& operator*() noexcept { return this->__get(); }
     constexpr const _Tp& operator*() const noexcept { return this->__get(); }
 
@@ -511,12 +499,8 @@ public:
         is_nothrow_constructible_v<_Tp, _Args...>)
         : __value_(std::forward<_Args>(__args)...) {}
 
-    constexpr bool has_value() const noexcept { return true; }
-
     constexpr _Tp& operator*() & noexcept { return __value_; }
     constexpr const _Tp& operator*() const& noexcept { return __value_; }
-    constexpr _Tp&& operator*() && noexcept { return std::move(__value_); }
-    constexpr const _Tp&& operator*() const&& noexcept { return std::move(__value_); }
 
     constexpr _Tp* operator->() noexcept { return std::addressof(__value_); }
     constexpr const _Tp* operator->() const noexcept { return std::addressof(__value_); }
@@ -545,12 +529,8 @@ public:
         is_nothrow_constructible_v<_Tp, _Args...>)
         : __value_(std::forward<_Args>(__args)...) {}
 
-    constexpr bool has_value() const noexcept { return true; }
-
     constexpr _Tp& operator*() & noexcept { return __value_; }
     constexpr const _Tp& operator*() const& noexcept { return __value_; }
-    constexpr _Tp&& operator*() && noexcept { return std::move(__value_); }
-    constexpr const _Tp&& operator*() const&& noexcept { return std::move(__value_); }
 
     constexpr _Tp* operator->() noexcept { return std::addressof(__value_); }
     constexpr const _Tp* operator->() const noexcept { return std::addressof(__value_); }
@@ -661,12 +641,8 @@ public:
         return *this;
     }
 
-    constexpr bool has_value() const noexcept { return this->__engaged_; }
-
     constexpr _Tp& operator*() & noexcept { return this->__get(); }
     constexpr const _Tp& operator*() const& noexcept { return this->__get(); }
-    constexpr _Tp&& operator*() && noexcept { return std::move(this->__get()); }
-    constexpr const _Tp&& operator*() const&& noexcept { return std::move(this->__get()); }
 
     constexpr _Tp* operator->() noexcept { return std::addressof(this->__get()); }
     constexpr const _Tp* operator->() const noexcept { return std::addressof(this->__get()); }

@@ -459,6 +459,14 @@ struct __fcxx_deleter_holder {
     constexpr const _Dp& __get() const noexcept { return __deleter; }
 };
 
+/* Workaround: Clang 20, all targets: it warns that the cv-qualifiers of a
+ * base class have no effect (-Wignored-qualifiers) where a template
+ * parameter brings them, as a deleter of a cv-qualified empty class type
+ * does here; Clang 21 does not. */
+#if _FCXX_CLANG >= 2000 && _FCXX_CLANG < 2100
+#  pragma clang diagnostic push
+#  pragma clang diagnostic ignored "-Wignored-qualifiers"
+#endif
 template <class _Dp>
 struct __fcxx_deleter_holder<_Dp, true> : private _Dp {
     constexpr __fcxx_deleter_holder() : _Dp() {}
@@ -470,6 +478,9 @@ struct __fcxx_deleter_holder<_Dp, true> : private _Dp {
 
     constexpr const _Dp& __get() const noexcept { return *this; }
 };
+#if _FCXX_CLANG >= 2000 && _FCXX_CLANG < 2100
+#  pragma clang diagnostic pop
+#endif
 
 template <class _Ptr, class _Dp>
 struct __fcxx_unique_ptr_storage : __fcxx_deleter_holder<_Dp> {
@@ -495,13 +506,6 @@ struct __fcxx_unique_ptr_default_deleter
 template <class _Dp, class _Ep>
 struct __fcxx_unique_ptr_deleter_converts
     : __fcxx_bool_constant<is_reference<_Dp>::value ? is_same<_Ep, _Dp>::value : is_convertible<_Ep, _Dp>::value> {};
-
-/* The type of the result of operator*, and its constraint, which C++26 has. */
-#if _FCXX_STD >= 2026
-#  define _FCXX_UNIQUE_PTR_DEREF_REQUIRES requires requires { *std::declval<pointer>(); }
-#else
-#  define _FCXX_UNIQUE_PTR_DEREF_REQUIRES
-#endif
 
 template <class _Tp, class _Dp = default_delete<_Tp> >
 class unique_ptr {
@@ -581,13 +585,17 @@ public:
         return *this;
     }
 
+    /* Constrained on dereferencing the pointer, as LWG 4324 has it (with the
+     * pointers to void left out where Clang takes them to be dereferenceable,
+     * see __fcxx_not_void_pointer), and not returning a reference to a
+     * temporary, as LWG 4148 has it. */
     constexpr typename add_lvalue_reference<_Tp>::type operator*() const
-        noexcept(noexcept(*std::declval<pointer>())) _FCXX_UNIQUE_PTR_DEREF_REQUIRES {
-#if _FCXX_STD >= 2026
+        noexcept(noexcept(*std::declval<pointer>()))
+        requires requires { *std::declval<pointer>(); } && __fcxx_not_void_pointer<pointer>
+    {
         static_assert(!__fcxx_reference_converts_from_temporary<typename add_lvalue_reference<_Tp>::type,
                                                                 decltype(*std::declval<pointer>())>::value,
                       "std::unique_ptr::operator* would return a reference to a temporary");
-#endif
         return *__s.__ptr;
     }
 
@@ -627,8 +635,6 @@ public:
 private:
     __fcxx_unique_ptr_storage<pointer, _Dp> __s;
 };
-
-#undef _FCXX_UNIQUE_PTR_DEREF_REQUIRES
 
 /* The constraints of the members of unique_ptr<T[]> that take pointers:
  * the pointer type, or a pointer to elements convertible to the elements

@@ -361,8 +361,6 @@ class iota_view : public view_interface<iota_view<_Wp, _Bound> > {
     public:
         __sentinel() = default;
 
-        constexpr const _Bound& __fcxx_bound() const noexcept { return __bound_; }
-
         friend constexpr bool operator==(const __iterator& __x, const __sentinel& __y) {
             return __x.__fcxx_value() == __y.__bound_;
         }

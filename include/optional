@@ -125,7 +125,23 @@ union __fcxx_optional_union {
     __fcxx_union_empty __empty;
     _Vp __val;
 
+#  if _FCXX_GCC >= 1400 && _FCXX_GCC < 1500
+    /* Workaround: GCC 14, all targets: where it cannot tell which of two
+     * optionals one is, as with the result of a conditional expression of
+     * one that holds a value and one that does not, it warns in the code of
+     * the caller that the value may be used uninitialized
+     * (-Wmaybe-uninitialized) where only one that holds a value reads it, so
+     * an optional of a scalar type that holds none initializes it too. */
+    constexpr __fcxx_optional_union() noexcept
+        requires (!is_scalar<_Vp>::value)
+        : __empty() {}
+
+    constexpr __fcxx_optional_union() noexcept
+        requires (is_scalar<_Vp>::value)
+        : __val() {}
+#  else
     constexpr __fcxx_optional_union() noexcept : __empty() {}
+#  endif
 
     template <class... _Args>
     constexpr explicit __fcxx_optional_union(in_place_t, _Args&&... __args) : __val(std::forward<_Args>(__args)...) {}

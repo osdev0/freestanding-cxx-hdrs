@@ -112,8 +112,6 @@ union __fcxx_variant_union;
 template <bool _Trivial>
 union __fcxx_variant_union<_Trivial> {
     __fcxx_union_empty __empty;
-
-    constexpr __fcxx_variant_union() noexcept : __empty() {}
 };
 
 template <class _T0, class... _Rest>
@@ -236,18 +234,11 @@ struct __fcxx_variant_payload {
     _Union __u;
     _Index __index;
 
-    constexpr explicit __fcxx_variant_payload(__fcxx_no_value_tag) noexcept
-        : __u(), __index(static_cast<_Index>(-1)) {}
-
     template <size_t _Ip, class... _Args>
     constexpr explicit __fcxx_variant_payload(in_place_index_t<_Ip> __tag, _Args&&... __args)
         : __u(__tag, std::forward<_Args>(__args)...), __index(static_cast<_Index>(_Ip)) {}
 
     constexpr __fcxx_variant_payload& __payload() noexcept {
-        return *this;
-    }
-
-    constexpr const __fcxx_variant_payload& __payload() const noexcept {
         return *this;
     }
 

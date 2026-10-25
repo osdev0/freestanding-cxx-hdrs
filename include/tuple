@@ -157,6 +157,14 @@ private:
     _Tp __value;
 };
 
+/* Workaround: Clang 20, all targets: it warns that the cv-qualifiers of a
+ * base class have no effect (-Wignored-qualifiers) where a template
+ * parameter brings them, as an element of a cv-qualified empty class type
+ * does here; Clang 21 does not. */
+#if _FCXX_CLANG >= 2000 && _FCXX_CLANG < 2100
+#  pragma clang diagnostic push
+#  pragma clang diagnostic ignored "-Wignored-qualifiers"
+#endif
 template <size_t _Ip, class _Tp>
 class __fcxx_tuple_leaf<_Ip, _Tp, true> : private _Tp {
 public:
@@ -182,6 +190,9 @@ public:
 
 private:
 };
+#if _FCXX_CLANG >= 2000 && _FCXX_CLANG < 2100
+#  pragma clang diagnostic pop
+#endif
 
 /* All of the elements of a tuple, with what the tuple does to all of them
  * at once. */
@@ -468,15 +479,12 @@ public:
         requires(__fcxx_tuple_like_other<_UTuple, tuple, _TList>
                  && __fcxx_tuple_constructible<_TList, _GetTypes<_UTuple>>
                  && __fcxx_tuple_like_single<_UTuple, _Types...>::value
-#if _FCXX_STD >= 2026
-                 && !__fcxx_tuple_dangles<_TList, _GetTypes<_UTuple>>
-#endif
-                 )
+                 && !__fcxx_tuple_dangles<_TList, _GetTypes<_UTuple>>)
     constexpr explicit(!__fcxx_tuple_like_implicit<_TList, _UTuple>::value) tuple(_UTuple&& __u)
         : _Base(__fcxx_tuple_from_tag(), std::forward<_UTuple>(__u)) {
     }
 
-#    if _FCXX_HAS_DANGLING_CHECK
+#if _FCXX_HAS_DANGLING_CHECK
     template <class... _UTypes>
         requires (__fcxx_tuple_forwarding<tuple, _TList, __fcxx_type_list<_UTypes...> >::value
                   && __fcxx_tuple_dangles<_TList, __fcxx_type_list<_UTypes&&...> >)
@@ -534,15 +542,14 @@ public:
     constexpr explicit(!__fcxx_tuple_convertible<_TList, __fcxx_type_list<const _U1&&, const _U2&&> >)
     tuple(const pair<_U1, _U2>&&) = delete;
 
-#  if _FCXX_STD >= 2026
+    /* The constructor from other tuple-like types too, as LWG 4045 has it. */
     template <class _UTuple>
         requires(__fcxx_tuple_like_other<_UTuple, tuple, _TList>
                  && __fcxx_tuple_constructible<_TList, _GetTypes<_UTuple>>
                  && __fcxx_tuple_like_single<_UTuple, _Types...>::value
                  && __fcxx_tuple_dangles<_TList, _GetTypes<_UTuple>>)
     constexpr explicit(!__fcxx_tuple_like_implicit<_TList, _UTuple>::value) tuple(_UTuple&&) = delete;
-#      endif
-#    endif
+#endif
 
     /* allocator-extended constructors */
     template <class _Alloc>

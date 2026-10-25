@@ -887,12 +887,6 @@ _FCXX_NODISCARD _FCXX_CONSTEXPR14 _Tp&& __fcxx_forward(typename remove_reference
 }
 
 template <class _Tp>
-_FCXX_NODISCARD _FCXX_CONSTEXPR14 _Tp&& __fcxx_forward(typename remove_reference<_Tp>::type&& __t) noexcept {
-    static_assert(!is_lvalue_reference<_Tp>::value, "std::forward of an rvalue as an lvalue");
-    return static_cast<_Tp&&>(__t);
-}
-
-template <class _Tp>
 _FCXX_NODISCARD _FCXX_CONSTEXPR14 typename remove_reference<_Tp>::type&& __fcxx_move(_Tp&& __t) noexcept {
     return static_cast<typename remove_reference<_Tp>::type&&>(__t);
 }

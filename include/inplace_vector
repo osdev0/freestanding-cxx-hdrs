@@ -25,10 +25,6 @@
 #  error "<inplace_vector> requires C++26 or later"
 #endif
 
-#define _FCXX_VERSION_INPLACE_VECTOR
-#include <__fcxx/version.h>
-#undef _FCXX_VERSION_INPLACE_VECTOR
-
 #if _FCXX_STD >= 2026
 
 /* inplace_vector is new in C++26. Its special member functions are trivial

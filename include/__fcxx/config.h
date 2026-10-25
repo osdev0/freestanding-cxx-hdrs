@@ -77,24 +77,11 @@
 #  define _FCXX_HAS_FEATURE(x) 0
 #endif
 
-#ifdef __has_attribute
-#  define _FCXX_HAS_ATTRIBUTE(x) __has_attribute(x)
-#else
-#  define _FCXX_HAS_ATTRIBUTE(x) 0
-#endif
-
 #if defined(__has_cpp_attribute) && _FCXX_STD >= 2011
 #  define _FCXX_HAS_CPP_ATTRIBUTE(x) __has_cpp_attribute(x)
 #else
 #  define _FCXX_HAS_CPP_ATTRIBUTE(x) 0
 #endif
-
-/* Clang reports the type trait keywords through __has_builtin only from
- * version 10 on, and through __has_feature before that. GCC reports them
- * through __has_builtin, from version 10 on; the users of this macro check
- * the version of older GCCs themselves. */
-#define _FCXX_HAS_TRAIT(builtin, feature) \
-    (_FCXX_HAS_BUILTIN(builtin) || _FCXX_HAS_FEATURE(feature))
 
 /* constexpr, for the functions the standard makes constexpr from a given
  * revision on. The C++11 kind can only be used with functions written to
@@ -144,16 +131,13 @@
 
 /* Exception specifications. The first is for the functions that C++98
  * already gave an empty one, and the second for those that only got one
- * from C++11 on. Variadic macros are an extension in C++98, where the last
- * only takes a single argument. */
+ * from C++11 on. */
 #if _FCXX_STD >= 2011
 #  define _FCXX_NOEXCEPT noexcept
 #  define _FCXX_NOEXCEPT11 noexcept
-#  define _FCXX_NOEXCEPT_IF(...) noexcept(__VA_ARGS__)
 #else
 #  define _FCXX_NOEXCEPT throw()
 #  define _FCXX_NOEXCEPT11
-#  define _FCXX_NOEXCEPT_IF(x)
 #endif
 
 /* Attributes. [[noreturn]] is used where the language has it, as Clang
@@ -173,12 +157,6 @@
 #  define _FCXX_NODISCARD [[nodiscard]]
 #else
 #  define _FCXX_NODISCARD
-#endif
-
-#if _FCXX_STD >= 2017 && _FCXX_HAS_CPP_ATTRIBUTE(maybe_unused) >= 201603L
-#  define _FCXX_MAYBE_UNUSED [[maybe_unused]]
-#else
-#  define _FCXX_MAYBE_UNUSED __attribute__((__unused__))
 #endif
 
 #if _FCXX_STD >= 2020 && _FCXX_HAS_CPP_ATTRIBUTE(no_unique_address) >= 201803L
@@ -267,7 +245,6 @@
 
 #if defined(__cpp_conditional_explicit) && __cpp_conditional_explicit >= 201806L
 #  define _FCXX_HAS_CONDITIONAL_EXPLICIT 1
-#  define _FCXX_EXPLICIT(...) explicit(__VA_ARGS__)
 #else
 #  define _FCXX_HAS_CONDITIONAL_EXPLICIT 0
 #endif
@@ -290,12 +267,6 @@
 #  define _FCXX_HAS_FOLD_EXPRESSIONS 1
 #else
 #  define _FCXX_HAS_FOLD_EXPRESSIONS 0
-#endif
-
-#if defined(__cpp_noexcept_function_type) && __cpp_noexcept_function_type >= 201510L
-#  define _FCXX_HAS_NOEXCEPT_FUNCTION_TYPE 1
-#else
-#  define _FCXX_HAS_NOEXCEPT_FUNCTION_TYPE 0
 #endif
 
 #if _FCXX_STD >= 2023 && defined(__cpp_explicit_this_parameter) && __cpp_explicit_this_parameter >= 202110L
@@ -331,22 +302,10 @@
 #  define _FCXX_HAS_CLASS_NTTP 0
 #endif
 
-#if _FCXX_STD >= 2023 && defined(__cpp_if_consteval) && __cpp_if_consteval >= 202106L
-#  define _FCXX_HAS_IF_CONSTEVAL 1
-#else
-#  define _FCXX_HAS_IF_CONSTEVAL 0
-#endif
-
 #if _FCXX_STD >= 2026 && defined(__cpp_pack_indexing) && __cpp_pack_indexing >= 202311L
 #  define _FCXX_HAS_PACK_INDEXING 1
 #else
 #  define _FCXX_HAS_PACK_INDEXING 0
-#endif
-
-#if defined(__cpp_constexpr_dynamic_alloc) && __cpp_constexpr_dynamic_alloc >= 201907L
-#  define _FCXX_HAS_CONSTEXPR_DYNAMIC_ALLOC 1
-#else
-#  define _FCXX_HAS_CONSTEXPR_DYNAMIC_ALLOC 0
 #endif
 
 /* constant_wrapper, of <utility>, which some of <functional> needs too, and
@@ -433,10 +392,6 @@
 #endif
 
 #define _FCXX_UNREACHABLE() __builtin_unreachable()
-
-/* Token pasting, after the expansion of the operands. */
-#define _FCXX_CONCAT_(a, b) a##b
-#define _FCXX_CONCAT(a, b) _FCXX_CONCAT_(a, b)
 
 /* Whether the compiler has the builtin for a type trait, named without its
  * leading underscores. Clang only reports the type trait keywords through

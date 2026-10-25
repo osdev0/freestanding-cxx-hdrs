@@ -69,10 +69,16 @@ using __fcxx_with_reference = _Tp&;
 template <class _Tp>
 concept __fcxx_can_reference = requires { typename __fcxx_with_reference<_Tp>; };
 
-/* Clang before 16 takes *p for a p of type void* to be an expression of
- * type void&, which is left out. */
+/* Workaround: Clang 12 to 15, all targets: it takes *p for a p of type
+ * void* to be an expression of type void&, so the pointers to void are left
+ * out by hand there; Clang 16 does not. */
 template <class _Tp>
-concept __fcxx_not_void_pointer = !is_void_v<remove_pointer_t<remove_cvref_t<_Tp> > >;
+concept __fcxx_not_void_pointer =
+#if _FCXX_CLANG && _FCXX_CLANG < 1600
+    !is_void_v<remove_pointer_t<remove_cvref_t<_Tp> > >;
+#else
+    true;
+#endif
 
 template <class _Tp>
 concept __fcxx_dereferenceable = __fcxx_not_void_pointer<_Tp> && requires(_Tp& __t) {

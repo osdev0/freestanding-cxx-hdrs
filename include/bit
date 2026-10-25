@@ -101,18 +101,11 @@ constexpr _Tp bit_floor(_Tp __x) noexcept {
     return std::__fcxx_bit_floor(__x);
 }
 
-/* The width was of the type of the argument in C++20. */
-#if _FCXX_STD >= 2023
+/* An int, in C++20 too, as LWG 3656 has it. */
 _FCXX_BIT_TEMPLATE_UNSIGNED
 constexpr int bit_width(_Tp __x) noexcept {
     return std::__fcxx_bit_width(__x);
 }
-#else
-_FCXX_BIT_TEMPLATE_UNSIGNED
-constexpr _Tp bit_width(_Tp __x) noexcept {
-    return static_cast<_Tp>(std::__fcxx_bit_width(__x));
-}
-#endif
 
 /* [bit.rotate], rotating */
 
