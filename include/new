@@ -21,6 +21,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #define _FCXX_VERSION_NEW
 #include <__fcxx/version.h>
@@ -139,8 +140,19 @@ _FCXX_NODISCARD constexpr _Tp* launder(_Tp* __p) noexcept {
 #    define _FCXX_DESTRUCTIVE_SIZE 64
 #    define _FCXX_CONSTRUCTIVE_SIZE 64
 #  endif
-_FCXX_INLINE_VAR constexpr size_t hardware_destructive_interference_size = _FCXX_DESTRUCTIVE_SIZE;
-_FCXX_INLINE_VAR constexpr size_t hardware_constructive_interference_size = _FCXX_CONSTRUCTIVE_SIZE;
+/* Workaround: GCC 5 and 6, all targets: they drop the alignment of an
+ * alignas larger than __BIGGEST_ALIGNMENT__ times 8, the largest alignment
+ * in bits taken for bytes, which those of the sizes above for AArch64, s390x
+ * and m68k are, so that a type aligned to them gets no alignment at all.
+ * The sizes are no larger than that there. */
+#  if _FCXX_GCC && _FCXX_GCC < 700
+#    define _FCXX_INTERFERENCE_SIZE(size) ((size) < __BIGGEST_ALIGNMENT__ * 8 ? (size) : __BIGGEST_ALIGNMENT__ * 8)
+#  else
+#    define _FCXX_INTERFERENCE_SIZE(size) (size)
+#  endif
+_FCXX_INLINE_VAR constexpr size_t hardware_destructive_interference_size = _FCXX_INTERFERENCE_SIZE(_FCXX_DESTRUCTIVE_SIZE);
+_FCXX_INLINE_VAR constexpr size_t hardware_constructive_interference_size = _FCXX_INTERFERENCE_SIZE(_FCXX_CONSTRUCTIVE_SIZE);
+#  undef _FCXX_INTERFERENCE_SIZE
 #endif
 
 } /* namespace std */
@@ -208,4 +220,5 @@ _FCXX_CONSTEXPR_PLACEMENT_NEW void operator delete[](void*, void*) _FCXX_NOEXCEP
 
 #undef _FCXX_CONSTEXPR_PLACEMENT_NEW
 
+_FCXX_END_EXTERN_CXX
 #endif
