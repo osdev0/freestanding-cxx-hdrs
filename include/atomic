@@ -422,6 +422,7 @@ _FCXX_ALWAYS_INLINE inline void __fcxx_atomic_clear_padding(_Tp* __p) noexcept {
 
 /* The result of is_lock_free, only asked of the atomic library for the
  * types that are not always lock-free. */
+
 template <bool _Always>
 struct __fcxx_atomic_lock_free_query {
     static bool __query(size_t, const volatile void*) noexcept {
@@ -572,6 +573,19 @@ _FCXX_ALWAYS_INLINE _FCXX_ATOMIC_CE void __fcxx_atomic_store(_Up* __p, _Tp __v, 
     __atomic_store(__fcxx_atomic_addr(__p), __fcxx_atomic_val(&__v), __fcxx_atomic_order(__m));
 }
 
+/* The orders given to the compare-and-exchange builtin. On the AVR and the
+ * MSP430, whose single core performs the accesses to memory in the order of
+ * the program, every order is as strong as seq_cst, so the builtin is given
+ * seq_cst there, with every compiler.
+ * Workaround: Clang 19 to 23, AVR and MSP430: it crashes selecting the
+ * instructions of a compare-and-exchange whose order of failure is known
+ * only at run time. */
+#if defined(__AVR__) || defined(__MSP430__)
+#  define _FCXX_ATOMIC_CAS_ORDER(order) ((void)(order), __ATOMIC_SEQ_CST)
+#else
+#  define _FCXX_ATOMIC_CAS_ORDER(order) (order)
+#endif
+
 /* The compare-and-exchange builtin, or the one of the library where GCC
  * gets it wrong (see _FCXX_ATOMIC_MICROBLAZE). */
 template <class _Tp, bool = _FCXX_ATOMIC_MICROBLAZE && sizeof(_Tp) <= 4>
@@ -579,9 +593,11 @@ struct __fcxx_atomic_builtin {
     template <class _Up>
     static _FCXX_ALWAYS_INLINE bool __cas(_Up* __p, _Tp* __e, _Tp* __d, bool __weak, int __s, int __f) noexcept {
         return __weak ? __atomic_compare_exchange(__fcxx_atomic_addr(__p), __fcxx_atomic_val(__e),
-                                                  __fcxx_atomic_val(__d), true, __s, __f)
+                                                  __fcxx_atomic_val(__d), true, _FCXX_ATOMIC_CAS_ORDER(__s),
+                                                  _FCXX_ATOMIC_CAS_ORDER(__f))
                       : __atomic_compare_exchange(__fcxx_atomic_addr(__p), __fcxx_atomic_val(__e),
-                                                  __fcxx_atomic_val(__d), false, __s, __f);
+                                                  __fcxx_atomic_val(__d), false, _FCXX_ATOMIC_CAS_ORDER(__s),
+                                                  _FCXX_ATOMIC_CAS_ORDER(__f));
     }
 };
 
@@ -2466,12 +2482,13 @@ _FCXX_ATOMIC_CE void atomic_flag_notify_all(atomic_flag* __f) noexcept {
 
 /* [atomics.fences], fences
  *
- * Clang cannot select any fence for the MSP430. Its single core performs
- * the accesses to memory in the order of the program, and the only other
- * threads it has are the interrupt handlers, so a barrier to the compiler
- * is all a fence needs to be there. */
+ * On the AVR and the MSP430, whose single core performs the accesses to
+ * memory in the order of the program, and whose only other threads are the
+ * interrupt handlers, a fence needs to be no more than a barrier to the
+ * compiler, which is what it is there, with every compiler.
+ * Workaround: Clang 6 to 23, MSP430: it cannot select any fence. */
 
-#if defined(__MSP430__) && defined(__clang__)
+#if defined(__AVR__) || defined(__MSP430__)
 #  define _FCXX_ATOMIC_FENCE(fence, order) \
       if ((order) != __ATOMIC_RELAXED) {     \
           __asm__ __volatile__("" ::: "memory"); \
@@ -2504,6 +2521,7 @@ _FCXX_ATOMIC_CE void atomic_signal_fence(memory_order __m) noexcept {
 
 #undef _FCXX_ATOMIC_FENCE
 #undef _FCXX_ATOMIC_THROUGH_MEMORY
+#undef _FCXX_ATOMIC_CAS_ORDER
 #undef _FCXX_ATOMIC_MICROBLAZE
 #undef _FCXX_ATOMIC_OBJECT_BARRIER
 #undef _FCXX_ATOMIC_X87_LOAD
