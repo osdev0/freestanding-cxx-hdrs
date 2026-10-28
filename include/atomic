@@ -2516,8 +2516,10 @@ _FCXX_ATOMIC_CE void atomic_signal_fence(memory_order __m) noexcept {
  * applied to C++20. The flag is value-initialized, which makes it clear
  * before C++20 too. */
 #if _FCXX_STD <= 2020
+#  undef ATOMIC_VAR_INIT
 #  define ATOMIC_VAR_INIT(value) { value }
 #endif
+#undef ATOMIC_FLAG_INIT
 #define ATOMIC_FLAG_INIT {}
 
 /* Clang can warn about the use of the macro that is deprecated. */

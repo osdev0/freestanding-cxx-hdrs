@@ -20,27 +20,30 @@
 
 /* <memory> */
 
-#if !defined(__cpp_lib_addressof_constexpr) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY)) \
     && _FCXX_STD >= 2023 && _FCXX_HAS_BUILTIN_ADDRESSOF
+#  undef __cpp_lib_addressof_constexpr
 #  define __cpp_lib_addressof_constexpr 201603L
 #endif
 
-#if !defined(__cpp_lib_allocator_traits_is_always_equal) \
-    && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY) || defined(_FCXX_VERSION_STRING)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY) || defined(_FCXX_VERSION_STRING)) \
     && _FCXX_STD >= 2023
+#  undef __cpp_lib_allocator_traits_is_always_equal
 #  define __cpp_lib_allocator_traits_is_always_equal 201411L
 #endif
 
-#if !defined(__cpp_lib_assume_aligned) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY)) \
     && _FCXX_STD >= 2023 && _FCXX_HAS_IS_CONSTANT_EVALUATED
+#  undef __cpp_lib_assume_aligned
 #  define __cpp_lib_assume_aligned 201811L
 #endif
 
 /* constexpr pointer_traits::pointer_to in C++20, unique_ptr in C++23, and
  * the specialized memory algorithms in C++26, which need the placement new
  * of constant evaluation. */
-#if !defined(__cpp_lib_constexpr_memory) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY)) \
     && _FCXX_STD >= 2023 && _FCXX_HAS_CONSTEXPR20
+#  undef __cpp_lib_constexpr_memory
 #  if _FCXX_STD >= 2026 && defined(__cpp_constexpr) && __cpp_constexpr >= 202406L
 #    define __cpp_lib_constexpr_memory 202506L
 #  else
@@ -48,27 +51,32 @@
 #  endif
 #endif
 
-#if !defined(__cpp_lib_freestanding_memory) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_freestanding_memory
 #  define __cpp_lib_freestanding_memory 202502L
 #endif
 
-#if !defined(__cpp_lib_is_sufficiently_aligned) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_is_sufficiently_aligned
 #  define __cpp_lib_is_sufficiently_aligned 202411L
 #endif
 
-#if !defined(__cpp_lib_out_ptr) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY)) \
     && _FCXX_STD >= 2026 && _FCXX_HAS_CONCEPTS
+#  undef __cpp_lib_out_ptr
 #  define __cpp_lib_out_ptr 202311L
 #endif
 
-#if !defined(__cpp_lib_start_lifetime_as) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY)) \
     && _FCXX_STD >= 2023
+#  undef __cpp_lib_start_lifetime_as
 #  define __cpp_lib_start_lifetime_as 202207L
 #endif
 
-#if !defined(__cpp_lib_to_address) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MEMORY)) \
     && _FCXX_STD >= 2023 && _FCXX_HAS_CONCEPTS
+#  undef __cpp_lib_to_address
 #  define __cpp_lib_to_address 201711L
 #endif

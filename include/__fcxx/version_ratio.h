@@ -20,12 +20,14 @@
 
 /* <ratio> */
 
-#if !defined(__cpp_lib_ratio) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RATIO)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RATIO)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_ratio
 #  define __cpp_lib_ratio 202306L
 #endif
 
-#if !defined(__cpp_lib_freestanding_ratio) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RATIO)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RATIO)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_freestanding_ratio
 #  define __cpp_lib_freestanding_ratio 202306L
 #endif

@@ -21,8 +21,9 @@
 /* <random> */
 
 /* philox_engine, which is part of the feature, is only there with <array>. */
-#if !defined(__cpp_lib_freestanding_random) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANDOM)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANDOM)) \
     && _FCXX_STD >= 2026 && defined(__has_include)
+#  undef __cpp_lib_freestanding_random
 #  if __has_include(<array>)
 #    define __cpp_lib_freestanding_random 202502L
 #  endif

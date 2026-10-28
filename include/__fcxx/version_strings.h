@@ -22,17 +22,18 @@
  * revision. __cpp_lib_char8_t and __cpp_lib_nonmember_container_access, which
  * it defines too, are with those of the other headers defining them. */
 
-#if !defined(__cpp_lib_freestanding_char_traits) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_STRING)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_STRING)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_freestanding_char_traits
 #  define __cpp_lib_freestanding_char_traits 202306L
 #endif
 
 /* <string_view>, whose parts from C++20 on need concepts. None of the other
  * macros of basic_string_view is freestanding. */
 
-#if !defined(__cpp_lib_freestanding_string_view) \
-    && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_STRING_VIEW)) && _FCXX_STD >= 2026 \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_STRING_VIEW)) && _FCXX_STD >= 2026 \
     && _FCXX_CONCEPT_ITERATORS && _FCXX_HAS_DEDUCTION_GUIDES
+#  undef __cpp_lib_freestanding_string_view
 #  define __cpp_lib_freestanding_string_view 202311L
 #endif
 

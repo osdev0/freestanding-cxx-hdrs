@@ -22,26 +22,30 @@
  * specialization for references needs concepts and conditional explicit,
  * and its range support, concepts. */
 
-#if !defined(__cpp_lib_freestanding_optional) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_OPTIONAL)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_OPTIONAL)) \
     && _FCXX_STD >= 2026 && _FCXX_HAS_IF_CONSTEXPR && _FCXX_HAS_CONCEPTS && _FCXX_HAS_CONDITIONAL_EXPLICIT
+#  undef __cpp_lib_freestanding_optional
 #  define __cpp_lib_freestanding_optional 202506L
 #endif
 
-#if !defined(__cpp_lib_optional_range_support) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_OPTIONAL)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_OPTIONAL)) \
     && _FCXX_STD >= 2026 && _FCXX_HAS_IF_CONSTEXPR && _FCXX_HAS_CONCEPTS
+#  undef __cpp_lib_optional_range_support
 #  define __cpp_lib_optional_range_support 202406L
 #endif
 
 /* <variant> */
 
-#if !defined(__cpp_lib_freestanding_variant) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_VARIANT)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_VARIANT)) \
     && _FCXX_STD >= 2026 && _FCXX_HAS_IF_CONSTEXPR && _FCXX_HAS_FOLD_EXPRESSIONS
+#  undef __cpp_lib_freestanding_variant
 #  define __cpp_lib_freestanding_variant 202311L
 #endif
 
 /* <expected> */
 
-#if !defined(__cpp_lib_freestanding_expected) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_EXPECTED)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_EXPECTED)) \
     && _FCXX_STD >= 2026 && _FCXX_HAS_CONCEPTS && _FCXX_HAS_CONDITIONAL_EXPLICIT
+#  undef __cpp_lib_freestanding_expected
 #  define __cpp_lib_freestanding_expected 202311L
 #endif

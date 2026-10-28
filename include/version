@@ -24,15 +24,17 @@
 #include <__fcxx/version.h>
 #undef _FCXX_VERSION_ALL
 
-#if _FCXX_STD >= 2026 && !defined(__cpp_lib_freestanding_feature_test_macros)
+#if _FCXX_STD >= 2026
+#  undef __cpp_lib_freestanding_feature_test_macros
 #  define __cpp_lib_freestanding_feature_test_macros 202306L
 #endif
 
 /* The modules std and std.compat, where they can be built from the module
  * units of modules/: from C++23 on, with GCC 15 and later where it compiles
  * modules (-fmodules), and with Clang 17 and later. */
-#if _FCXX_STD >= 2023 && !defined(__cpp_lib_modules) \
+#if _FCXX_STD >= 2023 \
     && ((_FCXX_GCC >= 1500 && defined(__cpp_modules)) || _FCXX_CLANG >= 1700)
+#  undef __cpp_lib_modules
 #  define __cpp_lib_modules 202207L
 #endif
 

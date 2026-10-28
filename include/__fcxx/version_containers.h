@@ -20,20 +20,23 @@
 
 /* <array> */
 
-#if !defined(__cpp_lib_to_array) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ARRAY)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ARRAY)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_to_array
 #  define __cpp_lib_to_array 201907L
 #endif
 
-#if !defined(__cpp_lib_freestanding_array) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ARRAY)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ARRAY)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_freestanding_array
 #  define __cpp_lib_freestanding_array 202311L
 #endif
 
 /* <span> */
 
-#if !defined(__cpp_lib_span) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_SPAN)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_SPAN)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_span
 #  if _FCXX_STD >= 2026
 #    define __cpp_lib_span 202311L
 #  else
@@ -46,8 +49,9 @@
  * canonicalized to, and aligned_accessor needs to tell constant evaluation
  * apart. */
 
-#if !defined(__cpp_lib_mdspan) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MDSPAN)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MDSPAN)) \
     && _FCXX_STD >= 2026 && _FCXX_HAS_MULTIDIMENSIONAL_SUBSCRIPT
+#  undef __cpp_lib_mdspan
 #  if _FCXX_STD >= 2026
 #    define __cpp_lib_mdspan 202406L
 #  else
@@ -55,18 +59,21 @@
 #  endif
 #endif
 
-#if !defined(__cpp_lib_freestanding_mdspan) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MDSPAN)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MDSPAN)) \
     && _FCXX_STD >= 2026 && _FCXX_HAS_MULTIDIMENSIONAL_SUBSCRIPT
+#  undef __cpp_lib_freestanding_mdspan
 #  define __cpp_lib_freestanding_mdspan 202311L
 #endif
 
-#if !defined(__cpp_lib_submdspan) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MDSPAN)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MDSPAN)) \
     && _FCXX_STD >= 2026 && _FCXX_HAS_MULTIDIMENSIONAL_SUBSCRIPT && _FCXX_HAS_CONSTANT_WRAPPER
+#  undef __cpp_lib_submdspan
 #  define __cpp_lib_submdspan 202603L
 #endif
 
-#if !defined(__cpp_lib_aligned_accessor) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MDSPAN)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_MDSPAN)) \
     && _FCXX_STD >= 2026 && _FCXX_HAS_MULTIDIMENSIONAL_SUBSCRIPT \
     && _FCXX_HAS_IS_CONSTANT_EVALUATED
+#  undef __cpp_lib_aligned_accessor
 #  define __cpp_lib_aligned_accessor 202411L
 #endif

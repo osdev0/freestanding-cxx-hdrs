@@ -20,12 +20,14 @@
 
 /* <charconv> */
 
-#if !defined(__cpp_lib_constexpr_charconv) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_CHARCONV)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_CHARCONV)) \
     && _FCXX_STD >= 2026 && _FCXX_HAS_CONSTEXPR20
+#  undef __cpp_lib_constexpr_charconv
 #  define __cpp_lib_constexpr_charconv 202207L
 #endif
 
-#if !defined(__cpp_lib_freestanding_charconv) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_CHARCONV)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_CHARCONV)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_freestanding_charconv
 #  define __cpp_lib_freestanding_charconv 202306L
 #endif

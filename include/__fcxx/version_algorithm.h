@@ -20,76 +20,89 @@
 
 /* <algorithm> */
 
-#if !defined(__cpp_lib_robust_nonmodifying_seq_ops) \
-    && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ALGORITHM)) && _FCXX_STD >= 2026
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ALGORITHM)) && _FCXX_STD >= 2026
+#  undef __cpp_lib_robust_nonmodifying_seq_ops
 #  define __cpp_lib_robust_nonmodifying_seq_ops 201304L
 #endif
 
-#if !defined(__cpp_lib_clamp) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ALGORITHM)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ALGORITHM)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_clamp
 #  define __cpp_lib_clamp 201603L
 #endif
 
-#if !defined(__cpp_lib_sample) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ALGORITHM)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ALGORITHM)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_sample
 #  define __cpp_lib_sample 201603L
 #endif
 
-#if !defined(__cpp_lib_ranges_starts_ends_with) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ALGORITHM)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ALGORITHM)) \
     && _FCXX_STD >= 2026 && _FCXX_CONCEPT_ITERATORS
+#  undef __cpp_lib_ranges_starts_ends_with
 #  define __cpp_lib_ranges_starts_ends_with 202106L
 #endif
 
-#if !defined(__cpp_lib_ranges_contains) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ALGORITHM)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ALGORITHM)) \
     && _FCXX_STD >= 2026 && _FCXX_CONCEPT_ITERATORS
+#  undef __cpp_lib_ranges_contains
 #  define __cpp_lib_ranges_contains 202207L
 #endif
 
-#if !defined(__cpp_lib_ranges_find_last) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ALGORITHM)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ALGORITHM)) \
     && _FCXX_STD >= 2026 && _FCXX_CONCEPT_ITERATORS
+#  undef __cpp_lib_ranges_find_last
 #  define __cpp_lib_ranges_find_last 202207L
 #endif
 
-#if !defined(__cpp_lib_ranges_fold) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ALGORITHM)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ALGORITHM)) \
     && _FCXX_STD >= 2023 && _FCXX_CONCEPT_ITERATORS && _FCXX_STD >= 2026
+#  undef __cpp_lib_ranges_fold
 #  define __cpp_lib_ranges_fold 202207L
 #endif
 
-#if !defined(__cpp_lib_freestanding_algorithm) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ALGORITHM)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_ALGORITHM)) \
     && _FCXX_STD >= 2026 && _FCXX_CONCEPT_ITERATORS
+#  undef __cpp_lib_freestanding_algorithm
 #  define __cpp_lib_freestanding_algorithm 202502L
 #endif
 
 /* <numeric> */
 
-#if !defined(__cpp_lib_gcd_lcm) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_NUMERIC)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_NUMERIC)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_gcd_lcm
 #  define __cpp_lib_gcd_lcm 201606L
 #endif
 
-#if !defined(__cpp_lib_constexpr_numeric) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_NUMERIC)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_NUMERIC)) \
     && _FCXX_STD >= 2026 && _FCXX_HAS_CONSTEXPR20
+#  undef __cpp_lib_constexpr_numeric
 #  define __cpp_lib_constexpr_numeric 201911L
 #endif
 
-#if !defined(__cpp_lib_ranges_iota) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_NUMERIC)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_NUMERIC)) \
     && _FCXX_STD >= 2026 && _FCXX_CONCEPT_ITERATORS
+#  undef __cpp_lib_ranges_iota
 #  define __cpp_lib_ranges_iota 202202L
 #endif
 
-#if !defined(__cpp_lib_saturation_arithmetic) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_NUMERIC)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_NUMERIC)) \
     && _FCXX_STD >= 2026 && _FCXX_HAS_CONCEPTS
+#  undef __cpp_lib_saturation_arithmetic
 #  define __cpp_lib_saturation_arithmetic 202603L
 #endif
 
-#if !defined(__cpp_lib_freestanding_numeric) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_NUMERIC)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_NUMERIC)) \
     && _FCXX_STD >= 2026 && _FCXX_CONCEPT_ITERATORS
+#  undef __cpp_lib_freestanding_numeric
 #  define __cpp_lib_freestanding_numeric 202502L
 #endif
 
 /* <execution> */
 
-#if !defined(__cpp_lib_freestanding_execution) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_EXECUTION)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_EXECUTION)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_freestanding_execution
 #  define __cpp_lib_freestanding_execution 202502L
 #endif

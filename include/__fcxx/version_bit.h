@@ -20,28 +20,33 @@
 
 /* <bit> */
 
-#if !defined(__cpp_lib_bit_cast) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_BIT)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_BIT)) \
     && _FCXX_STD >= 2020 && _FCXX_HAS_BUILTIN_BIT_CAST
+#  undef __cpp_lib_bit_cast
 #  define __cpp_lib_bit_cast 201806L
 #endif
 
-#if !defined(__cpp_lib_bitops) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_BIT)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_BIT)) \
     && _FCXX_STD >= 2020
+#  undef __cpp_lib_bitops
 #  define __cpp_lib_bitops 201907L
 #endif
 
-#if !defined(__cpp_lib_byteswap) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_BIT)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_BIT)) \
     && _FCXX_STD >= 2023
+#  undef __cpp_lib_byteswap
 #  define __cpp_lib_byteswap 202110L
 #endif
 
-#if !defined(__cpp_lib_endian) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_BIT)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_BIT)) \
     && _FCXX_STD >= 2020
+#  undef __cpp_lib_endian
 #  define __cpp_lib_endian 201907L
 #endif
 
-#if !defined(__cpp_lib_int_pow2) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_BIT)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_BIT)) \
     && _FCXX_STD >= 2020
+#  undef __cpp_lib_int_pow2
 #  define __cpp_lib_int_pow2 202002L
 #endif
 
@@ -49,7 +54,8 @@
  * of <stdbit.h> is freestanding, so the macro is defined where the header,
  * that of the C headers, whose part of C++ (c_stdbit.h) defines it too, is
  * there. */
-#if !defined(__cpp_lib_stdbit_h) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_STDBIT_H)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_STDBIT_H)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_stdbit_h
 #  define __cpp_lib_stdbit_h 202603L
 #endif

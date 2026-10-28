@@ -24,13 +24,15 @@
 
 /* <ranges> */
 
-#if !defined(__cpp_lib_freestanding_ranges) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_freestanding_ranges
 #  define __cpp_lib_freestanding_ranges 202306L
 #endif
 
-#if !defined(__cpp_lib_ranges_as_const) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
     && _FCXX_STD >= 2023
+#  undef __cpp_lib_ranges_as_const
 #  if _FCXX_STD >= 2026
 #    define __cpp_lib_ranges_as_const 202311L
 #  else
@@ -38,82 +40,96 @@
 #  endif
 #endif
 
-#if !defined(__cpp_lib_ranges_as_input) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_ranges_as_input
 #  define __cpp_lib_ranges_as_input 202502L
 #endif
 
-#if !defined(__cpp_lib_ranges_as_rvalue) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
     && _FCXX_STD >= 2023
+#  undef __cpp_lib_ranges_as_rvalue
 #  define __cpp_lib_ranges_as_rvalue 202207L
 #endif
 
-#if !defined(__cpp_lib_ranges_cache_latest) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_ranges_cache_latest
 #  define __cpp_lib_ranges_cache_latest 202411L
 #endif
 
-#if !defined(__cpp_lib_ranges_cartesian_product) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
     && _FCXX_STD >= 2023 && _FCXX_CONSTRAINED_TUPLES
+#  undef __cpp_lib_ranges_cartesian_product
 #  define __cpp_lib_ranges_cartesian_product 202207L
 #endif
 
-#if !defined(__cpp_lib_ranges_chunk) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
     && _FCXX_STD >= 2023
+#  undef __cpp_lib_ranges_chunk
 #  define __cpp_lib_ranges_chunk 202202L
 #endif
 
-#if !defined(__cpp_lib_ranges_chunk_by) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
     && _FCXX_STD >= 2023
+#  undef __cpp_lib_ranges_chunk_by
 #  define __cpp_lib_ranges_chunk_by 202202L
 #endif
 
-#if !defined(__cpp_lib_ranges_concat) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_ranges_concat
 #  define __cpp_lib_ranges_concat 202403L
 #endif
 
-#if !defined(__cpp_lib_ranges_enumerate) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
     && _FCXX_STD >= 2023 && _FCXX_CONSTRAINED_TUPLES
+#  undef __cpp_lib_ranges_enumerate
 #  define __cpp_lib_ranges_enumerate 202302L
 #endif
 
-#if !defined(__cpp_lib_ranges_filter) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
     && _FCXX_STD >= 2026
+#  undef __cpp_lib_ranges_filter
 #  define __cpp_lib_ranges_filter 202603L
 #endif
 
-#if !defined(__cpp_lib_ranges_join_with) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
     && _FCXX_STD >= 2023
+#  undef __cpp_lib_ranges_join_with
 #  define __cpp_lib_ranges_join_with 202202L
 #endif
 
-#if !defined(__cpp_lib_ranges_repeat) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
     && _FCXX_STD >= 2023
+#  undef __cpp_lib_ranges_repeat
 #  define __cpp_lib_ranges_repeat 202207L
 #endif
 
-#if !defined(__cpp_lib_ranges_slide) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
     && _FCXX_STD >= 2023
+#  undef __cpp_lib_ranges_slide
 #  define __cpp_lib_ranges_slide 202202L
 #endif
 
-#if !defined(__cpp_lib_ranges_stride) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
     && _FCXX_STD >= 2023
+#  undef __cpp_lib_ranges_stride
 #  define __cpp_lib_ranges_stride 202207L
 #endif
 
-#if !defined(__cpp_lib_ranges_to_container) && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES)) \
     && _FCXX_STD >= 2023
+#  undef __cpp_lib_ranges_to_container
 #  define __cpp_lib_ranges_to_container 202202L
 #endif
 
 /* <ranges>, <tuple> and <utility>, which give pair and tuple what zip_view
  * needs of them. */
 
-#if !defined(__cpp_lib_ranges_zip) \
-    && (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES) || defined(_FCXX_VERSION_TUPLE) \
+#if (defined(_FCXX_VERSION_ALL) || defined(_FCXX_VERSION_RANGES) || defined(_FCXX_VERSION_TUPLE) \
         || defined(_FCXX_VERSION_UTILITY)) \
     && _FCXX_STD >= 2023 && _FCXX_CONSTRAINED_TUPLES
+#  undef __cpp_lib_ranges_zip
 #  define __cpp_lib_ranges_zip 202110L
 #endif
