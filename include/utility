@@ -222,13 +222,8 @@ struct constant_wrapper;
  * template argument from X before converting X to the type of the parameter,
  * and so fails (on typename int::type; its trunk of 2026-10-22 even crashes),
  * so the library gives that argument itself there. */
-#  if _FCXX_GCC
 template <__fcxx_cw_fixed_value _Xp>
 using __fcxx_cw = constant_wrapper<_Xp, typename decltype(_Xp)::type>;
-#  else
-template <__fcxx_cw_fixed_value _Xp>
-using __fcxx_cw = constant_wrapper<_Xp>;
-#  endif
 
 template <class _Tp>
 concept __fcxx_constexpr_param = requires { typename __fcxx_cw<_Tp::value>; };

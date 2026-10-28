@@ -201,7 +201,6 @@ class iota_view : public view_interface<iota_view<_Wp, _Bound> > {
             return *this;
         }
 
-#  if _FCXX_RANGES_ONE_OVERLOAD
         /* Workaround: GCC 11 to 13 and Clang 12 to 17, all targets: the two
          * postfix increments as one function, as their mangled names are
          * the same with these compilers (see ranges_util.h). */
@@ -214,17 +213,6 @@ class iota_view : public view_interface<iota_view<_Wp, _Bound> > {
                 ++*this;
             }
         }
-#  else
-        constexpr void operator++(int) { ++*this; }
-
-        constexpr __iterator operator++(int)
-            requires incrementable<_Wp>
-        {
-            auto __tmp = *this;
-            ++*this;
-            return __tmp;
-        }
-#  endif
 
         constexpr __iterator& operator--()
             requires __fcxx_decrementable<_Wp>
@@ -411,7 +399,6 @@ public:
 
     constexpr __iterator begin() const { return __iterator(__value_); }
 
-#  if _FCXX_RANGES_ONE_OVERLOAD
     /* Workaround: GCC 11 to 13 and Clang 12 to 17, all targets: the two
      * end() as one function, as their mangled names are the same with these
      * compilers (see ranges_util.h). */
@@ -424,21 +411,6 @@ public:
             return __sentinel(__bound_);
         }
     }
-#  else
-    constexpr auto end() const {
-        if constexpr (same_as<_Bound, unreachable_sentinel_t>) {
-            return unreachable_sentinel;
-        } else {
-            return __sentinel(__bound_);
-        }
-    }
-
-    constexpr __iterator end() const
-        requires same_as<_Wp, _Bound>
-    {
-        return __iterator(__bound_);
-    }
-#  endif
 
     constexpr bool empty() const { return __value_ == __bound_; }
 
@@ -633,7 +605,6 @@ public:
 
     constexpr __iterator begin() const { return __iterator(std::addressof(*__value_)); }
 
-#  if _FCXX_RANGES_ONE_OVERLOAD
     /* Workaround: GCC 11 to 13 and Clang 12 to 17, all targets: the two
      * end() as one function, as their mangled names are the same with these
      * compilers (see ranges_util.h). */
@@ -644,15 +615,6 @@ public:
             return __iterator(std::addressof(*__value_), __bound_);
         }
     }
-#  else
-    constexpr __iterator end() const
-        requires(!same_as<_Bound, unreachable_sentinel_t>)
-    {
-        return __iterator(std::addressof(*__value_), __bound_);
-    }
-
-    constexpr unreachable_sentinel_t end() const noexcept { return unreachable_sentinel; }
-#  endif
 
     constexpr auto size() const
         requires(!same_as<_Bound, unreachable_sentinel_t>)

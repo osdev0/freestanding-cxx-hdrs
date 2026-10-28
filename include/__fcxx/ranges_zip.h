@@ -1905,7 +1905,6 @@ public:
         return __end<false>(*this, make_index_sequence<_Nv>());
     }
 
-#  if _FCXX_RANGES_ONE_OVERLOAD
     /* Workaround: GCC 11 to 13 and Clang 12 to 17, all targets: the two
      * end() const as one function, as their mangled names are the same with
      * these compilers (see ranges_util.h). */
@@ -1916,15 +1915,6 @@ public:
             return default_sentinel;
         }
     }
-#  else
-    constexpr __iterator<true> end() const
-        requires __fcxx_cartesian_product_is_common<const _First, const _Vs...>
-    {
-        return __end<true>(*this, make_index_sequence<_Nv>());
-    }
-
-    constexpr default_sentinel_t end() const noexcept { return default_sentinel; }
-#  endif
 
     constexpr auto size()
         requires __fcxx_cartesian_product_is_sized<_First, _Vs...>

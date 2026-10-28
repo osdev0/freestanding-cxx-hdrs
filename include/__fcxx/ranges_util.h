@@ -46,14 +46,9 @@
  * the class, which instantiates both where both constraints are satisfied,
  * fails to assemble ("symbol ... is already defined") or to compile
  * ("definition with same mangled name"); GCC 14 and Clang 18 mangle the
- * constraints. With them, the views make such pairs of members, where the
- * standard has them, single functions that choose what to do with
- * if constexpr, with the same results. */
-#if (_FCXX_GCC && _FCXX_GCC < 1400) || (_FCXX_CLANG && _FCXX_CLANG < 1800)
-#  define _FCXX_RANGES_ONE_OVERLOAD 1
-#else
-#  define _FCXX_RANGES_ONE_OVERLOAD 0
-#endif
+ * constraints. The views make such pairs of members, where the standard has
+ * them, single functions that choose what to do with if constexpr, with the
+ * same results. */
 
 namespace std {
 namespace ranges {

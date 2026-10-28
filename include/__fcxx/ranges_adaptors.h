@@ -911,7 +911,6 @@ public:
         return __iterator<true>(*this, ranges::begin(__base_));
     }
 
-#  if _FCXX_RANGES_ONE_OVERLOAD
     /* Workaround: GCC 11 to 13 and Clang 12 to 17, all targets: each pair of
      * end() as one function, as their mangled names are the same with these
      * compilers (see ranges_util.h). */
@@ -932,27 +931,6 @@ public:
             return __sentinel<true>(ranges::end(__base_));
         }
     }
-#  else
-    constexpr __sentinel<false> end() { return __sentinel<false>(ranges::end(__base_)); }
-
-    constexpr __iterator<false> end()
-        requires common_range<_Vp>
-    {
-        return __iterator<false>(*this, ranges::end(__base_));
-    }
-
-    constexpr __sentinel<true> end() const
-        requires __fcxx_transform_const_iterable<_Vp, _Fp>
-    {
-        return __sentinel<true>(ranges::end(__base_));
-    }
-
-    constexpr __iterator<true> end() const
-        requires common_range<const _Vp> && __fcxx_transform_const_iterable<_Vp, _Fp>
-    {
-        return __iterator<true>(*this, ranges::end(__base_));
-    }
-#  endif
 
     constexpr auto size()
         requires sized_range<_Vp>
@@ -1839,8 +1817,10 @@ public:
 
     constexpr _Vp base() && { return std::move(__base_); }
 
-    /* It is only chosen where V is not common, but is there for the common
-     * ones too, which have no cache. */
+    /* Workaround: GCC 11 to 13 and Clang 12 to 17, all targets: one begin(),
+     * for the common ranges too, which have no cache, as the mangled name of
+     * the one of the standard for them is that of this one with these
+     * compilers (see ranges_util.h). */
     constexpr reverse_iterator<iterator_t<_Vp> > begin() {
         if constexpr (common_range<_Vp>) {
             return std::make_reverse_iterator(ranges::end(__base_));
@@ -1851,17 +1831,6 @@ public:
             return std::make_reverse_iterator(*__end_);
         }
     }
-
-#  if !_FCXX_RANGES_ONE_OVERLOAD
-    /* Workaround: GCC 11 to 13 and Clang 12 to 17, all targets: left out, as
-     * its mangled name is that of the one above with these compilers, which
-     * does what it does (see ranges_util.h). */
-    constexpr reverse_iterator<iterator_t<_Vp> > begin()
-        requires common_range<_Vp>
-    {
-        return std::make_reverse_iterator(ranges::end(__base_));
-    }
-#  endif
 
     constexpr auto begin() const
         requires common_range<const _Vp>
@@ -2446,7 +2415,6 @@ public:
         return __iterator<false>{ranges::end(__base_)};
     }
 
-#  if _FCXX_RANGES_ONE_OVERLOAD
     /* Workaround: GCC 11 to 13 and Clang 12 to 17, all targets: the two
      * end() const as one function, as their mangled names are the same with
      * these compilers (see ranges_util.h). */
@@ -2459,19 +2427,6 @@ public:
             return __sentinel<true>{ranges::end(__base_)};
         }
     }
-#  else
-    constexpr auto end() const
-        requires range<const _Vp>
-    {
-        return __sentinel<true>{ranges::end(__base_)};
-    }
-
-    constexpr auto end() const
-        requires common_range<const _Vp>
-    {
-        return __iterator<true>{ranges::end(__base_)};
-    }
-#  endif
 
     constexpr auto size()
         requires sized_range<_Vp>

@@ -294,7 +294,6 @@ struct __fcxx_compare_three_way_result<
                           <=> std::__fcxx_declval<const remove_reference_t<_Up>&>());
 };
 
-#    if _FCXX_GCC && _FCXX_GCC < 1203
 /* Workaround: GCC 10 to 12.2, all targets: they crash (with an internal
  * compiler error in spaceship_comp_cat) on a <=> b of pointers that have no
  * composite pointer type, in SFINAE. Pointers are only compared there where
@@ -321,10 +320,6 @@ template <class _Tp, class _Up = _Tp>
 struct compare_three_way_result
     : __fcxx_conditional_t<__fcxx_three_way_operands<_Tp, _Up>::value, __fcxx_compare_three_way_result<_Tp, _Up>,
                            __fcxx_no_three_way_result> {};
-#else
-template <class _Tp, class _Up = _Tp>
-struct compare_three_way_result : __fcxx_compare_three_way_result<_Tp, _Up> {};
-#endif
 
 template <class _Tp, class _Up = _Tp>
 using compare_three_way_result_t = typename compare_three_way_result<_Tp, _Up>::type;
@@ -699,7 +694,6 @@ namespace __fcxx_cmp_cpo {
 
 /* The customizations are only looked for with argument-dependent lookup,
  * which these declarations leave the only way of finding one. */
-#  if _FCXX_GCC && _FCXX_GCC < 1200
 /* Workaround: GCC 10 and 11, all targets: no argument-dependent lookup is
  * done where ordinary lookup finds a deleted function that is not a
  * template, so these are not deleted, but only declared, which their arity
@@ -707,11 +701,6 @@ namespace __fcxx_cmp_cpo {
 void strong_order();
 void weak_order();
 void partial_order();
-#  else
-void strong_order() = delete;
-void weak_order() = delete;
-void partial_order() = delete;
-#  endif
 
 template <class _Tp, class _Up>
 concept __same_decayed = is_same_v<decay_t<_Tp>, decay_t<_Up> >;

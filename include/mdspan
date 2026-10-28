@@ -1172,11 +1172,7 @@ public:
          * reads past the static extents, which r being less than the rank
          * rules out. It does not warn of the loop that compares with <. (GCC
          * 12 and 13 warn of such loops too, but have no padded layouts.) */
-#if _FCXX_GCC >= 1400 && _FCXX_GCC < 1600
         for (rank_type __k = 1; __k < __r; ++__k) {
-#else
-        for (rank_type __k = 1; __k != __r; ++__k) {
-#endif
             __s = static_cast<index_type>(_FCXX_MUL(__s, __exts.extent(__k)));
         }
         return __s;

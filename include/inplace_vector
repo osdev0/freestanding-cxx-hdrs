@@ -55,9 +55,6 @@
 #if _FCXX_GCC >= 1400
 #  pragma GCC diagnostic push
 #  pragma GCC diagnostic ignored "-Wstringop-overflow"
-#  define _FCXX_IV_EXCHANGE_ARITHMETIC 1
-#else
-#  define _FCXX_IV_EXCHANGE_ARITHMETIC 0
 #endif
 
 namespace std {
@@ -462,7 +459,7 @@ public:
             }
             const size_type __n = __shorter->size();
             for (size_type __i = 0; __i < __n; ++__i) {
-                if constexpr (_FCXX_IV_EXCHANGE_ARITHMETIC && is_arithmetic_v<_Tp>) {
+                if constexpr (is_arithmetic_v<_Tp>) {
                     const _Tp __tmp = __shorter->__data()[__i];
                     __shorter->__data()[__i] = __longer->__data()[__i];
                     __longer->__data()[__i] = __tmp;
@@ -601,7 +598,6 @@ constexpr typename inplace_vector<_Tp, _Np>::size_type erase_if(inplace_vector<_
 #if _FCXX_GCC >= 1400
 #  pragma GCC diagnostic pop
 #endif
-#undef _FCXX_IV_EXCHANGE_ARITHMETIC
 
 #endif
 
