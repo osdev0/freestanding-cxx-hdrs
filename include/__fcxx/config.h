@@ -144,8 +144,11 @@
  * makes the attribute of GNU part of the type of the function. Before
  * C++11, Clang has the _Noreturn of C11 as an extension, which is not part
  * of the type, and which __extension__ keeps from being warned about at the
- * start of the declarations it is used in. */
-#if _FCXX_STD >= 2011
+ * start of the declarations it is used in.
+ * Workaround: GCC 4.8.0, all targets: it ignores [[noreturn]], with a warning,
+ * and has the attribute of GNU only, as before C++11. [[noreturn]] came in
+ * 4.8.1. */
+#if _FCXX_STD >= 2011 && !(_FCXX_GCC == 408 && __GNUC_PATCHLEVEL__ == 0)
 #  define _FCXX_NORETURN [[noreturn]]
 #elif _FCXX_CLANG
 #  define _FCXX_NORETURN __extension__ _Noreturn
