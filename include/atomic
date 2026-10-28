@@ -668,6 +668,10 @@ template <bool _Sized>
 struct __fcxx_atomic_exchange_generic {
     template <class _Up, class _Vp>
     static _FCXX_ALWAYS_INLINE void __exchange(_Up* __p, _Vp* __v, _Vp* __r, int __m) noexcept {
+        /* Workaround: GCC 4.8.0 to 4.8.2, all targets: -Wunused-but-set-parameter
+         * takes the pointer, which only __atomic_exchange is given, for one that
+         * is set and not used. */
+        (void)__p;
         __atomic_exchange(__p, __v, __r, __m);
     }
 };
