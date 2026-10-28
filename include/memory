@@ -508,6 +508,11 @@ template <class _Dp, class _Ep>
 struct __fcxx_unique_ptr_deleter_converts
     : __fcxx_bool_constant<is_reference<_Dp>::value ? is_same<_Ep, _Dp>::value : is_convertible<_Ep, _Dp>::value> {};
 
+/* Workaround: Clang 10 to 12, all targets: the constraint of operator* is a
+ * concept (see __fcxx_member_arrow). */
+template <class _Ptr>
+concept __fcxx_unique_ptr_dereferenceable = requires { *std::declval<_Ptr>(); };
+
 template <class _Tp, class _Dp = default_delete<_Tp> >
 class unique_ptr {
     template <class _Up, class _Ep>
@@ -592,7 +597,7 @@ public:
      * temporary, as LWG 4148 has it. */
     constexpr typename add_lvalue_reference<_Tp>::type operator*() const
         noexcept(noexcept(*std::declval<pointer>()))
-        requires requires { *std::declval<pointer>(); } && __fcxx_not_void_pointer<pointer>
+        requires __fcxx_unique_ptr_dereferenceable<pointer> && __fcxx_not_void_pointer<pointer>
     {
         static_assert(!__fcxx_reference_converts_from_temporary<typename add_lvalue_reference<_Tp>::type,
                                                                 decltype(*std::declval<pointer>())>::value,

@@ -76,6 +76,15 @@ concept __fcxx_can_reference = requires { typename __fcxx_with_reference<_Tp>; }
 template <class _Tp>
 concept __fcxx_not_void_pointer = !is_void_v<remove_pointer_t<remove_cvref_t<_Tp> > >;
 
+/* Workaround: Clang 10 to 12, all targets: the requires-expressions in the
+ * constraints of the members of a class template are substituted with the
+ * class, and once more where a member is checked in a pack expansion, when
+ * Clang reads the expression of each requirement that failed the first time
+ * (it has none) and may crash. So those constraints name concepts, such as
+ * this one, instead. */
+template <class _It>
+concept __fcxx_member_arrow = requires(const _It& __i) { __i.operator->(); };
+
 template <class _Tp>
 concept __fcxx_dereferenceable = __fcxx_not_void_pointer<_Tp> && requires(_Tp& __t) {
     { *__t } -> __fcxx_can_reference;

@@ -75,7 +75,7 @@ public:
     }
 
     constexpr pointer operator->() const
-        requires(is_pointer_v<_It> || requires(const _It __i) { __i.operator->(); })
+        requires(is_pointer_v<_It> || __fcxx_member_arrow<_It>)
     {
         if constexpr (is_pointer_v<_It>) {
             return std::prev(current);

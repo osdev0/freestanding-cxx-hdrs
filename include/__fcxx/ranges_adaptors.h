@@ -139,8 +139,10 @@ public:
     constexpr iterator_t<_Rp> begin() const { return ranges::begin(*__r_); }
     constexpr sentinel_t<_Rp> end() const { return ranges::end(*__r_); }
 
+    /* Workaround: Clang 10 to 12, all targets: a concept, not a
+     * requires-expression (see __fcxx_member_arrow). */
     constexpr bool empty() const
-        requires requires(_Rp& __r) { ranges::empty(__r); }
+        requires __fcxx_can_empty<_Rp>
     {
         return ranges::empty(*__r_);
     }
@@ -208,14 +210,16 @@ public:
         return ranges::end(__r_);
     }
 
+    /* Workaround: Clang 10 to 12, all targets: concepts, not
+     * requires-expressions (see __fcxx_member_arrow). */
     constexpr bool empty()
-        requires requires(_Rp& __r) { ranges::empty(__r); }
+        requires __fcxx_can_empty<_Rp>
     {
         return ranges::empty(__r_);
     }
 
     constexpr bool empty() const
-        requires requires(const _Rp& __r) { ranges::empty(__r); }
+        requires __fcxx_can_empty<const _Rp>
     {
         return ranges::empty(__r_);
     }
