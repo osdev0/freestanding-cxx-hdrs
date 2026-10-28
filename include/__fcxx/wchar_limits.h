@@ -39,19 +39,18 @@
 #    define WCHAR_MAX __INT_MAX__
 #  endif
 #else
-#  ifndef WCHAR_MAX
-#    define WCHAR_MAX __WCHAR_MAX__
-#  endif
-#  ifndef WCHAR_MIN
-#    if defined(__WCHAR_MIN__)
-#      define WCHAR_MIN __WCHAR_MIN__
-#    elif defined(__WCHAR_UNSIGNED__) && __SIZEOF_WCHAR_T__ >= __SIZEOF_INT__
-#      define WCHAR_MIN 0U
-#    elif defined(__WCHAR_UNSIGNED__)
-#      define WCHAR_MIN 0
-#    else
-#      define WCHAR_MIN (-WCHAR_MAX - 1)
-#    endif
+#  undef WCHAR_MAX
+#  define WCHAR_MAX __WCHAR_MAX__
+/* Workaround: Clang 6 to 22, all targets: it does not tell the minimum of
+ * wchar_t, only whether it is unsigned, which GCC does not tell, and that
+ * of an unsigned type is 0 of its promoted type. */
+#  undef WCHAR_MIN
+#  if defined(__WCHAR_MIN__)
+#    define WCHAR_MIN __WCHAR_MIN__
+#  elif defined(__WCHAR_UNSIGNED__)
+#    define WCHAR_MIN (WCHAR_MAX - WCHAR_MAX)
+#  else
+#    define WCHAR_MIN (-WCHAR_MAX - 1)
 #  endif
 #endif
 
