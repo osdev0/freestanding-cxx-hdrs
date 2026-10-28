@@ -24,6 +24,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <type_traits>
 
@@ -188,4 +189,5 @@ struct __fcxx_is_hash_enabled : is_default_constructible<hash<_Tp> > {};
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

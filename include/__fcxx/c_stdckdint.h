@@ -26,6 +26,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #if _FCXX_STD >= 2026
 
@@ -90,4 +91,5 @@ _FCXX_CKD(mul)
 
 #endif
 
+_FCXX_END_EXTERN_CXX
 #endif

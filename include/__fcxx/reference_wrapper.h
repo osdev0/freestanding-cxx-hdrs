@@ -23,6 +23,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <type_traits>
 #include <__fcxx/addressof.h>
@@ -186,4 +187,5 @@ struct basic_common_reference<_Tp, _Rp, _TQual, _RQual> {
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

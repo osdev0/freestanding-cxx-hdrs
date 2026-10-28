@@ -24,6 +24,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <type_traits>
 
@@ -58,4 +59,5 @@ constexpr _Tp make_obj_using_allocator(const _Alloc& __alloc, _Args&&... __args)
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

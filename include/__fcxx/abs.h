@@ -24,6 +24,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 namespace std {
 
@@ -54,4 +55,5 @@ __bf16 abs(__bf16) = delete;
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

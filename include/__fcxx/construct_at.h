@@ -25,6 +25,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <new>
 #include <type_traits>
@@ -77,4 +78,5 @@ constexpr void destroy_at(_Tp* __location) {
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

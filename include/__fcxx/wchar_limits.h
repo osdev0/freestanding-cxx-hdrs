@@ -27,6 +27,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #if __SIZEOF_WCHAR_T__ == __SIZEOF_INT__
 #  undef WCHAR_MIN
@@ -54,4 +55,5 @@
 #  endif
 #endif
 
+_FCXX_END_EXTERN_CXX
 #endif

@@ -29,6 +29,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #if _FCXX_STD >= 2026 && _FCXX_CLANG && !_FCXX_HAS_BUILTIN(__builtin_c23_va_start)
 #  undef va_start
@@ -39,4 +40,5 @@
       _Pragma("clang diagnostic pop")
 #endif
 
+_FCXX_END_EXTERN_CXX
 #endif

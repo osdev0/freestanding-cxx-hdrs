@@ -24,6 +24,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 #include <__fcxx/integer_product.h>
 #include <__fcxx/algorithm_impl.h>
 #include <__fcxx/algorithm_nonmodifying.h>
@@ -720,4 +721,5 @@ constexpr _ForwardIterator shift_right(_ForwardIterator __first, _ForwardIterato
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

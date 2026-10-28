@@ -26,6 +26,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #if _FCXX_STD <= 2023
 #  undef __alignas_is_defined
@@ -36,4 +37,5 @@
 #  define __alignof_is_defined 1
 #endif
 
+_FCXX_END_EXTERN_CXX
 #endif

@@ -23,6 +23,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <type_traits>
 #include <__fcxx/integer_sequence.h>
@@ -94,4 +95,5 @@ struct __fcxx_zip_all<_Pred, __fcxx_type_list<_Ts...>, __fcxx_type_list<_Us...>,
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

@@ -24,6 +24,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <compare>
 #include <concepts>
@@ -664,4 +665,5 @@ inline constexpr __repeat_fn repeat{};
 } /* namespace ranges */
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

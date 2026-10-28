@@ -22,6 +22,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 /* wint_t. */
 #include <cwchar>
@@ -188,4 +189,5 @@ struct char_traits<char8_t> : __fcxx_char_traits_base<char8_t, unsigned int, sta
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

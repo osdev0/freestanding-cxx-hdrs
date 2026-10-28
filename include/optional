@@ -21,6 +21,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #if _FCXX_STD < 2026
 #  error "<optional> is not a freestanding header before C++26"
@@ -1257,4 +1258,5 @@ struct hash<optional<_Tp> > : __fcxx_optional_hash<_Tp> {};
 
 #endif
 
+_FCXX_END_EXTERN_CXX
 #endif

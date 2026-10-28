@@ -26,6 +26,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 #include <__fcxx/integer_product.h>
 
 #include <type_traits>
@@ -609,4 +610,5 @@ struct less_equal {
 #  pragma clang diagnostic pop
 #endif
 
+_FCXX_END_EXTERN_CXX
 #endif

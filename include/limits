@@ -21,6 +21,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #define _FCXX_VERSION_LIMITS
 #include <__fcxx/version.h>
@@ -1035,4 +1036,5 @@ template <class _Tp> class numeric_limits<const volatile _Tp> : public numeric_l
 #undef _FCXX_LIMITS_CONST
 #undef _FCXX_LIMITS_INTEGER_TRAPS
 
+_FCXX_END_EXTERN_CXX
 #endif

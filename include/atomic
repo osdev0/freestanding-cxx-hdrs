@@ -21,6 +21,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #if _FCXX_STD < 2011
 #  error "<atomic> requires C++11 or later"
@@ -2575,4 +2576,5 @@ _FCXX_ATOMIC_CE void atomic_signal_fence(memory_order __m) noexcept {
 
 #endif
 
+_FCXX_END_EXTERN_CXX
 #endif

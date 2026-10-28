@@ -24,6 +24,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <compare>
 
@@ -62,4 +63,5 @@ using __fcxx_synth_three_way_result = decltype(__fcxx_synth_three_way(std::declv
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

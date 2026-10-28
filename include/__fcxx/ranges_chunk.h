@@ -34,6 +34,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 #include <__fcxx/integer_product.h>
 
 #include <compare>
@@ -1709,4 +1710,5 @@ inline constexpr __as_input_fn as_input{};
 } /* namespace ranges */
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

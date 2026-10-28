@@ -26,6 +26,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #define _FCXX_VERSION_STDBIT_H
 #include <__fcxx/version.h>
@@ -154,4 +155,5 @@ _FCXX_STDBIT_FUNCTIONS(bit_ceil, unsigned char, unsigned short, unsigned int, un
 
 #endif
 
+_FCXX_END_EXTERN_CXX
 #endif

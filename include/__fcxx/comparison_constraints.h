@@ -25,6 +25,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <type_traits>
 
@@ -65,4 +66,5 @@ concept __fcxx_ge_comparable = requires(const _Tp& __t, const _Up& __u) {
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

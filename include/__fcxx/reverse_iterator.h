@@ -24,6 +24,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 #include <__fcxx/iterator_base.h>
 #include <__fcxx/iterator_ops.h>
 #include <__fcxx/addressof.h>
@@ -220,4 +221,5 @@ inline constexpr bool disable_sized_sentinel_for<reverse_iterator<_I1>, reverse_
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

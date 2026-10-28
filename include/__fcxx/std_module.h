@@ -32,6 +32,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #if _FCXX_STD < 2023
 #  error "the modules std and std.compat require C++23 or later"
@@ -94,4 +95,5 @@
 #  include <variant>
 #endif
 
+_FCXX_END_EXTERN_CXX
 #endif

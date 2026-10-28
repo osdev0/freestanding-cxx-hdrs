@@ -24,6 +24,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <concepts>
 #include <type_traits>
@@ -59,4 +60,5 @@ inline constexpr bool enable_borrowed_range = false;
 } /* namespace ranges */
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

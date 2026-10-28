@@ -24,6 +24,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <initializer_list>
 #include <type_traits>
@@ -185,4 +186,5 @@ constexpr const _Ep* data(initializer_list<_Ep> __il) noexcept {
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

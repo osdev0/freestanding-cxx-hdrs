@@ -26,6 +26,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <concepts>
 #include <type_traits>
@@ -44,4 +45,5 @@ concept __fcxx_integral_constant_like = is_integral_v<remove_cvref_t<decltype(_T
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

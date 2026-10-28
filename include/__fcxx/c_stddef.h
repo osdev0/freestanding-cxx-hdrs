@@ -26,6 +26,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #undef NULL
 #define NULL __null
@@ -34,4 +35,5 @@
 typedef decltype(nullptr) nullptr_t;
 #endif
 
+_FCXX_END_EXTERN_CXX
 #endif

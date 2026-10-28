@@ -23,6 +23,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <__fcxx/hash.h>
 #include <compare>
@@ -49,4 +50,5 @@ struct hash<monostate> {
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

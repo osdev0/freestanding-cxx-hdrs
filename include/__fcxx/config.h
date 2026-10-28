@@ -57,6 +57,21 @@
 #  error "The freestanding C++ headers require GCC 4.8 or later, or Clang 6 or later."
 #endif
 
+/* Workaround: GCC before 9, the targets that do not define
+ * NO_IMPLICIT_EXTERN_C, which most of those without an operating system are
+ * (such as x86_64-elf, arm-none-eabi, aarch64-elf, AVR, MSP430 and Nios II):
+ * it puts the headers of the directories of the system that it does not take
+ * as made for C++, which those given with -isystem are, in an implicit
+ * extern "C", where templates cannot be and functions get the linkage of C.
+ * Each header has its declarations in an extern "C++" there. */
+#if _FCXX_GCC && _FCXX_GCC < 900
+#  define _FCXX_BEGIN_EXTERN_CXX extern "C++" {
+#  define _FCXX_END_EXTERN_CXX }
+#else
+#  define _FCXX_BEGIN_EXTERN_CXX
+#  define _FCXX_END_EXTERN_CXX
+#endif
+
 /* Whether functions can have ref-qualifiers.
  * Workaround: GCC 4.8.0, all targets: it has none, which came in 4.8.1. */
 #if _FCXX_GCC == 408 && __GNUC_PATCHLEVEL__ == 0

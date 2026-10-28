@@ -33,6 +33,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #if _FCXX_STD >= 2026
 #  define __FREESTANDING_C_HDRS_C 202311L
@@ -84,4 +85,5 @@
 #  define __FREESTANDING_C_HDRS_STDCKDINT_REVISION 0
 #endif
 
+_FCXX_END_EXTERN_CXX
 #endif

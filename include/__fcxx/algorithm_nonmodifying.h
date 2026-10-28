@@ -24,6 +24,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 #include <__fcxx/algorithm_impl.h>
 #include <__fcxx/iterator_base.h>
 #include <__fcxx/iterator_ops.h>
@@ -570,4 +571,5 @@ template <class _ForwardIterator, class _Searcher>
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

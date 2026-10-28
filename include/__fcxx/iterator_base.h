@@ -26,6 +26,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <type_traits>
 #include <concepts>
@@ -839,4 +840,5 @@ concept sortable = permutable<_It> && indirect_strict_weak_order<_Rp, projected<
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

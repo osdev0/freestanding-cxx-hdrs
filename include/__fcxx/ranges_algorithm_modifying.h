@@ -24,6 +24,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <__fcxx/algorithm_modifying.h>
 #include <__fcxx/ranges_algorithm_base.h>
@@ -1355,4 +1356,5 @@ inline constexpr __fcxx_shift_right_fn shift_right{};
 } /* namespace ranges */
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

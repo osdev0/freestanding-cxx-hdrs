@@ -26,6 +26,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 #include <__fcxx/algorithm_impl.h>
 #include <__fcxx/algorithm_modifying.h>
 #include <__fcxx/algorithm_nonmodifying.h>
@@ -715,4 +716,5 @@ constexpr bool prev_permutation(_BidirectionalIterator __first, _BidirectionalIt
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

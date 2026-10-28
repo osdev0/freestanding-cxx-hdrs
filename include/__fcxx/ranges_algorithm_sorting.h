@@ -25,6 +25,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <__fcxx/algorithm_sorting.h>
 #include <__fcxx/ranges_algorithm_base.h>
@@ -1574,4 +1575,5 @@ inline constexpr __fcxx_prev_permutation_fn prev_permutation{};
 } /* namespace ranges */
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

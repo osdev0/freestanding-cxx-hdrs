@@ -25,6 +25,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #if _FCXX_STD >= 2023
 
@@ -158,4 +159,5 @@ using std::atomic_signal_fence;
 
 #endif
 
+_FCXX_END_EXTERN_CXX
 #endif

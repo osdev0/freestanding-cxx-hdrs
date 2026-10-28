@@ -35,6 +35,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #if _FCXX_GCC >= 1000 && defined(__mips64) && defined(__mips_isa_rev) && __mips_isa_rev >= 6 && _FCXX_STD >= 2020 \
     && _FCXX_HAS_IS_CONSTANT_EVALUATED
@@ -80,4 +81,5 @@ _FCXX_ALWAYS_INLINE constexpr auto __fcxx_mul(_Tp&& __a, _Up&& __b)
 #  define _FCXX_MUL(a, b) ((a) * (b))
 #endif
 
+_FCXX_END_EXTERN_CXX
 #endif

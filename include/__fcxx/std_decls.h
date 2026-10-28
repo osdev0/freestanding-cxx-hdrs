@@ -22,6 +22,8 @@
 
 #pragma GCC system_header
 
+_FCXX_BEGIN_EXTERN_CXX
+
 namespace std {
 
 /* They are long long on some targets, which C++98 does not have. */
@@ -37,4 +39,5 @@ _FCXX_NORETURN void terminate() _FCXX_NOEXCEPT;
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

@@ -35,6 +35,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 #include <__fcxx/iterator_base.h>
 #include <__fcxx/iterator_ops.h>
 /* swap and pair. */
@@ -709,4 +710,5 @@ _Up* __fcxx_memmove_backward(_Tp* __first, _Tp* __last, _Up* __result) {
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

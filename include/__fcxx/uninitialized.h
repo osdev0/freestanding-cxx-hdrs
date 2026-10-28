@@ -25,6 +25,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 #include <new>
 #include <__fcxx/iterator_base.h>
 
@@ -743,4 +744,5 @@ inline constexpr __destroy_n_fn destroy_n{};
 #undef _FCXX_UNINIT_CATCH
 #undef _FCXX_CONSTEXPR_PLACEMENT
 
+_FCXX_END_EXTERN_CXX
 #endif

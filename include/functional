@@ -21,6 +21,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #if _FCXX_STD < 2023
 #  error "<functional> is not a freestanding header before C++23"
@@ -1166,4 +1167,5 @@ private:
 
 #endif
 
+_FCXX_END_EXTERN_CXX
 #endif

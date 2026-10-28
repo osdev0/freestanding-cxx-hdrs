@@ -24,6 +24,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 #include <__fcxx/iterator_base.h>
 
 namespace std {
@@ -211,4 +212,5 @@ inline constexpr __prev_fn prev{};
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

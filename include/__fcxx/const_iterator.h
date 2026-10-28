@@ -24,6 +24,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <compare>
 #include <concepts>
@@ -363,4 +364,5 @@ constexpr const_sentinel<_Sp> make_const_sentinel(_Sp __s) {
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

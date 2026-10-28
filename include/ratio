@@ -21,6 +21,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #if _FCXX_STD < 2023
 #  error "<ratio> is not a freestanding header before C++23"
@@ -447,4 +448,5 @@ typedef ratio<static_cast<__fcxx_intmax_t>(1000000000000000000) * 1000000000000,
 
 #endif
 
+_FCXX_END_EXTERN_CXX
 #endif

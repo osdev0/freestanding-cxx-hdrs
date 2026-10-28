@@ -25,6 +25,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <concepts>
 #include <type_traits>
@@ -459,4 +460,5 @@ struct __fcxx_is_tuple_like_impl<ranges::subrange<_It, _Sp, _Kp> > : true_type {
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

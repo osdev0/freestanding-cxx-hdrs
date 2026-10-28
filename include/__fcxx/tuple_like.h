@@ -24,6 +24,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 #include <type_traits>
 
@@ -120,4 +121,5 @@ using __fcxx_get_t = decltype(get<_Ip>(std::declval<_Tp>()));
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif

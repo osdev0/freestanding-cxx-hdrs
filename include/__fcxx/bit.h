@@ -25,6 +25,7 @@
 #pragma GCC system_header
 
 #include <__fcxx/config.h>
+_FCXX_BEGIN_EXTERN_CXX
 
 namespace std {
 
@@ -255,4 +256,5 @@ constexpr _Tp __fcxx_byteswap(_Tp __x) noexcept {
 
 } /* namespace std */
 
+_FCXX_END_EXTERN_CXX
 #endif
