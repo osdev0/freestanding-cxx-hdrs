@@ -191,12 +191,27 @@ struct __fcxx_constant_fn {
     }
 };
 
+/* Whether a constant callable object is a null pointer, which the forms
+ * that take one as a template argument mandate it is not.
+ * Workaround: GCC, with -fno-delete-null-pointer-checks, which is the default
+ * for AVR: as a function can be at the address 0 then, it takes no
+ * comparison of the address of a function, or of a pointer to a member
+ * function, with a null pointer for a constant expression. Where the
+ * comparison is not a constant, the pointer is the address of a function,
+ * not a null one. */
 template <auto _Fn>
-consteval void __fcxx_check_constant_fn() {
+constexpr bool __fcxx_null_callable() noexcept {
     using _Fp = decltype(_Fn);
     if constexpr (is_pointer_v<_Fp> || is_member_pointer_v<_Fp>) {
-        static_assert(_Fn != nullptr, "a null pointer is not callable");
+        return __builtin_constant_p(_Fn == nullptr) && _Fn == nullptr;
+    } else {
+        return false;
     }
+}
+
+template <auto _Fn>
+consteval void __fcxx_check_constant_fn() {
+    static_assert(!std::__fcxx_null_callable<_Fn>(), "a null pointer is not callable");
 }
 
 template <auto _Fn>
@@ -624,10 +639,7 @@ class function_ref<_Rp(_ArgTypes...) noexcept(false)> {
 
     template <class _Cw>
     static consteval void __check_constant() {
-        using _Fp = typename _Cw::value_type;
-        if constexpr (is_pointer_v<_Fp> || is_member_pointer_v<_Fp>) {
-            static_assert(_Cw::value != nullptr, "std::function_ref of a null pointer");
-        }
+        static_assert(!std::__fcxx_null_callable<_Cw::value>(), "std::function_ref of a null pointer");
     }
 #  endif
 
@@ -742,10 +754,7 @@ class function_ref<_Rp(_ArgTypes...) noexcept(true)> {
 
     template <class _Cw>
     static consteval void __check_constant() {
-        using _Fp = typename _Cw::value_type;
-        if constexpr (is_pointer_v<_Fp> || is_member_pointer_v<_Fp>) {
-            static_assert(_Cw::value != nullptr, "std::function_ref of a null pointer");
-        }
+        static_assert(!std::__fcxx_null_callable<_Cw::value>(), "std::function_ref of a null pointer");
     }
 #  endif
 
@@ -860,10 +869,7 @@ class function_ref<_Rp(_ArgTypes...) const noexcept(false)> {
 
     template <class _Cw>
     static consteval void __check_constant() {
-        using _Fp = typename _Cw::value_type;
-        if constexpr (is_pointer_v<_Fp> || is_member_pointer_v<_Fp>) {
-            static_assert(_Cw::value != nullptr, "std::function_ref of a null pointer");
-        }
+        static_assert(!std::__fcxx_null_callable<_Cw::value>(), "std::function_ref of a null pointer");
     }
 #  endif
 
@@ -978,10 +984,7 @@ class function_ref<_Rp(_ArgTypes...) const noexcept(true)> {
 
     template <class _Cw>
     static consteval void __check_constant() {
-        using _Fp = typename _Cw::value_type;
-        if constexpr (is_pointer_v<_Fp> || is_member_pointer_v<_Fp>) {
-            static_assert(_Cw::value != nullptr, "std::function_ref of a null pointer");
-        }
+        static_assert(!std::__fcxx_null_callable<_Cw::value>(), "std::function_ref of a null pointer");
     }
 #  endif
 
