@@ -421,7 +421,17 @@ _FCXX_ALWAYS_INLINE inline void __fcxx_atomic_clear_padding(_Tp* __p) noexcept {
 }
 
 /* The result of is_lock_free, only asked of the atomic library for the
- * types that are not always lock-free. */
+ * types that are not always lock-free.
+ * Workaround: Clang 17 to 23, MSP430, with exceptions: unlike its other
+ * calls of the atomic library, the one __atomic_is_lock_free becomes is not
+ * told not to throw, so in a noexcept function it gets a landing pad, on
+ * which the backend crashes at -O1 and above, as on every landing pad there.
+ * The function is called through a declaration of it that is noexcept there
+ * instead, which is what the builtin becomes there with every version of
+ * Clang, as no type is lock-free for it there. */
+#if defined(__clang__) && defined(__MSP430__)
+extern "C" bool __fcxx_atomic_is_lock_free(size_t, const volatile void*) noexcept __asm__("__atomic_is_lock_free");
+#endif
 
 template <bool _Always>
 struct __fcxx_atomic_lock_free_query {
@@ -433,7 +443,11 @@ struct __fcxx_atomic_lock_free_query {
 template <>
 struct __fcxx_atomic_lock_free_query<false> {
     static bool __query(size_t __size, const volatile void* __p) noexcept {
+#if defined(__clang__) && defined(__MSP430__)
+        return __fcxx_atomic_is_lock_free(__size, __p);
+#else
         return __atomic_is_lock_free(__size, const_cast<void*>(__p));
+#endif
     }
 };
 
