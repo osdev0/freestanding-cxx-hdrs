@@ -35,11 +35,11 @@
 _FCXX_BEGIN_EXTERN_CXX
 
 #if _FCXX_STD < 2023
-#  error "the modules std and std.compat require C++23 or later"
+#  error "The modules std and std.compat require C++23 or later"
 #elif _FCXX_GCC && _FCXX_GCC < 1500
-#  error "the modules std and std.compat require GCC 15 or later"
+#  error "The modules std and std.compat require GCC 15 or later"
 #elif _FCXX_CLANG && _FCXX_CLANG < 1700
-#  error "the modules std and std.compat require Clang 17 or later"
+#  error "The modules std and std.compat require Clang 17 or later"
 #endif
 
 #if _FCXX_STD >= 2023
